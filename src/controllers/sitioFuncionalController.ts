@@ -61,6 +61,21 @@ export class SitioFuncionalController {
     }
   };
 
+  // Resumo consolidado das distribuições ENF/TEC por unidade (não quebra rotas existentes)
+  resumoDistribuicoes = async (req: Request, res: Response) => {
+    try {
+      const { id: unidadeId } = req.params;
+      const data = await this.repo.resumoDistribuicoesPorUnidade(unidadeId);
+      return res.json(data);
+    } catch (error) {
+      console.error("Erro ao gerar resumo de distribuições:", error);
+      return res.status(500).json({
+        message: "Erro interno do servidor",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
   // Criar novo sítio funcional
   criar = async (req: Request, res: Response) => {
     try {
