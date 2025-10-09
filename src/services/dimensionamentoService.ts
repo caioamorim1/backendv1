@@ -24,6 +24,17 @@ export class DimensionamentoService {
   async calcularParaInternacao(
     unidadeId: string
   ): Promise<AnaliseInternacaoResponse> {
+    console.log(
+      "\n╔════════════════════════════════════════════════════════════════╗"
+    );
+    console.log(
+      "║  🏥 INÍCIO DO DIMENSIONAMENTO - UNIDADE DE INTERNAÇÃO         ║"
+    );
+    console.log(
+      "╚════════════════════════════════════════════════════════════════╝\n"
+    );
+    console.log("📝 Unidade ID:", unidadeId);
+
     const unidadeRepo = this.ds.getRepository(UnidadeInternacao);
     const parametrosRepo = this.ds.getRepository(ParametrosUnidade);
 
@@ -38,13 +49,40 @@ export class DimensionamentoService {
       throw new Error("Unidade de internação não encontrada");
     }
 
+    console.log("✅ Unidade encontrada:", unidade.nome);
+    console.log("   Número de leitos:", unidade.leitos.length);
+    console.log(
+      "   Número de cargos cadastrados:",
+      unidade.cargosUnidade?.length || 0
+    );
+
     // --- ETAPA 1: BUSCAR INPUTS ---
     const parametros = await parametrosRepo.findOne({
       where: { unidade: { id: unidadeId } },
     });
+
+    console.log("\n=== ⚙️ ETAPA 1: PARÂMETROS DA UNIDADE ===");
     const ist = (parametros?.ist ?? 15) / 100;
     const equipeComRestricoes = parametros?.aplicarIST ?? false;
     const diasTrabalhoSemana = parametros?.diasSemana ?? 7;
+
+    console.log("Parâmetros carregados:");
+    console.log(
+      `  IST: ${(ist * 100).toFixed(1)}% (${
+        parametros?.ist ? "customizado" : "padrão"
+      })`
+    );
+    console.log(
+      `  Aplicar IST (Equipe com restrições): ${
+        equipeComRestricoes ? "SIM" : "NÃO"
+      }`
+    );
+    console.log(
+      `  Dias de trabalho/semana: ${diasTrabalhoSemana} (${
+        parametros?.diasSemana ? "customizado" : "padrão"
+      })`
+    );
+    console.log("=== FIM ETAPA 1 ===\n");
 
     // --- ETAPA 2: CALCULAR A MÉDIA DE PACIENTES DO MÊS ATUAL (LÓGICA CORRIGIDA) ---
     // Usar horário do Brasil (UTC-3) para garantir cálculos corretos
@@ -241,44 +279,98 @@ export class DimensionamentoService {
     }
 
     // --- ETAPA 3: CALCULAR TOTAL DE HORAS DE ENFERMAGEM (THE) ---
+    // Mapeamento de classificações do banco para horas de enfermagem
     const horasPorClassificacao: { [key: string]: number } = {
-      PCM: 4,
-      PCI: 6,
-      PADC: 10,
-      PCSI: 10,
-      PCIt: 18,
+      MINIMOS: 4, // PCM - Pacientes de Cuidados Mínimos
+      INTERMEDIARIOS: 6, // PCI - Pacientes de Cuidados Intermediários
+      ALTA_DEPENDENCIA: 10, // PADC - Pacientes de Alta Dependência de Cuidados
+      SEMI_INTENSIVOS: 10, // PCSI - Pacientes de Cuidados Semi-Intensivos
+      INTENSIVOS: 18, // PCIt - Pacientes de Cuidados Intensivos
     };
+
+    console.log("\n=== 📊 ETAPA 3: CÁLCULO DE HORAS DE ENFERMAGEM ===");
+    console.log("Horas por classificação configuradas:", horasPorClassificacao);
+
     const totalHorasEnfermagem = Object.keys(mediaDiariaClassificacao).reduce(
       (total, key) => {
         const horas = horasPorClassificacao[key] ?? 0;
         const quantidadeMedia = mediaDiariaClassificacao[key];
-        return total + horas * quantidadeMedia;
+        const horasClassificacao = horas * quantidadeMedia;
+        console.log(
+          `  ${key}: ${quantidadeMedia.toFixed(
+            2
+          )} pacientes × ${horas}h = ${horasClassificacao.toFixed(2)}h`
+        );
+        return total + horasClassificacao;
       },
       0
     );
+    console.log(
+      "✅ Total de Horas de Enfermagem (THE):",
+      totalHorasEnfermagem.toFixed(2),
+      "horas/dia"
+    );
+    console.log("=== FIM ETAPA 3 ===\n");
 
     // --- ETAPA 4: CALCULAR PERCENTUAL DA EQUIPE (ENF / TEC) ---
-    const pci = mediaDiariaClassificacao["PCI"] || 0;
-    const padc = mediaDiariaClassificacao["PADC"] || 0;
-    const pcsi = mediaDiariaClassificacao["PCSI"] || 0;
-    const pcit = mediaDiariaClassificacao["PCIt"] || 0;
-    const pcm = mediaDiariaClassificacao["PCM"] || 0;
-    const intermediarioAlta = pci + padc;
+    const minimos = mediaDiariaClassificacao["MINIMOS"] || 0;
+    const intermediarios = mediaDiariaClassificacao["INTERMEDIARIOS"] || 0;
+    const altaDependencia = mediaDiariaClassificacao["ALTA_DEPENDENCIA"] || 0;
+    const semiIntensivos = mediaDiariaClassificacao["SEMI_INTENSIVOS"] || 0;
+    const intensivos = mediaDiariaClassificacao["INTENSIVOS"] || 0;
+    const intermediarioAlta = intermediarios + altaDependencia;
+
+    console.log("\n=== 👥 ETAPA 4: CÁLCULO DE PERCENTUAL ENF/TEC ===");
+    console.log("Classificações médias diárias:");
+    console.log(`  MINIMOS (PCM): ${minimos.toFixed(2)}`);
+    console.log(`  INTERMEDIARIOS (PCI): ${intermediarios.toFixed(2)}`);
+    console.log(`  ALTA_DEPENDENCIA (PADC): ${altaDependencia.toFixed(2)}`);
+    console.log(`  SEMI_INTENSIVOS (PCSI): ${semiIntensivos.toFixed(2)}`);
+    console.log(`  INTENSIVOS (PCIt): ${intensivos.toFixed(2)}`);
+    console.log(`  Intermediário + Alta: ${intermediarioAlta.toFixed(2)}`);
+
     let percentualEnfermeiro = 0.52;
-    if (pcm > intermediarioAlta && pcm >= pcsi && pcm >= pcit) {
-      percentualEnfermeiro = 0.33;
-    } else if (
-      intermediarioAlta >= pcm &&
-      intermediarioAlta >= pcsi &&
-      intermediarioAlta >= pcit
+    let criterioAplicado = "Padrão (0.52)";
+
+    if (
+      minimos > intermediarioAlta &&
+      minimos >= semiIntensivos &&
+      minimos >= intensivos
     ) {
       percentualEnfermeiro = 0.33;
-    } else if (pcsi > pcm && pcsi > intermediarioAlta && pcsi >= pcit) {
+      criterioAplicado = "MINIMOS predominante (0.33)";
+    } else if (
+      intermediarioAlta >= minimos &&
+      intermediarioAlta >= semiIntensivos &&
+      intermediarioAlta >= intensivos
+    ) {
+      percentualEnfermeiro = 0.33;
+      criterioAplicado = "Intermediário+Alta predominante (0.33)";
+    } else if (
+      semiIntensivos > minimos &&
+      semiIntensivos > intermediarioAlta &&
+      semiIntensivos >= intensivos
+    ) {
       percentualEnfermeiro = 0.37;
-    } else if (pcit > pcm && pcit > intermediarioAlta && pcit > pcsi) {
+      criterioAplicado = "SEMI_INTENSIVOS predominante (0.37)";
+    } else if (
+      intensivos > minimos &&
+      intensivos > intermediarioAlta &&
+      intensivos > semiIntensivos
+    ) {
       percentualEnfermeiro = 0.42;
+      criterioAplicado = "INTENSIVOS predominante (0.42)";
     }
     const percentualTecnico = 1 - percentualEnfermeiro;
+
+    console.log("Critério aplicado:", criterioAplicado);
+    console.log(
+      `✅ Percentual Enfermeiro: ${(percentualEnfermeiro * 100).toFixed(1)}%`
+    );
+    console.log(
+      `✅ Percentual Técnico: ${(percentualTecnico * 100).toFixed(1)}%`
+    );
+    console.log("=== FIM ETAPA 4 ===\n");
 
     // --- ETAPA 5: CALCULAR FATOR "KM" PARA CADA CARGO ---
     const cargaHorariaEnfermeiro = parseFloat(
@@ -292,6 +384,18 @@ export class DimensionamentoService {
       )?.cargo.carga_horaria || "36"
     );
     const fatorRestricao = equipeComRestricoes ? 1.1 : 1.0;
+
+    console.log("\n=== ⚙️ ETAPA 5: CÁLCULO DO FATOR KM ===");
+    console.log("Parâmetros:");
+    console.log(`  IST: ${(ist * 100).toFixed(1)}%`);
+    console.log(
+      `  Equipe com restrições: ${equipeComRestricoes ? "SIM" : "NÃO"}`
+    );
+    console.log(`  Fator de restrição: ${fatorRestricao}`);
+    console.log(`  Dias de trabalho/semana: ${diasTrabalhoSemana}`);
+    console.log(`  Carga horária Enfermeiro: ${cargaHorariaEnfermeiro}h`);
+    console.log(`  Carga horária Técnico: ${cargaHorariaTecnico}h`);
+
     const kmEnfermeiro =
       cargaHorariaEnfermeiro > 0
         ? (diasTrabalhoSemana / cargaHorariaEnfermeiro) * (fatorRestricao + ist)
@@ -301,13 +405,63 @@ export class DimensionamentoService {
         ? (diasTrabalhoSemana / cargaHorariaTecnico) * (fatorRestricao + ist)
         : 0;
 
+    console.log("Cálculos:");
+    console.log(
+      `  KM Enfermeiro = (${diasTrabalhoSemana} / ${cargaHorariaEnfermeiro}) × (${fatorRestricao} + ${ist.toFixed(
+        2
+      )}) = ${kmEnfermeiro.toFixed(4)}`
+    );
+    console.log(
+      `  KM Técnico = (${diasTrabalhoSemana} / ${cargaHorariaTecnico}) × (${fatorRestricao} + ${ist.toFixed(
+        2
+      )}) = ${kmTecnico.toFixed(4)}`
+    );
+    console.log("=== FIM ETAPA 5 ===\n");
+
     // --- ETAPA 6: CALCULAR QUANTIDADE DE PESSOAL (QP) FINAL ---
-    const qpEnfermeiros = Math.ceil(
-      kmEnfermeiro * (totalHorasEnfermagem * percentualEnfermeiro)
+    const horasEnfermeiroNecessarias =
+      totalHorasEnfermagem * percentualEnfermeiro;
+    const horasTecnicoNecessarias = totalHorasEnfermagem * percentualTecnico;
+
+    console.log("\n=== 🎯 ETAPA 6: CÁLCULO QUANTIDADE DE PESSOAL (QP) ===");
+    console.log("Horas necessárias:");
+    console.log(
+      `  Enfermeiro: ${totalHorasEnfermagem.toFixed(2)}h × ${(
+        percentualEnfermeiro * 100
+      ).toFixed(1)}% = ${horasEnfermeiroNecessarias.toFixed(2)}h`
     );
-    const qpTecnicos = Math.ceil(
-      kmTecnico * (totalHorasEnfermagem * percentualTecnico)
+    console.log(
+      `  Técnico: ${totalHorasEnfermagem.toFixed(2)}h × ${(
+        percentualTecnico * 100
+      ).toFixed(1)}% = ${horasTecnicoNecessarias.toFixed(2)}h`
     );
+
+    const qpEnfermeirosExato = kmEnfermeiro * horasEnfermeiroNecessarias;
+    const qpTecnicosExato = kmTecnico * horasTecnicoNecessarias;
+
+    console.log("\nQuantidade de pessoal (QP):");
+    console.log(
+      `  QP Enfermeiro (exato) = ${kmEnfermeiro.toFixed(
+        4
+      )} × ${horasEnfermeiroNecessarias.toFixed(
+        2
+      )} = ${qpEnfermeirosExato.toFixed(2)}`
+    );
+    console.log(
+      `  QP Técnico (exato) = ${kmTecnico.toFixed(
+        4
+      )} × ${horasTecnicoNecessarias.toFixed(2)} = ${qpTecnicosExato.toFixed(
+        2
+      )}`
+    );
+
+    const qpEnfermeiros = Math.ceil(qpEnfermeirosExato);
+    const qpTecnicos = Math.ceil(qpTecnicosExato);
+
+    console.log("\n✅ Quantidade projetada (arredondado):");
+    console.log(`  Enfermeiros: ${qpEnfermeiros} profissionais`);
+    console.log(`  Técnicos: ${qpTecnicos} profissionais`);
+    console.log("=== FIM ETAPA 6 ===\n");
 
     // --- Montar a resposta da API ---
     const agregados = {
@@ -331,8 +485,11 @@ export class DimensionamentoService {
         const cargoNomeLower = cu.cargo.nome.toLowerCase();
         const isEnfermeiro = cargoNomeLower.includes("enfermeiro");
         const isTecnico =
-          cargoNomeLower.includes("técnico") ||
-          cargoNomeLower.includes("auxiliar");
+          cargoNomeLower.includes("técnico em enfermagem") ||
+          cargoNomeLower.includes("técnico  enfermagem") ||
+          cargoNomeLower.includes("tec enfermagem") ||
+          cargoNomeLower.includes("técnico de enfermagem");
+          cargoNomeLower.includes("tec. enfermagem") 
         const isScp = isEnfermeiro || isTecnico;
 
         let quantidadeProjetada = cu.quantidade_funcionarios;
@@ -363,7 +520,32 @@ export class DimensionamentoService {
       }
     );
 
-    return { agregados, tabela };
+    console.log("\n=== 📋 TABELA DE CARGOS GERADA ===");
+    tabela.forEach((cargo, index) => {
+      console.log(`\n${index + 1}. ${cargo.cargoNome}:`);
+      console.log(`   - É SCP: ${cargo.isScpCargo ? "SIM" : "NÃO"}`);
+      console.log(`   - Quantidade Atual: ${cargo.quantidadeAtual}`);
+      console.log(`   - Quantidade Projetada: ${cargo.quantidadeProjetada}`);
+      console.log(
+        `   - Diferença: ${
+          cargo.quantidadeProjetada - cargo.quantidadeAtual > 0 ? "+" : ""
+        }${cargo.quantidadeProjetada - cargo.quantidadeAtual}`
+      );
+      console.log(`   - Salário: R$ ${cargo.salario.toFixed(2)}`);
+      console.log(`   - Adicionais: R$ ${cargo.adicionais.toFixed(2)}`);
+      console.log(
+        `   - Custo por funcionário: R$ ${cargo.custoPorFuncionario.toFixed(2)}`
+      );
+    });
+    console.log("\n=== FIM TABELA ===\n");
+
+    const response = { agregados, tabela };
+
+    console.log("\n=== 🚀 RESPOSTA FINAL ENVIADA AO FRONTEND ===");
+    console.log(JSON.stringify(response, null, 2));
+    console.log("=== FIM RESPOSTA ===\n");
+
+    return response;
   }
 
   // Lógica para Unidades de NÃO INTERNAÇÃO
@@ -436,6 +618,16 @@ export class DimensionamentoService {
     ).map((sitio) => {
       const cargosDoSitio = (sitio.cargosSitio || []).map((cs) => {
         const cargo = cs.cargoUnidade.cargo;
+        const cargoNomeLower = cargo.nome.toLowerCase();
+
+        // Identificar se é Enfermeiro ou Técnico de Enfermagem
+        const isEnfermeiro = cargoNomeLower.includes("enfermeiro");
+        const isTecnico =
+          cargoNomeLower.includes("técnico de enfermagem") ||
+           cargoNomeLower.includes("tec. enfermagem") ||
+          cargoNomeLower.includes("tecnico de enfermagem");
+        const isScpCargo = isEnfermeiro || isTecnico;
+
         const salario = parseFloat(cargo.salario?.replace(",", ".") || "0");
         const adicionais = parseFloat(
           cargo.adicionais_tributos?.replace(",", ".") || "0"
@@ -445,14 +637,14 @@ export class DimensionamentoService {
         return {
           cargoId: cargo.id,
           cargoNome: cargo.nome,
-          isScpCargo: false,
+          isScpCargo: isScpCargo, // ✅ Marca ENF/TEC como true
           salario,
           adicionais,
           valorHorasExtras,
           cargaHoraria,
           custoPorFuncionario: salario + adicionais + valorHorasExtras,
           quantidadeAtual: cs.quantidade_funcionarios,
-          quantidadeProjetada: cs.quantidade_funcionarios,
+          quantidadeProjetada: cs.quantidade_funcionarios, // Será calculado depois
         };
       });
 
@@ -500,6 +692,26 @@ export class DimensionamentoService {
     const pessoalEnfermeiroBruto = kmEnfermeiro * totalSitiosEnfermeiro;
     const pessoalTecnicoBruto = kmTecnico * totalSitiosTecnico;
 
+    // ✅ Atualizar quantidade projetada dos cargos ENF/TEC em todos os sítios
+    const pessoalEnfermeiroArredondado = Math.ceil(pessoalEnfermeiroBruto);
+    const pessoalTecnicoArredondado = Math.ceil(pessoalTecnicoBruto);
+
+    tabela.forEach((sitio) => {
+      sitio.cargos.forEach((cargo) => {
+        const cargoNomeLower = cargo.cargoNome.toLowerCase();
+        const isEnfermeiro = cargoNomeLower.includes("enfermeiro");
+        const isTecnico =
+          cargoNomeLower.includes("técnico de enfermagem") ||
+          cargoNomeLower.includes("tecnico de enfermagem");
+
+        if (isEnfermeiro) {
+          cargo.quantidadeProjetada = pessoalEnfermeiroArredondado;
+        } else if (isTecnico) {
+          cargo.quantidadeProjetada = pessoalTecnicoArredondado;
+        }
+      });
+    });
+
     const resumoDimensionamento = {
       periodoTrabalho,
       kmEnfermeiro: Number(kmEnfermeiro.toFixed(4)),
@@ -508,8 +720,8 @@ export class DimensionamentoService {
       totalSitiosTecnico,
       pessoalEnfermeiro: Number(pessoalEnfermeiroBruto.toFixed(2)),
       pessoalTecnico: Number(pessoalTecnicoBruto.toFixed(2)),
-      pessoalEnfermeiroArredondado: Math.ceil(pessoalEnfermeiroBruto),
-      pessoalTecnicoArredondado: Math.ceil(pessoalTecnicoBruto),
+      pessoalEnfermeiroArredondado: pessoalEnfermeiroArredondado,
+      pessoalTecnicoArredondado: pessoalTecnicoArredondado,
     };
 
     const resumoDistribuicao = {

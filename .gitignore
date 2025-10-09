@@ -31,4 +31,3 @@ docker-compose.override.yml
 # Editor
 .vscode/
 .idea/
-uploads/

@@ -159,6 +159,76 @@ export class SitioFuncionalRepository {
     return this.obter((created as any as SitioFuncional).id);
   }
 
+  /**
+   * Retorna um resumo consolidado das distribuições (ENF/TEC) por sítio de uma unidade,
+   * incluindo totais por período (SegSex/SabDom) e total geral por categoria.
+   * Isso é apenas leitura e não altera o comportamento das rotas existentes.
+   */
+  async resumoDistribuicoesPorUnidade(unidadeId: string) {
+    const sitios = await this.repo().find({
+      where: { unidade: { id: unidadeId } },
+      relations: ["distribuicoes"],
+      order: { created_at: "ASC" },
+    });
+
+    const buildResumo = (dist?: any) => {
+      const segSex = {
+        manha: dist?.segSexManha ?? 0,
+        tarde: dist?.segSexTarde ?? 0,
+        noite1: dist?.segSexNoite1 ?? 0,
+        noite2: dist?.segSexNoite2 ?? 0,
+      };
+      const sabDom = {
+        manha: dist?.sabDomManha ?? 0,
+        tarde: dist?.sabDomTarde ?? 0,
+        noite1: dist?.sabDomNoite1 ?? 0,
+        noite2: dist?.sabDomNoite2 ?? 0,
+      };
+      const totalSegSex =
+        segSex.manha + segSex.tarde + segSex.noite1 + segSex.noite2;
+      const totalSabDom =
+        sabDom.manha + sabDom.tarde + sabDom.noite1 + sabDom.noite2;
+      const totalGeral = totalSegSex + totalSabDom;
+      return { segSex, sabDom, totalSegSex, totalSabDom, totalGeral };
+    };
+
+    const payload = sitios.map((s) => {
+      const enf = (s as any).distribuicoes?.find(
+        (d: any) => d.categoria === "ENF"
+      );
+      const tec = (s as any).distribuicoes?.find(
+        (d: any) => d.categoria === "TEC"
+      );
+      const ENF = buildResumo(enf);
+      const TEC = buildResumo(tec);
+      return {
+        id: (s as any).id,
+        nome: (s as any).nome,
+        descricao: (s as any).descricao,
+        ENF,
+        TEC,
+      };
+    });
+
+    const totaisUnidade = payload.reduce(
+      (acc, item) => {
+        acc.ENF.totalSegSex += item.ENF.totalSegSex;
+        acc.ENF.totalSabDom += item.ENF.totalSabDom;
+        acc.ENF.totalGeral += item.ENF.totalGeral;
+        acc.TEC.totalSegSex += item.TEC.totalSegSex;
+        acc.TEC.totalSabDom += item.TEC.totalSabDom;
+        acc.TEC.totalGeral += item.TEC.totalGeral;
+        return acc;
+      },
+      {
+        ENF: { totalSegSex: 0, totalSabDom: 0, totalGeral: 0 },
+        TEC: { totalSegSex: 0, totalSabDom: 0, totalGeral: 0 },
+      }
+    );
+
+    return { unidadeId, sitios: payload, totaisUnidade };
+  }
+
   async atualizar(
     id: string,
     dadosRaw: AtualizarSitioFuncionalDTO | AtualizarSitioFuncionalDTOWithCargos

@@ -24,6 +24,11 @@ export const SitioPosicaoRoutes = (ds: DataSource): Router => {
 
   // Sítios por unidade (manter compatibilidade)
   r.get("/unidades-nao-internacao/:id/sitios", sitioCtrl.listarPorUnidade);
+  // Resumo consolidado de distribuições ENF/TEC por unidade (rota nova, apenas leitura)
+  r.get(
+    "/unidades-nao-internacao/:id/sitios/resumo-distribuicoes",
+    sitioCtrl.resumoDistribuicoes
+  );
 
   // Cargos atribuídos a um sítio
   r.get("/sitios-funcionais/:id/cargos", cargoSitioCtrl.listarPorSitio);
