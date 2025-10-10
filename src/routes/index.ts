@@ -18,6 +18,7 @@ import { RedeRoutes } from "./redeRoutes";
 import { RegiaoRoutes } from "./regiaoRoutes";
 import { GrupoRoutes } from "./grupoRoutes";
 import { BaselineRoutes } from "./baselineRoutes";
+import { HospitalSectorsAggregateRoutes } from "./hospitalSectorsAggregateRoutes";
 
 import { DataSource } from "typeorm";
 import { AuthRoutes } from "./authRoutes";
@@ -87,6 +88,7 @@ export const createIndexRouter = (dataSource: DataSource): Router => {
   router.use("/dimensionamento", DimensionamentoRoutes(dataSource));
 
   // Hospital Sectors (Internation + Assistance)
+  router.use("/hospital-sectors-aggregate", HospitalSectorsAggregateRoutes(dataSource));
   router.use("/hospital-sectors", HospitalSectorsRoutes(dataSource));
 
   // Snapshot
