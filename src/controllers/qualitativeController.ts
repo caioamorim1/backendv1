@@ -1,0 +1,66 @@
+import { Request, Response } from "express";
+import { QualitativeCategory } from "../dto/qualitative.dto";
+import { QualitativeRepository } from "../repositories/QualitativeRepository";
+
+export class QualitativeController {
+    constructor(private repo: QualitativeRepository) { }
+
+
+
+    listarCategorias = async (req: Request, res: Response) => {
+        try {
+            const result = await this.repo.listarCategorias();
+
+            return res.json(result);
+        } catch (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Erro ao listar categorias." });
+        }
+    };
+
+    atualizar = async (req: Request, res: Response) => {
+        const id = parseInt(req.params.id);
+        const { name, meta } = req.body;
+        if (!name || meta === undefined || isNaN(meta) || meta <= 0) {
+            return res.status(400).json({ error: "Nome e meta são obrigatórios. A meta deve ser maior que zero." });
+        }
+
+        try {
+            await this.repo.atualizarCategoria(id, { name, meta });
+            return res.status(204).send();
+        } catch (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Erro ao atualizar categoria." });
+        }
+    };
+
+    criar = async (req: Request, res: Response) => {
+        const { name, meta } = req.body;
+        if (!name || meta === undefined || isNaN(meta) || meta <= 0) {
+            return res.status(400).json({ error: "Nome e meta são obrigatórios. A meta deve ser maior que zero." });
+        }
+        try {
+            const result = await this.repo.criarCategoria({ name, meta });
+            return res.status(201).json(result);
+        } catch (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Erro ao criar categoria." });
+        }
+    };
+
+    excluir = async (req: Request, res: Response) => {
+        const id = parseInt(req.params.id);
+        if (isNaN(id)) {
+            return res.status(400).json({ error: "ID inválido." });
+        }
+
+        try {
+            await this.repo.excluirCategoria(id);
+            return res.status(204).send();
+        } catch (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Erro ao excluir categoria." });
+        }
+    };
+
+}

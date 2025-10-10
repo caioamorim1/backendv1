@@ -31,6 +31,7 @@ import { DimensionamentoRoutes } from "./dimensionamentoRoutes";
 import { HospitalSectorsRoutes } from "./hospitalSectorsRoutes";
 import { LeitosStatusRoutes } from "./leitosStatusRoutes";
 import { snapshotDimensionamentoRoutes } from "./snapshotDimensionamentoRoutes";
+import { QualitativeRoutes } from "./QualitativeRoutes";
 
 export const createIndexRouter = (dataSource: DataSource): Router => {
   const router = Router();
@@ -81,6 +82,8 @@ export const createIndexRouter = (dataSource: DataSource): Router => {
   router.use("/baselines", BaselineRoutes(dataSource));
   // Questionários
   router.use("/questionarios", QuestionarioRoutes(dataSource));
+  router.use("/qualitative", QualitativeRoutes(dataSource));
+
   // Coletas
 
   router.use("/coletas", ColetaRoutes(dataSource));
