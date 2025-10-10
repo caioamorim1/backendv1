@@ -4,6 +4,26 @@ import { HospitalSectorsAggregateRepository } from "../repositories/hospitalSect
 export class HospitalSectorsAggregateController {
   constructor(private repo: HospitalSectorsAggregateRepository) {}
 
+  getAllSectors = async (req: Request, res: Response) => {
+    try {
+      console.log("Buscando setores para TODOS os hospitais...");
+      const result = await this.repo.getAllSectors();
+      return res.json(result);
+    } catch (error) {
+      console.error(
+        "[HospitalSectorsAggregateController] erro ao buscar todos os setores:",
+        error
+      );
+      const msg = error instanceof Error ? error.message : String(error);
+      if (process.env.NODE_ENV !== "production") {
+        return res
+          .status(500)
+          .json({ error: "Erro ao buscar todos os setores", details: msg });
+      }
+      return res.status(500).json({ error: "Erro ao buscar todos os setores" });
+    }
+  };
+
   getSectorsByNetwork = async (req: Request, res: Response) => {
     try {
       const { networkId } = req.params;
@@ -15,10 +35,15 @@ export class HospitalSectorsAggregateController {
       const result = await this.repo.getSectorsByNetwork(networkId);
       return res.json(result);
     } catch (error) {
-      console.error("[HospitalSectorsAggregateController] erro ao buscar setores por rede:", error);
+      console.error(
+        "[HospitalSectorsAggregateController] erro ao buscar setores por rede:",
+        error
+      );
       const msg = error instanceof Error ? error.message : String(error);
       if (process.env.NODE_ENV !== "production") {
-        return res.status(500).json({ error: "Erro ao buscar setores por rede", details: msg });
+        return res
+          .status(500)
+          .json({ error: "Erro ao buscar setores por rede", details: msg });
       }
       return res.status(500).json({ error: "Erro ao buscar setores por rede" });
     }
@@ -35,12 +60,19 @@ export class HospitalSectorsAggregateController {
       const result = await this.repo.getSectorsByGroup(groupId);
       return res.json(result);
     } catch (error) {
-      console.error("[HospitalSectorsAggregateController] erro ao buscar setores por grupo:", error);
+      console.error(
+        "[HospitalSectorsAggregateController] erro ao buscar setores por grupo:",
+        error
+      );
       const msg = error instanceof Error ? error.message : String(error);
       if (process.env.NODE_ENV !== "production") {
-        return res.status(500).json({ error: "Erro ao buscar setores por grupo", details: msg });
+        return res
+          .status(500)
+          .json({ error: "Erro ao buscar setores por grupo", details: msg });
       }
-      return res.status(500).json({ error: "Erro ao buscar setores por grupo" });
+      return res
+        .status(500)
+        .json({ error: "Erro ao buscar setores por grupo" });
     }
   };
 
@@ -55,12 +87,19 @@ export class HospitalSectorsAggregateController {
       const result = await this.repo.getSectorsByRegion(regionId);
       return res.json(result);
     } catch (error) {
-      console.error("[HospitalSectorsAggregateController] erro ao buscar setores por região:", error);
+      console.error(
+        "[HospitalSectorsAggregateController] erro ao buscar setores por região:",
+        error
+      );
       const msg = error instanceof Error ? error.message : String(error);
       if (process.env.NODE_ENV !== "production") {
-        return res.status(500).json({ error: "Erro ao buscar setores por região", details: msg });
+        return res
+          .status(500)
+          .json({ error: "Erro ao buscar setores por região", details: msg });
       }
-      return res.status(500).json({ error: "Erro ao buscar setores por região" });
+      return res
+        .status(500)
+        .json({ error: "Erro ao buscar setores por região" });
     }
   };
 }

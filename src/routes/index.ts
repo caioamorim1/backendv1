@@ -18,7 +18,6 @@ import { RedeRoutes } from "./redeRoutes";
 import { RegiaoRoutes } from "./regiaoRoutes";
 import { GrupoRoutes } from "./grupoRoutes";
 import { BaselineRoutes } from "./baselineRoutes";
-import { HospitalSectorsAggregateRoutes } from "./hospitalSectorsAggregateRoutes";
 
 import { DataSource } from "typeorm";
 import { AuthRoutes } from "./authRoutes";
@@ -31,8 +30,9 @@ import { ColetaRoutes } from "./coletaRoutes";
 import { DimensionamentoRoutes } from "./dimensionamentoRoutes";
 import { HospitalSectorsRoutes } from "./hospitalSectorsRoutes";
 import { LeitosStatusRoutes } from "./leitosStatusRoutes";
+
 import { snapshotDimensionamentoRoutes } from "./snapshotDimensionamentoRoutes";
-import { QualitativeRoutes } from "./QualitativeRoutes";
+import { HospitalSectorsAggregateRoutes } from "./hospitalSectorsAggregateRoutes";
 
 export const createIndexRouter = (dataSource: DataSource): Router => {
   const router = Router();
@@ -83,17 +83,17 @@ export const createIndexRouter = (dataSource: DataSource): Router => {
   router.use("/baselines", BaselineRoutes(dataSource));
   // Questionários
   router.use("/questionarios", QuestionarioRoutes(dataSource));
-  router.use("/qualitative", QualitativeRoutes(dataSource));
-
   // Coletas
 
   router.use("/coletas", ColetaRoutes(dataSource));
   router.use("/dimensionamento", DimensionamentoRoutes(dataSource));
 
   // Hospital Sectors (Internation + Assistance)
-  router.use("/hospital-sectors-aggregate", HospitalSectorsAggregateRoutes(dataSource));
   router.use("/hospital-sectors", HospitalSectorsRoutes(dataSource));
-
+  router.use(
+    "/hospital-sectors-aggregate",
+    HospitalSectorsAggregateRoutes(dataSource)
+  );
   // Snapshot
   router.use("/snapshot", snapshotDimensionamentoRoutes(dataSource));
   // Leitos Status (Atualização de estatísticas de leitos)
