@@ -489,7 +489,6 @@ export class DimensionamentoService {
           cargoNomeLower.includes("técnico  enfermagem") ||
           cargoNomeLower.includes("tec enfermagem") ||
           cargoNomeLower.includes("técnico de enfermagem");
-          cargoNomeLower.includes("tec. enfermagem") 
         const isScp = isEnfermeiro || isTecnico;
 
         let quantidadeProjetada = cu.quantidade_funcionarios;
@@ -624,7 +623,6 @@ export class DimensionamentoService {
         const isEnfermeiro = cargoNomeLower.includes("enfermeiro");
         const isTecnico =
           cargoNomeLower.includes("técnico de enfermagem") ||
-           cargoNomeLower.includes("tec. enfermagem") ||
           cargoNomeLower.includes("tecnico de enfermagem");
         const isScpCargo = isEnfermeiro || isTecnico;
 

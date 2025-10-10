@@ -8,6 +8,9 @@ export const HospitalSectorsAggregateRoutes = (ds: DataSource): Router => {
   const repo = new HospitalSectorsAggregateRepository(ds);
   const controller = new HospitalSectorsAggregateController(repo);
 
+  // Rota para buscar setores de TODOS os hospitais
+  router.get("/all", controller.getAllSectors);
+
   // Rota para buscar setores por rede
   router.get("/network/:networkId", controller.getSectorsByNetwork);
 

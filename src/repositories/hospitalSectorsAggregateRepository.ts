@@ -3,20 +3,31 @@ import {
   InternationSectorWithHospitalDTO,
   AssistanceSectorWithHospitalDTO,
   AggregatedSectorsDTO,
-  SectorsAggregateDTO
+  SectorsAggregateDTO,
 } from "../dto/hospitalSectorsAggregate.dto";
 
 export class HospitalSectorsAggregateRepository {
   constructor(private ds: DataSource) {}
 
+  // Busca TODOS os hospitais
+  async getAllSectors(): Promise<SectorsAggregateDTO> {
+    const internation = await this.getAllInternationSectors();
+    const assistance = await this.getAllAssistanceSectors();
+
+    return {
+      id: `all-hospitals-sectors`,
+      hospitals: await this.aggregateSectorsByHospital(internation, assistance),
+    };
+  }
+
   // Busca por Rede
   async getSectorsByNetwork(networkId: string): Promise<SectorsAggregateDTO> {
     const internation = await this.getInternationSectorsByNetwork(networkId);
     const assistance = await this.getAssistanceSectorsByNetwork(networkId);
-    
+
     return {
       id: `network-sectors-${networkId}`,
-      hospitals: await this.aggregateSectorsByHospital(internation, assistance)
+      hospitals: await this.aggregateSectorsByHospital(internation, assistance),
     };
   }
 
@@ -24,10 +35,10 @@ export class HospitalSectorsAggregateRepository {
   async getSectorsByGroup(groupId: string): Promise<SectorsAggregateDTO> {
     const internation = await this.getInternationSectorsByGroup(groupId);
     const assistance = await this.getAssistanceSectorsByGroup(groupId);
-    
+
     return {
       id: `group-sectors-${groupId}`,
-      hospitals: await this.aggregateSectorsByHospital(internation, assistance)
+      hospitals: await this.aggregateSectorsByHospital(internation, assistance),
     };
   }
 
@@ -35,14 +46,16 @@ export class HospitalSectorsAggregateRepository {
   async getSectorsByRegion(regionId: string): Promise<SectorsAggregateDTO> {
     const internation = await this.getInternationSectorsByRegion(regionId);
     const assistance = await this.getAssistanceSectorsByRegion(regionId);
-    
+
     return {
       id: `region-sectors-${regionId}`,
-      hospitals: await this.aggregateSectorsByHospital(internation, assistance)
+      hospitals: await this.aggregateSectorsByHospital(internation, assistance),
     };
   }
 
-  private async getInternationSectorsByNetwork(networkId: string): Promise<InternationSectorWithHospitalDTO[]> {
+  private async getInternationSectorsByNetwork(
+    networkId: string
+  ): Promise<InternationSectorWithHospitalDTO[]> {
     const query = `
       SELECT 
         uni.id AS "id",
@@ -97,7 +110,97 @@ export class HospitalSectorsAggregateRepository {
     return await this.ds.query(query, [networkId]);
   }
 
-  private async getAssistanceSectorsByNetwork(networkId: string): Promise<AssistanceSectorWithHospitalDTO[]> {
+  private async getAllInternationSectors(): Promise<
+    InternationSectorWithHospitalDTO[]
+  > {
+    const query = `
+      SELECT 
+        uni.id AS "id",
+        uni.nome AS "name",
+        h.nome AS "hospitalName",
+        uni.descricao AS "descr",
+        SUM(
+          (
+            (COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) + 
+             COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
+             COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0))
+            * COALESCE(cuni.quantidade_funcionarios, 0)
+          )
+        ) AS "costAmount",
+        COALESCE(ls.bed_count, 0) AS "bedCount",
+        JSON_BUILD_OBJECT(
+          'minimumCare',      COALESCE(ls.minimum_care, 0),
+          'intermediateCare', COALESCE(ls.intermediate_care, 0),
+          'highDependency',   COALESCE(ls.high_dependency, 0),
+          'semiIntensive',    COALESCE(ls.semi_intensive, 0),
+          'intensive',        COALESCE(ls.intensive, 0)
+        ) AS "careLevel",
+        JSON_BUILD_OBJECT(
+          'evaluated', COALESCE(ls.evaluated, 0),
+          'vacant',    COALESCE(ls.vacant, 0),
+          'inactive',  COALESCE(ls.inactive, 0)
+        ) AS "bedStatus",
+        JSON_AGG(
+          JSON_BUILD_OBJECT(
+            'id', c.id,
+            'role', c.nome,
+            'quantity', cuni.quantidade_funcionarios
+          )
+        ) FILTER (WHERE c.id IS NOT NULL) AS "staff"
+      FROM public.unidades_internacao uni
+      INNER JOIN public.hospitais h ON h.id = uni."hospitalId"
+      LEFT JOIN public.cargos_unidade cuni ON cuni.unidade_id = uni.id
+      LEFT JOIN public.cargo c ON c.id = cuni.cargo_id
+      LEFT JOIN public.leitos_status ls ON ls.unidade_id = uni.id
+      GROUP BY 
+        uni.id, uni.nome, h.nome, uni.descricao,
+        ls.bed_count, ls.minimum_care, ls.intermediate_care,
+        ls.high_dependency, ls.semi_intensive, ls.intensive,
+        ls.evaluated, ls.vacant, ls.inactive
+      ORDER BY h.nome, uni.nome
+    `;
+
+    return await this.ds.query(query);
+  }
+
+  private async getAllAssistanceSectors(): Promise<
+    AssistanceSectorWithHospitalDTO[]
+  > {
+    const query = `
+      SELECT 
+        uni.id AS "id",
+        uni.nome AS "name",
+        h.nome AS "hospitalName",
+        uni.descricao AS "descr",
+        SUM(
+          (
+            (COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) + 
+             COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
+             COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0))
+            * COALESCE(cuni.quantidade_funcionarios, 0)
+          )
+        ) AS "costAmount",
+        JSON_AGG(
+          JSON_BUILD_OBJECT(
+            'id', c.id,
+            'role', c.nome,
+            'quantity', cuni.quantidade_funcionarios
+          )
+        ) FILTER (WHERE c.id IS NOT NULL) AS "staff"
+      FROM public.unidades_nao_internacao uni
+      INNER JOIN public.hospitais h ON h.id = uni."hospitalId"
+      LEFT JOIN public.cargos_unidade cuni ON cuni.unidade_nao_internacao_id = uni.id
+      LEFT JOIN public.cargo c ON c.id = cuni.cargo_id
+      GROUP BY uni.id, uni.nome, h.nome, uni.descricao
+      ORDER BY h.nome, uni.nome
+    `;
+
+    return await this.ds.query(query);
+  }
+
+  private async getAssistanceSectorsByNetwork(
+    networkId: string
+  ): Promise<AssistanceSectorWithHospitalDTO[]> {
     const query = `
       SELECT 
         uni.id AS "id",
@@ -134,7 +237,9 @@ export class HospitalSectorsAggregateRepository {
     return await this.ds.query(query, [networkId]);
   }
 
-  private async getInternationSectorsByGroup(groupId: string): Promise<InternationSectorWithHospitalDTO[]> {
+  private async getInternationSectorsByGroup(
+    groupId: string
+  ): Promise<InternationSectorWithHospitalDTO[]> {
     const query = `
       SELECT 
         uni.id AS "id",
@@ -188,7 +293,9 @@ export class HospitalSectorsAggregateRepository {
     return await this.ds.query(query, [groupId]);
   }
 
-  private async getAssistanceSectorsByGroup(groupId: string): Promise<AssistanceSectorWithHospitalDTO[]> {
+  private async getAssistanceSectorsByGroup(
+    groupId: string
+  ): Promise<AssistanceSectorWithHospitalDTO[]> {
     const query = `
       SELECT 
         uni.id AS "id",
@@ -224,7 +331,9 @@ export class HospitalSectorsAggregateRepository {
     return await this.ds.query(query, [groupId]);
   }
 
-  private async getInternationSectorsByRegion(regionId: string): Promise<InternationSectorWithHospitalDTO[]> {
+  private async getInternationSectorsByRegion(
+    regionId: string
+  ): Promise<InternationSectorWithHospitalDTO[]> {
     const query = `
       SELECT 
         uni.id AS "id",
@@ -277,7 +386,9 @@ export class HospitalSectorsAggregateRepository {
     return await this.ds.query(query, [regionId]);
   }
 
-  private async getAssistanceSectorsByRegion(regionId: string): Promise<AssistanceSectorWithHospitalDTO[]> {
+  private async getAssistanceSectorsByRegion(
+    regionId: string
+  ): Promise<AssistanceSectorWithHospitalDTO[]> {
     const query = `
       SELECT 
         uni.id AS "id",
@@ -327,7 +438,7 @@ export class HospitalSectorsAggregateRepository {
           id: `hospital-sectors-${hospitalName}`,
           hospitalName,
           internation: [],
-          assistance: []
+          assistance: [],
         });
       }
       hospitalMap.get(hospitalName)!.internation.push(sectorData);
@@ -341,14 +452,14 @@ export class HospitalSectorsAggregateRepository {
           id: `hospital-sectors-${hospitalName}`,
           hospitalName,
           internation: [],
-          assistance: []
+          assistance: [],
         });
       }
       hospitalMap.get(hospitalName)!.assistance.push(sectorData);
     }
 
     // Converter o mapa em array e ordenar por nome do hospital
-    return Array.from(hospitalMap.values()).sort((a, b) => 
+    return Array.from(hospitalMap.values()).sort((a, b) =>
       a.hospitalName.localeCompare(b.hospitalName)
     );
   }
