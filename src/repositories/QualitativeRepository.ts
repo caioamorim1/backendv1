@@ -10,7 +10,8 @@ export class QualitativeRepository {
     console.log("listando categorias qualitativas...");
 
     const query = `
-      SELECT * FROM qualitative_category
+      SELECT * FROM qualitative_category 
+      WHERE deleted_at IS NULL
       ORDER BY name
         
     `;
@@ -37,7 +38,7 @@ export class QualitativeRepository {
 
   async excluirCategoria(id: number): Promise<void> {
     await this.ds.query(
-      `DELETE FROM qualitative_category WHERE id = $1`,
+      `UPDATE qualitative_category SET deleted_at = NOW() WHERE id = $1`,
       [id]
     );
   }
