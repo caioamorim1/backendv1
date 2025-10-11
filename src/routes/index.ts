@@ -81,7 +81,7 @@ export const createIndexRouter = (dataSource: DataSource): Router => {
   // Baselines
   router.use("/baselines", BaselineRoutes(dataSource));
   // Questionários
-  router.use("/questionarios", QuestionarioRoutes(dataSource));
+  //router.use("/questionarios", QuestionarioRoutes(dataSource));
   router.use("/qualitative", QualitativeRoutes(dataSource));
 
   // Coletas

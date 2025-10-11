@@ -1,5 +1,5 @@
-import { Repository, DataSource, FindManyOptions, ILike } from "typeorm";
-import { QualitativeCategory } from "../dto/qualitative.dto";
+import { DataSource } from "typeorm";
+import { QualitativeCategory, Questionnaire } from "../dto/qualitative.dto";
 
 
 export class QualitativeRepository {
@@ -43,5 +43,52 @@ export class QualitativeRepository {
     );
   }
 
+
+  async criarQuestionario(data: { name: string; questions: any[]; }): Promise<void> {
+    const query = `
+    INSERT INTO qualitative_questionnaire 
+      (name, questions, is_active, version, created_at, updated_at) 
+    VALUES ($1, $2::jsonb, $3, $4, NOW(), NOW())
+    RETURNING *
+  `;
+
+    const values = [
+      data.name,
+      JSON.stringify(data.questions),
+      true, // is_active padrão como true
+      1    // version inicial como 1
+    ];
+
+    const result = await this.ds.query(query, values);
+    return result[0];
+  }
+
+  async listarQuestionarios(): Promise<Questionnaire[]> {
+    const query = `
+      SELECT * FROM qualitative_questionnaire
+      WHERE deleted_at IS NULL
+      ORDER BY name
+    `;
+
+    const questionarios = await this.ds.query(query);
+    return questionarios;
+  }
+
+  async atualizarQuestionario(id: number, data: { name: string; questions: any[]; }): Promise<void> {
+    const query = `
+      UPDATE qualitative_questionnaire
+      SET name = $1, questions = $2::jsonb
+      WHERE id = $3
+    `;
+
+    await this.ds.query(query, [data.name, JSON.stringify(data.questions), id]);
+  }
+
+  async excluirQuestionario(id: number): Promise<void> {
+    await this.ds.query(
+      `UPDATE qualitative_questionnaire SET deleted_at = NOW() WHERE id = $1`,
+      [id]
+    );
+  }
 
 }

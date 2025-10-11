@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { QualitativeCategory } from "../dto/qualitative.dto";
+import { QualitativeCategory, Questionnaire } from "../dto/qualitative.dto";
 import { QualitativeRepository } from "../repositories/QualitativeRepository";
 
 export class QualitativeController {
@@ -60,6 +60,65 @@ export class QualitativeController {
         } catch (err) {
             console.error(err);
             return res.status(500).json({ error: "Erro ao excluir categoria." });
+        }
+    };
+
+
+    criarQuestionario = async (req: Request, res: Response) => {
+
+        const { name, questions }: Questionnaire = req.body;
+
+        if (!name || !questions || !Array.isArray(questions) || questions.length === 0) {
+            return res.status(400).json({ error: "Nome e perguntas são obrigatórios." });
+        }
+
+        try {
+            const result = await this.repo.criarQuestionario({ name, questions });
+            return res.status(201).json(result);
+        } catch (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Erro ao criar questionário." });
+        }
+    }
+
+    listarQuestionarios = async (req: Request, res: Response) => {
+        try {
+            const result = await this.repo.listarQuestionarios();
+            return res.json(result);
+        } catch (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Erro ao listar questionários." });
+        }
+    };
+
+    atualizarQuestionario = async (req: Request, res: Response) => {
+        const id = parseInt(req.params.id);
+        const { name, questions }: Questionnaire = req.body;
+
+        if (!name || !questions || !Array.isArray(questions) || questions.length === 0) {
+            return res.status(400).json({ error: "Nome e perguntas são obrigatórios." });
+        }
+
+        try {
+            await this.repo.atualizarQuestionario(id, { name, questions });
+            return res.status(204).send();
+        } catch (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Erro ao atualizar questionário." });
+        }
+    };
+    excluirQuestionario = async (req: Request, res: Response) => {
+        const id = parseInt(req.params.id);
+        if (isNaN(id)) {
+            return res.status(400).json({ error: "ID inválido." });
+        }
+
+        try {
+            await this.repo.excluirQuestionario(id);
+            return res.status(204).send();
+        } catch (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Erro ao excluir questionário." });
         }
     };
 
