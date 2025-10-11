@@ -241,6 +241,23 @@ export class SitioFuncionalRepository {
     });
     if (!existente) return null;
 
+    // ✅ VERIFICAR SE A UNIDADE TEM MÚLTIPLOS SÍTIOS
+    const totalSitios = await this.repo().count({
+      where: { unidade: { id: existente.unidade?.id } },
+    });
+    const temMultiplosSitios = totalSitios > 1;
+
+    console.log(`\n🔍 UPDATE SÍTIO: ${existente.nome}`);
+    console.log(`   Unidade: ${existente.unidade?.nome}`);
+    console.log(`   Total de sítios na unidade: ${totalSitios}`);
+    console.log(
+      `   Validação de quantidade: ${
+        temMultiplosSitios
+          ? "❌ DESABILITADA (múltiplos sítios)"
+          : "✅ HABILITADA"
+      }`
+    );
+
     // use transaction to update sitio and reconcile cargos if provided
     await this.ds.transaction(async (manager) => {
       const sitioRepo = manager.getRepository(SitioFuncional);
@@ -285,31 +302,34 @@ export class SitioFuncionalRepository {
           if (existingAssoc) {
             // update only if quantidade_funcionarios provided, otherwise leave as-is
             if (typeof c.quantidade_funcionarios === "number") {
-              // Lock CargoUnidade and validate availability (excluding current alloc)
-              const cuLocked = await manager
-                .createQueryBuilder(CargoUnidade, "cu")
-                .setLock("pessimistic_write")
-                .where("cu.id = :id", { id: cargoUnidadeId })
-                .getOne();
-              if (!cuLocked) throw new Error("CargoUnidade não encontrado");
+              // ✅ SÓ VALIDAR SE NÃO FOR UNIDADE COM MÚLTIPLOS SÍTIOS
+              if (!temMultiplosSitios) {
+                // Lock CargoUnidade and validate availability (excluding current alloc)
+                const cuLocked = await manager
+                  .createQueryBuilder(CargoUnidade, "cu")
+                  .setLock("pessimistic_write")
+                  .where("cu.id = :id", { id: cargoUnidadeId })
+                  .getOne();
+                if (!cuLocked) throw new Error("CargoUnidade não encontrado");
 
-              const raw = await cargoSitioRepo
-                .createQueryBuilder("cs")
-                .select("COALESCE(SUM(cs.quantidade_funcionarios),0)", "sum")
-                .where("cs.cargo_unidade_id = :id", { id: cargoUnidadeId })
-                .andWhere("cs.id != :currentId", {
-                  currentId: existingAssoc.id,
-                })
-                .getRawOne();
+                const raw = await cargoSitioRepo
+                  .createQueryBuilder("cs")
+                  .select("COALESCE(SUM(cs.quantidade_funcionarios),0)", "sum")
+                  .where("cs.cargo_unidade_id = :id", { id: cargoUnidadeId })
+                  .andWhere("cs.id != :currentId", {
+                    currentId: existingAssoc.id,
+                  })
+                  .getRawOne();
 
-              const allocatedExcluding = Number(raw?.sum ?? 0);
-              if (
-                allocatedExcluding + Number(c.quantidade_funcionarios) >
-                (cuLocked.quantidade_funcionarios ?? 0)
-              ) {
-                throw new Error(
-                  "Quantidade solicitada excede a disponibilidade do cargo na unidade"
-                );
+                const allocatedExcluding = Number(raw?.sum ?? 0);
+                if (
+                  allocatedExcluding + Number(c.quantidade_funcionarios) >
+                  (cuLocked.quantidade_funcionarios ?? 0)
+                ) {
+                  throw new Error(
+                    "Quantidade solicitada excede a disponibilidade do cargo na unidade"
+                  );
+                }
               }
 
               existingAssoc.quantidade_funcionarios = c.quantidade_funcionarios;
@@ -319,29 +339,32 @@ export class SitioFuncionalRepository {
           }
 
           // create new association with availability check
-          const cuLockedForCreate = await manager
-            .createQueryBuilder(CargoUnidade, "cu")
-            .setLock("pessimistic_write")
-            .where("cu.id = :id", { id: cargoUnidadeId })
-            .getOne();
-          if (!cuLockedForCreate)
-            throw new Error("CargoUnidade não encontrado");
+          // ✅ SÓ VALIDAR SE NÃO FOR UNIDADE COM MÚLTIPLOS SÍTIOS
+          if (!temMultiplosSitios) {
+            const cuLockedForCreate = await manager
+              .createQueryBuilder(CargoUnidade, "cu")
+              .setLock("pessimistic_write")
+              .where("cu.id = :id", { id: cargoUnidadeId })
+              .getOne();
+            if (!cuLockedForCreate)
+              throw new Error("CargoUnidade não encontrado");
 
-          const raw2 = await cargoSitioRepo
-            .createQueryBuilder("cs")
-            .select("COALESCE(SUM(cs.quantidade_funcionarios),0)", "sum")
-            .where("cs.cargo_unidade_id = :id", { id: cargoUnidadeId })
-            .getRawOne();
+            const raw2 = await cargoSitioRepo
+              .createQueryBuilder("cs")
+              .select("COALESCE(SUM(cs.quantidade_funcionarios),0)", "sum")
+              .where("cs.cargo_unidade_id = :id", { id: cargoUnidadeId })
+              .getRawOne();
 
-          const allocatedNow = Number(raw2?.sum ?? 0);
-          const requestedNow = Number(c.quantidade_funcionarios ?? 1);
-          if (
-            allocatedNow + requestedNow >
-            (cuLockedForCreate.quantidade_funcionarios ?? 0)
-          ) {
-            throw new Error(
-              "Quantidade solicitada excede a disponibilidade do cargo na unidade"
-            );
+            const allocatedNow = Number(raw2?.sum ?? 0);
+            const requestedNow = Number(c.quantidade_funcionarios ?? 1);
+            if (
+              allocatedNow + requestedNow >
+              (cuLockedForCreate.quantidade_funcionarios ?? 0)
+            ) {
+              throw new Error(
+                "Quantidade solicitada excede a disponibilidade do cargo na unidade"
+              );
+            }
           }
 
           const cs = cargoSitioRepo.create({

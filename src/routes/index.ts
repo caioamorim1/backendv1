@@ -30,7 +30,9 @@ import { ColetaRoutes } from "./coletaRoutes";
 import { DimensionamentoRoutes } from "./dimensionamentoRoutes";
 import { HospitalSectorsRoutes } from "./hospitalSectorsRoutes";
 import { LeitosStatusRoutes } from "./leitosStatusRoutes";
+
 import { snapshotDimensionamentoRoutes } from "./snapshotDimensionamentoRoutes";
+import { HospitalSectorsAggregateRoutes } from "./hospitalSectorsAggregateRoutes";
 import { QualitativeRoutes } from "./QualitativeRoutes";
 
 export const createIndexRouter = (dataSource: DataSource): Router => {
@@ -91,7 +93,10 @@ export const createIndexRouter = (dataSource: DataSource): Router => {
 
   // Hospital Sectors (Internation + Assistance)
   router.use("/hospital-sectors", HospitalSectorsRoutes(dataSource));
-
+  router.use(
+    "/hospital-sectors-aggregate",
+    HospitalSectorsAggregateRoutes(dataSource)
+  );
   // Snapshot
   router.use("/snapshot", snapshotDimensionamentoRoutes(dataSource));
   // Leitos Status (Atualização de estatísticas de leitos)
