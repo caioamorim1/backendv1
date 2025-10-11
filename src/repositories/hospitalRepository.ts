@@ -123,6 +123,10 @@ export class HospitalRepository {
       .where("hospital.id = :id", { id })
       .leftJoinAndSelect("hospital.colaboradores", "colaboradores")
       .leftJoinAndSelect("hospital.unidades", "unidades")
+      .leftJoinAndSelect(
+        "hospital.unidadesNaoInternacao",
+        "unidadesNaoInternacao"
+      )
       .leftJoinAndSelect("hospital.baseline", "baseline")
       .leftJoinAndSelect("hospital.regiao", "regiao")
       .leftJoinAndSelect("regiao.grupo", "grupo")

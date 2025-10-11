@@ -33,6 +33,14 @@ export class ParametrosUnidade {
   @Column({ type: "int", nullable: true })
   diasSemana?: number;
 
+  // Carga horária semanal do enfermeiro (por padrão 36h)
+  @Column({ type: "decimal", precision: 5, scale: 2, nullable: true })
+  cargaHorariaEnfermeiro?: number;
+
+  // Carga horária semanal do técnico (por padrão 36h)
+  @Column({ type: "decimal", precision: 5, scale: 2, nullable: true })
+  cargaHorariaTecnico?: number;
+
   @CreateDateColumn()
   created_at!: Date;
 

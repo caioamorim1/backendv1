@@ -4,4 +4,6 @@ export interface CreateParametrosDTO {
   aplicarIST?: boolean;
   ist?: number;
   diasSemana?: number;
+  cargaHorariaEnfermeiro?: number; // Carga horária semanal (padrão 36h)
+  cargaHorariaTecnico?: number; // Carga horária semanal (padrão 36h)
 }
