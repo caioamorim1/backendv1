@@ -91,4 +91,75 @@ export class QualitativeRepository {
     );
   }
 
+  async criarAvaliacao(data: any): Promise<void> {
+    const query = `
+      INSERT INTO qualitative_evaluation 
+        (title, evaluator, date, status, questionnaire_id, questionnaire, answers, calculate_rate, sector_id, created_at, updated_at) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, NOW(), NOW())
+      RETURNING *
+    `;
+
+    const values = [
+      data.title,
+      data.evaluator,
+      data.date,
+      data.status,
+      data.questionnaireId,
+      data.questionnaire,
+      JSON.stringify(data.answers),
+      data.calculateRate,
+      data.sectorId
+    ];
+
+    const result = await this.ds.query(query, values);
+    return result[0];
+  }
+  async listarAvaliacoes(): Promise<any[]> {
+    const query = `
+      SELECT qe.*, qq.name AS "questionnaire", qe.questionnaire_id AS "questionnaireId"
+      FROM qualitative_evaluation qe
+      JOIN qualitative_questionnaire qq ON qe.questionnaire_id = qq.id
+      WHERE qe.deleted_at IS NULL
+      ORDER BY qe.date DESC
+    `;
+    const result = await this.ds.query(query);
+    return result;
+  }
+  async obterAvaliacao(id: number): Promise<any> {
+    const query = `
+      SELECT qe.*, qq.name AS questionnaire
+      FROM qualitative_evaluation qe
+      JOIN qualitative_questionnaire qq ON qe.questionnaire_id = qq.id
+      WHERE qe.id = $1 AND qe.deleted_at IS NULL
+    `;
+    const result = await this.ds.query(query, [id]);
+    return result[0];
+  }
+  async atualizarAvaliacao(id: number, data: any): Promise<void> {
+    const query = `
+      UPDATE qualitative_evaluation
+      SET title = $1, evaluator = $2, date = $3, status = $4, questionnaire_id = $5, answers = $6::jsonb, calculate_rate = $7, sector_id = $8, updated_at = NOW()
+      WHERE id = $9
+    `;
+
+    const values = [
+      data.title,
+      data.evaluator,
+      data.date,
+      data.status,
+      data.questionnaireId,
+      JSON.stringify(data.answers),
+      data.calculateRate,
+      data.sectorId,
+      id
+    ];
+
+    await this.ds.query(query, values);
+  }
+  async excluirAvaliacao(id: number): Promise<void> {
+    await this.ds.query(
+      `UPDATE qualitative_evaluation SET deleted_at = NOW() WHERE id = $1`,
+      [id]
+    );
+  }
 }

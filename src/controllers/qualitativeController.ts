@@ -122,4 +122,77 @@ export class QualitativeController {
         }
     };
 
+
+    criarAvaliacao = async (req: Request, res: Response) => {
+        const { title, evaluator, date, status, questionnaire, questionnaireId, answers, sectorId } = req.body;
+
+        if (!title || !evaluator || !date || !status || !questionnaireId || !answers || !sectorId) {
+            return res.status(400).json({ error: "Todos os campos são obrigatórios." });
+        }
+
+        try {
+            const result = await this.repo.criarAvaliacao({ title, evaluator, date, status, questionnaire, questionnaireId, answers, sectorId });
+            return res.status(201).json(result);
+        } catch (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Erro ao criar avaliação." });
+        }
+    };
+    listarAvaliacoes = async (req: Request, res: Response) => {
+        try {
+            const result = await this.repo.listarAvaliacoes();
+            return res.json(result);
+        } catch (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Erro ao listar avaliações." });
+        }
+    };
+
+    obterAvaliacao = async (req: Request, res: Response) => {
+        const id = parseInt(req.params.id);
+        if (isNaN(id)) {
+            return res.status(400).json({ error: "ID inválido." });
+        }
+        try {
+            const result = await this.repo.obterAvaliacao(id);
+            if (!result) {
+                return res.status(404).json({ error: "Avaliação não encontrada." });
+            }
+            return res.json(result);
+        } catch (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Erro ao obter avaliação." });
+        }
+    };
+
+    atualizarAvaliacao = async (req: Request, res: Response) => {
+        const id = parseInt(req.params.id);
+        const { title, evaluator, date, status, questionnaireId, answers, sectorId } = req.body;
+
+        if (!title || !evaluator || !date || !status || !questionnaireId || !answers || !sectorId) {
+            return res.status(400).json({ error: "Todos os campos são obrigatórios." });
+        }
+
+        try {
+            await this.repo.atualizarAvaliacao(id, { title, evaluator, date, status, questionnaireId, answers, sectorId });
+            return res.status(204).send();
+        } catch (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Erro ao atualizar avaliação." });
+        }
+    };
+    excluirAvaliacao = async (req: Request, res: Response) => {
+        const id = parseInt(req.params.id);
+        if (isNaN(id)) {
+            return res.status(400).json({ error: "ID inválido." });
+        }
+
+        try {
+            await this.repo.excluirAvaliacao(id);
+            return res.status(204).send();
+        } catch (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Erro ao excluir avaliação." });
+        }
+    };
 }
