@@ -116,7 +116,7 @@ export class QualitativeRepository {
   }
   async listarAvaliacoes(): Promise<any[]> {
     const query = `
-      SELECT qe.*, qq.name AS "questionnaire", qe.questionnaire_id AS "questionnaireId"
+      SELECT qe.*, qq.name AS "questionnaire", qe.questionnaire_id AS "questionnaireId", qe.calculate_rate AS "calculateRate"
       FROM qualitative_evaluation qe
       JOIN qualitative_questionnaire qq ON qe.questionnaire_id = qq.id
       WHERE qe.deleted_at IS NULL
@@ -138,7 +138,7 @@ export class QualitativeRepository {
   async atualizarAvaliacao(id: number, data: any): Promise<void> {
     const query = `
       UPDATE qualitative_evaluation
-      SET title = $1, evaluator = $2, date = $3, status = $4, questionnaire_id = $5, answers = $6::jsonb, calculate_rate = $7, sector_id = $8, updated_at = NOW()
+      SET title = $1, evaluator = $2, date = $3, status = $4, questionnaire_id = $5, answers = $6::jsonb, calculate_rate = $7, sector_id = $8,  updated_at = NOW()
       WHERE id = $9
     `;
 

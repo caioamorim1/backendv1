@@ -124,14 +124,14 @@ export class QualitativeController {
 
 
     criarAvaliacao = async (req: Request, res: Response) => {
-        const { title, evaluator, date, status, questionnaire, questionnaireId, answers, sectorId } = req.body;
+        const { title, evaluator, date, status, questionnaire, questionnaireId, answers, sectorId, calculateRate } = req.body;
 
         if (!title || !evaluator || !date || !status || !questionnaireId || !answers || !sectorId) {
             return res.status(400).json({ error: "Todos os campos são obrigatórios." });
         }
 
         try {
-            const result = await this.repo.criarAvaliacao({ title, evaluator, date, status, questionnaire, questionnaireId, answers, sectorId });
+            const result = await this.repo.criarAvaliacao({ title, evaluator, date, status, questionnaire, questionnaireId, answers, sectorId, calculateRate });
             return res.status(201).json(result);
         } catch (err) {
             console.error(err);
@@ -167,14 +167,14 @@ export class QualitativeController {
 
     atualizarAvaliacao = async (req: Request, res: Response) => {
         const id = parseInt(req.params.id);
-        const { title, evaluator, date, status, questionnaireId, answers, sectorId } = req.body;
+        const { title, evaluator, date, status, questionnaireId, answers, sectorId, calculateRate } = req.body;
 
         if (!title || !evaluator || !date || !status || !questionnaireId || !answers || !sectorId) {
             return res.status(400).json({ error: "Todos os campos são obrigatórios." });
         }
 
         try {
-            await this.repo.atualizarAvaliacao(id, { title, evaluator, date, status, questionnaireId, answers, sectorId });
+            await this.repo.atualizarAvaliacao(id, { title, evaluator, date, status, questionnaireId, answers, sectorId, calculateRate });
             return res.status(204).send();
         } catch (err) {
             console.error(err);
