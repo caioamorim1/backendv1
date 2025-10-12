@@ -1781,7 +1781,9 @@ export class HospitalSectorsAggregateRepository {
         if (row.unit_id) {
           // tentar usar map pré-carregado para evitar chamadas redundantes
           const dimFromMap = internationDimMap?.get?.(row.unit_id) ?? null;
-          const dim: any = dimFromMap ?? (await dimService.calcularParaInternacao(row.unit_id));
+          const dim: any =
+            dimFromMap ??
+            (await dimService.calcularParaInternacao(row.unit_id));
           // dim.tabela contém linhas por cargo (LinhaAnaliseFinanceira)
           const enfermeiro = (dim.tabela || []).find((t: any) =>
             (t.cargoNome || "").toLowerCase().includes("enfermeiro")
@@ -1827,9 +1829,10 @@ export class HospitalSectorsAggregateRepository {
               // Para cargos dimensionados (SCP), usar quantidadeProjetada se definida (mesmo que 0).
               // Caso contrário, usar quantidadeAtual.
               const qty = isScp
-                ? (c.quantidadeProjetada !== undefined && c.quantidadeProjetada !== null
-                    ? c.quantidadeProjetada
-                    : c.quantidadeAtual ?? 0)
+                ? c.quantidadeProjetada !== undefined &&
+                  c.quantidadeProjetada !== null
+                  ? c.quantidadeProjetada
+                  : c.quantidadeAtual ?? 0
                 : c.quantidadeAtual ?? 0;
               totalProjectedCost += Number(qty) * Number(costPer);
             }
@@ -1878,7 +1881,9 @@ export class HospitalSectorsAggregateRepository {
         if (row.unit_id) {
           // tentar usar map pré-carregado para evitar chamadas redundantes
           const dimFromMap = assistanceDimMap?.get?.(row.unit_id) ?? null;
-          const dim: any = dimFromMap ?? (await dimService.calcularParaNaoInternacao(row.unit_id));
+          const dim: any =
+            dimFromMap ??
+            (await dimService.calcularParaNaoInternacao(row.unit_id));
           // Preferir os totais já calculados pelo dimensionamento no nível da UNIDADE
           // (quando presentes em dim.dimensionamento.pessoalEnfermeiroArredondado / pessoalTecnicoArredondado)
           const resumo = dim.dimensionamento;
@@ -1891,7 +1896,8 @@ export class HospitalSectorsAggregateRepository {
             projectedStaff = tabela.map((sitio: any) => {
               const cargos = (sitio.cargos || []).map((c: any) => {
                 const qty =
-                  c.quantidadeProjetada !== undefined && c.quantidadeProjetada !== null
+                  c.quantidadeProjetada !== undefined &&
+                  c.quantidadeProjetada !== null
                     ? c.quantidadeProjetada
                     : c.quantidadeAtual ?? 0;
                 return {
@@ -1901,11 +1907,11 @@ export class HospitalSectorsAggregateRepository {
                 };
               });
 
-            return {
-              sitioId: sitio.id,
-              sitioNome: sitio.nome,
-              cargos,
-            };
+              return {
+                sitioId: sitio.id,
+                sitioNome: sitio.nome,
+                cargos,
+              };
             });
 
             // Calcular custo projetado para a unidade usando as quantidades por sítio quando possível
@@ -1920,13 +1926,16 @@ export class HospitalSectorsAggregateRepository {
                       (c.adicionais || 0) +
                       (c.valorHorasExtras || 0);
                   const qty =
-                    c.quantidadeProjetada !== undefined && c.quantidadeProjetada !== null
+                    c.quantidadeProjetada !== undefined &&
+                    c.quantidadeProjetada !== null
                       ? c.quantidadeProjetada
                       : c.quantidadeAtual ?? 0;
                   totalProjectedCost += Number(qty) * Number(costPer);
                 }
               }
-              projectedCostAmountAssistNum = Number(totalProjectedCost.toFixed(2));
+              projectedCostAmountAssistNum = Number(
+                totalProjectedCost.toFixed(2)
+              );
             } catch (err) {
               // noop
             }
@@ -1944,14 +1953,21 @@ export class HospitalSectorsAggregateRepository {
             if (hasResumoEnf || hasResumoTec) {
               const totalEnfermeiro = resumo.pessoalEnfermeiroArredondado ?? 0;
               const totalTecnico = resumo.pessoalTecnicoArredondado ?? 0;
-              projectedStaff.push({ role: "Enfermeiro", quantity: totalEnfermeiro });
+              projectedStaff.push({
+                role: "Enfermeiro",
+                quantity: totalEnfermeiro,
+              });
               projectedStaff.push({ role: "Técnico", quantity: totalTecnico });
 
               try {
                 const others: any[] = row.projected_staff || [];
                 for (const o of others) {
                   const rn = (o.role || "").toLowerCase();
-                  if (!rn.includes("enfermeiro") && !rn.includes("técnico") && o.quantity) {
+                  if (
+                    !rn.includes("enfermeiro") &&
+                    !rn.includes("técnico") &&
+                    o.quantity
+                  ) {
                     projectedStaff.push({ role: o.role, quantity: o.quantity });
                   }
                 }
