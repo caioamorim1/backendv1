@@ -230,6 +230,211 @@ export class SnapshotDimensionamentoService {
     return { removidos, dataLimite };
   }
 
+  /**
+   * Agregar um snapshot por escopo (rede|grupo|regiao|hospital)
+   * Se o snapshot for de hospital individual, retorna items agregados conforme groupBy
+   */
+  async agregarSnapshot(snapshotId: string | undefined, groupBy: string) {
+    let snapshotsToAggregate: any[] = [];
+
+    if (snapshotId) {
+      // Buscar snapshot específico
+      const snapshot = await this.snapshotRepo.buscarPorId(snapshotId);
+      if (!snapshot) throw new Error("Snapshot não encontrado");
+
+      const dados = snapshot.dados;
+
+      if (Array.isArray(dados.hospitais)) {
+        snapshotsToAggregate = dados.hospitais;
+      } else if (snapshot.escopo === "HOSPITAL") {
+        snapshotsToAggregate = [
+          {
+            hospitalId: snapshot.hospitalId,
+            nome: dados.hospital?.nome || dados.hospital?.name || "Hospital",
+            internation:
+              dados.internation || dados.unidades || dados.internacao || [],
+            assistance: dados.assistance || dados.unidadesNaoInternacao || [],
+          },
+        ];
+      }
+    } else {
+      // Agregar últimos snapshots de todos hospitais
+      const latestSnapshots =
+        await this.snapshotRepo.buscarUltimosSnapshotsTodosHospitais();
+      snapshotsToAggregate = latestSnapshots.map((s) => {
+        const dados = s.dados || {};
+        if (Array.isArray(dados.hospitais)) {
+          return dados.hospitais[0];
+        }
+        return {
+          hospitalId: s.hospitalId,
+          nome: dados.hospital?.nome || dados.hospital?.name || "Hospital",
+          internation:
+            dados.internation || dados.unidades || dados.internacao || [],
+          assistance: dados.assistance || dados.unidadesNaoInternacao || [],
+        };
+      });
+    }
+
+    // Coletar hospitalIds e buscar hierarquia
+    const hospitalIds = snapshotsToAggregate
+      .map((h) => h.hospitalId)
+      .filter(Boolean);
+    const hierarchy = await this.snapshotRepo.getHospitalHierarchy(hospitalIds);
+
+    // Map de agregação: chave depende do groupBy
+    const itemsMap: Map<string, any> = new Map();
+
+    function getKeyAndName(hospital: any) {
+      const hInfo = hierarchy[hospital.hospitalId] || {};
+      switch (groupBy) {
+        case "rede":
+          return {
+            key: `rede-${hInfo.redeId || "unknown"}`,
+            name: hInfo.redeName || "Rede",
+          };
+        case "grupo":
+          return {
+            key: `grupo-${hInfo.grupoId || "unknown"}`,
+            name: hInfo.grupoName || "Grupo",
+          };
+        case "regiao":
+          return {
+            key: `regiao-${hInfo.regiaoId || "unknown"}`,
+            name: hInfo.regiaoName || "Região",
+          };
+        default:
+          return {
+            key: `hospital-${hospital.hospitalId}`,
+            name: hospital.nome || hInfo.hospitalName || "Hospital",
+          };
+      }
+    }
+
+    // Função para agregar setores por nome dentro de um item
+    function aggregateSectors(
+      target: any,
+      sectors: any[],
+      isInternation: boolean
+    ) {
+      if (!Array.isArray(sectors)) return;
+      for (const s of sectors) {
+        const sectorName = s.name || s.nome || s.id;
+        const sectorId = `${target.id}|${sectorName}`;
+        let existing = (
+          isInternation ? target.internation : target.assistance
+        ).find((x: any) => x.name === sectorName);
+        if (!existing) {
+          existing = {
+            id: sectorId,
+            name: sectorName,
+            entityName: target.name,
+            costAmount: s.costAmount || 0,
+            projectedCostAmount: s.projectedCostAmount || s.costAmount || 0,
+            staff: s.staff || [],
+            projectedStaff: s.projectedStaff || s.staff || [],
+          };
+          if (isInternation) {
+            existing.bedCount = s.bedCount || 0;
+            existing.careLevel = s.careLevel || {};
+            existing.bedStatus = s.bedStatus || {};
+          }
+          (isInternation ? target.internation : target.assistance).push(
+            existing
+          );
+        } else {
+          // Somar campos numéricos
+          existing.costAmount =
+            (existing.costAmount || 0) + (s.costAmount || 0);
+          existing.projectedCostAmount =
+            (existing.projectedCostAmount || 0) +
+            (s.projectedCostAmount || s.costAmount || 0);
+          existing.bedCount = (existing.bedCount || 0) + (s.bedCount || 0);
+          // Agregar careLevel
+          if (s.careLevel) {
+            existing.careLevel = existing.careLevel || {};
+            for (const [k, v] of Object.entries(s.careLevel)) {
+              existing.careLevel[k] =
+                (existing.careLevel[k] || 0) + ((v as number) || 0);
+            }
+          }
+          // Agregar bedStatus
+          if (s.bedStatus) {
+            existing.bedStatus = existing.bedStatus || {};
+            for (const [k, v] of Object.entries(s.bedStatus)) {
+              existing.bedStatus[k] =
+                (existing.bedStatus[k] || 0) + ((v as number) || 0);
+            }
+          }
+          // Agregar staff arrays (por role)
+          function mergeStaff(dest: any[], src: any[]) {
+            const map = new Map(dest.map((it: any) => [it.role, it.quantity]));
+            for (const r of src || []) {
+              const prev = map.get(r.role) || 0;
+              map.set(r.role, prev + (r.quantity || 0));
+            }
+            return Array.from(map.entries()).map(([role, quantity]) => ({
+              role,
+              quantity,
+            }));
+          }
+          existing.staff = mergeStaff(existing.staff || [], s.staff || []);
+          existing.projectedStaff = mergeStaff(
+            existing.projectedStaff || [],
+            s.projectedStaff || s.staff || []
+          );
+        }
+      }
+    }
+
+    // Iterar hospitais e agregar
+    for (const hosp of snapshotsToAggregate) {
+      const { key, name } = getKeyAndName(hosp);
+      if (!itemsMap.has(key)) {
+        itemsMap.set(key, { id: key, name, internation: [], assistance: [] });
+      }
+      const target = itemsMap.get(key);
+      aggregateSectors(target, hosp.internation || [], true);
+      aggregateSectors(target, hosp.assistance || [], false);
+    }
+
+    const items = Array.from(itemsMap.values());
+
+    // Determinar snapshotId/data retornada:
+    // - se o usuário pediu um snapshotId específico, retornamos ele e a sua data
+    // - se agregamos todos os hospitais, retornamos snapshotId = null e snapshotDate = última data entre os snapshots agregados
+    let aggregatedSnapshotId: string | null = null;
+    let aggregatedSnapshotDate: Date = new Date();
+
+    if (snapshotId) {
+      aggregatedSnapshotId = snapshotId;
+      // tentar pegar data de um dos snapshotsToAggregate (quando veio via snapshotId, tinha somente um snapshot original)
+      // quando snapshotId foi passado originalmente, a variável `snapshot` existia no escopo anterior; tentamos recuperar uma data coerente:
+      const first = snapshotsToAggregate[0];
+      if (first && first.dataHora) {
+        aggregatedSnapshotDate = new Date(first.dataHora);
+      }
+    } else {
+      // snapshotsToAggregate foram construídos a partir de latestSnapshots; tentar pegar a máxima dataHora
+      const dates = snapshotsToAggregate
+        .map((s) => s.dataHora)
+        .filter(Boolean)
+        .map((d: any) => new Date(d));
+      if (dates.length > 0) {
+        aggregatedSnapshotDate = new Date(
+          Math.max(...dates.map((d) => d.getTime()))
+        );
+      }
+    }
+
+    return {
+      aggregatedBy: groupBy,
+      snapshotId: aggregatedSnapshotId,
+      snapshotDate: aggregatedSnapshotDate,
+      items,
+    };
+  }
+
   // ===== MÉTODOS AUXILIARES =====
 
   /**
@@ -274,7 +479,21 @@ export class SnapshotDimensionamentoService {
               `🔧 [SANITIZAR] ${caminhoCompleto}: "${valor}" → ${resultado}`
             );
           }
-          sanitizado[chave] = resultado;
+          // Normalizar campos monetários para centavos (inteiro)
+          if (
+            typeof resultado === "number" &&
+            /cost|custo|valor|price|preco/i.test(chave)
+          ) {
+            // Se tem casas decimais, assumir BRL float e converter para centavos
+            if (!Number.isInteger(resultado)) {
+              sanitizado[chave] = Math.round(resultado * 100);
+            } else {
+              // Se já é inteiro, deixar como está (assume centavos)
+              sanitizado[chave] = resultado;
+            }
+          } else {
+            sanitizado[chave] = resultado;
+          }
         }
         // Se for objeto ou array, sanitizar recursivamente
         else if (typeof valor === "object" && valor !== null) {
