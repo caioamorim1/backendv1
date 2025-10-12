@@ -126,7 +126,6 @@ export class QualitativeController {
 
     criarAvaliacao = async (req: Request, res: Response) => {
         const { title, evaluator, date, status, questionnaire, questionnaireId, answers, sectorId, hospitalId, calculateRate, rate, unidadeType } = req.body;
-        console.log('Creating evaluation with data:', req.body);
         if (!title || !evaluator || !date || !status || !questionnaireId || !answers || !sectorId || !hospitalId || !unidadeType) {
             return res.status(400).json({ error: "Todos os campos são obrigatórios." });
         }
@@ -186,7 +185,6 @@ export class QualitativeController {
 
     atualizarAvaliacao = async (req: Request, res: Response) => {
         const id = parseInt(req.params.id);
-        console.log('Updating evaluation with ID:', id, 'and data:', req.body);
         const { title, evaluator, date, status, questionnaireId, answers, sectorId, hospitalId, calculateRate, rate, unidadeType } = req.body;
 
         if (!title || !evaluator || !date || !status || !questionnaireId || !answers || !sectorId || !hospitalId || !unidadeType) {

@@ -183,4 +183,31 @@ export class QualitativeRepository {
     `;
     await this.ds.query(query, [unidadeId, hospitalId, unidadeType, status, JSON.stringify(calculateRate)]);
   }
+
+  async getQualitativeAverages(unidade_id: string, unidade_type: string, hospital_id: string) {
+
+    const query = `
+      SELECT 
+        qc.id AS category_id,
+        qc.name,
+        qc.meta,
+        AVG((elem->>'score')::numeric) AS media_score
+      FROM public.qualitative_projection qp
+      JOIN public.qualitative_category qc
+        ON qc.id = (elem->>'categoryId')::int
+      CROSS JOIN LATERAL jsonb_array_elements(qp.rates) AS elem
+      WHERE 
+        ($1::uuid IS NULL OR qp.unidade_id = $1)
+        AND ($2::text IS NULL OR qp.unidade_type = $2)
+        AND ($3::uuid IS NULL OR qp.hospital_id = $3)
+      GROUP BY qc.id, qc.name, qc.meta
+      ORDER BY qc.id;
+    `;
+
+    return await this.ds.query(
+      query,
+      [unidade_id || null, unidade_type || null, hospital_id || null]
+    );
+
+  }
 }
