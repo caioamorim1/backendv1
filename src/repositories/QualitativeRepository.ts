@@ -107,7 +107,7 @@ export class QualitativeRepository {
       data.questionnaireId,
       data.questionnaire,
       JSON.stringify(data.answers),
-      data.calculateRate,
+      data.rate,
       data.sectorId
     ];
 
@@ -123,6 +123,17 @@ export class QualitativeRepository {
       ORDER BY qe.date DESC
     `;
     const result = await this.ds.query(query);
+    return result;
+  }
+  async listarAvaliacoesPorSetor(sectorId: string): Promise<any[]> {
+    const query = `
+      SELECT qe.*, qq.name AS "questionnaire", qe.questionnaire_id AS "questionnaireId", qe.calculate_rate AS "calculateRate"
+      FROM qualitative_evaluation qe
+      JOIN qualitative_questionnaire qq ON qe.questionnaire_id = qq.id
+      WHERE qe.sector_id = $1 AND qe.deleted_at IS NULL
+      ORDER BY qe.date DESC
+    `;
+    const result = await this.ds.query(query, [sectorId]);
     return result;
   }
   async obterAvaliacao(id: number): Promise<any> {
@@ -149,7 +160,7 @@ export class QualitativeRepository {
       data.status,
       data.questionnaireId,
       JSON.stringify(data.answers),
-      data.calculateRate,
+      data.rate,
       data.sectorId,
       id
     ];
@@ -161,5 +172,15 @@ export class QualitativeRepository {
       `UPDATE qualitative_evaluation SET deleted_at = NOW() WHERE id = $1`,
       [id]
     );
+  }
+
+  async saveCalculatedProjection(unidadeId: string, hospitalId: string, unidadeType: string, calculateRate: number, status: string): Promise<void> {
+    const query = `
+      INSERT INTO qualitative_projection (unidade_id, hospital_id, unidade_type, status_available, rates, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+      ON CONFLICT (unidade_id)
+      DO UPDATE SET rates = EXCLUDED.rates, status_available = EXCLUDED.status_available, updated_at = NOW()
+    `;
+    await this.ds.query(query, [unidadeId, hospitalId, unidadeType, status, JSON.stringify(calculateRate)]);
   }
 }
