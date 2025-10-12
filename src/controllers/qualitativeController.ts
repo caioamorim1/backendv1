@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { QualitativeCategory, Questionnaire } from "../dto/qualitative.dto";
 import { QualitativeRepository } from "../repositories/QualitativeRepository";
+import { stat } from "fs";
 
 export class QualitativeController {
     constructor(private repo: QualitativeRepository) { }
@@ -124,14 +125,17 @@ export class QualitativeController {
 
 
     criarAvaliacao = async (req: Request, res: Response) => {
-        const { title, evaluator, date, status, questionnaire, questionnaireId, answers, sectorId, calculateRate } = req.body;
-
-        if (!title || !evaluator || !date || !status || !questionnaireId || !answers || !sectorId) {
+        const { title, evaluator, date, status, questionnaire, questionnaireId, answers, sectorId, hospitalId, calculateRate, rate, unidadeType } = req.body;
+        console.log('Creating evaluation with data:', req.body);
+        if (!title || !evaluator || !date || !status || !questionnaireId || !answers || !sectorId || !hospitalId || !unidadeType) {
             return res.status(400).json({ error: "Todos os campos são obrigatórios." });
         }
 
         try {
-            const result = await this.repo.criarAvaliacao({ title, evaluator, date, status, questionnaire, questionnaireId, answers, sectorId, calculateRate });
+            const result = await this.repo.criarAvaliacao({ title, evaluator, date, status, questionnaire, questionnaireId, answers, sectorId, hospitalId, rate });
+            if (status === 'completed') {
+                await this.repo.saveCalculatedProjection(sectorId, hospitalId, unidadeType, calculateRate, status);
+            }
             return res.status(201).json(result);
         } catch (err) {
             console.error(err);
@@ -145,6 +149,21 @@ export class QualitativeController {
         } catch (err) {
             console.error(err);
             return res.status(500).json({ error: "Erro ao listar avaliações." });
+        }
+    };
+
+    listarAvaliacoesPorSetor = async (req: Request, res: Response) => {
+        const sectorId = req.query.sectorId as string;
+        if (!sectorId) {
+            return res.status(400).json({ error: "ID do setor é obrigatório." });
+        }
+
+        try {
+            const result = await this.repo.listarAvaliacoesPorSetor(sectorId);
+            return res.json(result);
+        } catch (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Erro ao listar avaliações por setor." });
         }
     };
 
@@ -167,14 +186,18 @@ export class QualitativeController {
 
     atualizarAvaliacao = async (req: Request, res: Response) => {
         const id = parseInt(req.params.id);
-        const { title, evaluator, date, status, questionnaireId, answers, sectorId, calculateRate } = req.body;
+        console.log('Updating evaluation with ID:', id, 'and data:', req.body);
+        const { title, evaluator, date, status, questionnaireId, answers, sectorId, hospitalId, calculateRate, rate, unidadeType } = req.body;
 
-        if (!title || !evaluator || !date || !status || !questionnaireId || !answers || !sectorId) {
+        if (!title || !evaluator || !date || !status || !questionnaireId || !answers || !sectorId || !hospitalId || !unidadeType) {
             return res.status(400).json({ error: "Todos os campos são obrigatórios." });
         }
 
         try {
-            await this.repo.atualizarAvaliacao(id, { title, evaluator, date, status, questionnaireId, answers, sectorId, calculateRate });
+            await this.repo.atualizarAvaliacao(id, { title, evaluator, date, status, questionnaireId, answers, sectorId, hospitalId, rate });
+            if (status === 'completed') {
+                await this.repo.saveCalculatedProjection(sectorId, hospitalId, unidadeType, calculateRate, status);
+            }
             return res.status(204).send();
         } catch (err) {
             console.error(err);

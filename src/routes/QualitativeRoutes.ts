@@ -20,6 +20,7 @@ export const QualitativeRoutes = (ds: DataSource): Router => {
 
     router.post("/evaluations", ctrl.criarAvaliacao);
     router.get("/evaluations", ctrl.listarAvaliacoes);
+    router.get("/evaluations-by-sector", ctrl.listarAvaliacoesPorSetor);
     router.get("/evaluations/:id", ctrl.obterAvaliacao);
     router.put("/evaluations/:id", ctrl.atualizarAvaliacao);
     router.delete("/evaluations/:id", ctrl.excluirAvaliacao);
