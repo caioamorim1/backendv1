@@ -68,18 +68,15 @@ export class DimensionamentoService {
 
     console.log("Parâmetros carregados:");
     console.log(
-      `  IST: ${(ist * 100).toFixed(1)}% (${
-        parametros?.ist ? "customizado" : "padrão"
+      `  IST: ${(ist * 100).toFixed(1)}% (${parametros?.ist ? "customizado" : "padrão"
       })`
     );
     console.log(
-      `  Aplicar IST (Equipe com restrições): ${
-        equipeComRestricoes ? "SIM" : "NÃO"
+      `  Aplicar IST (Equipe com restrições): ${equipeComRestricoes ? "SIM" : "NÃO"
       }`
     );
     console.log(
-      `  Dias de trabalho/semana: ${diasTrabalhoSemana} (${
-        parametros?.diasSemana ? "customizado" : "padrão"
+      `  Dias de trabalho/semana: ${diasTrabalhoSemana} (${parametros?.diasSemana ? "customizado" : "padrão"
       })`
     );
     console.log("=== FIM ETAPA 1 ===\n");
@@ -169,8 +166,8 @@ export class DimensionamentoService {
         }),
         fim: historicosDoMes[0].fim
           ? new Date(historicosDoMes[0].fim).toLocaleString("pt-BR", {
-              timeZone: "America/Sao_Paulo",
-            })
+            timeZone: "America/Sao_Paulo",
+          })
           : "ainda ativo",
         classificacao: historicosDoMes[0].classificacao,
       });
@@ -237,10 +234,8 @@ export class DimensionamentoService {
         }
 
         console.log(
-          `Dia ${
-            i + 1
-          }/${diasNoPeriodo}: ${pacientesNesteDia} pacientes ativos ${
-            isHoje ? "(incluindo avaliações de hoje)" : ""
+          `Dia ${i + 1
+          }/${diasNoPeriodo}: ${pacientesNesteDia} pacientes ativos ${isHoje ? "(incluindo avaliações de hoje)" : ""
           }`
         );
       }
@@ -442,15 +437,13 @@ export class DimensionamentoService {
     console.log(`  Fator de restrição: ${fatorRestricao}`);
     console.log(`  Dias de trabalho/semana: ${diasTrabalhoSemana}`);
     console.log(
-      `  Carga horária Enfermeiro: ${cargaHorariaEnfermeiro}h ${
-        parametros?.cargaHorariaEnfermeiro
-          ? "(customizada)"
-          : "(do cargo/padrão)"
+      `  Carga horária Enfermeiro: ${cargaHorariaEnfermeiro}h ${parametros?.cargaHorariaEnfermeiro
+        ? "(customizada)"
+        : "(do cargo/padrão)"
       }`
     );
     console.log(
-      `  Carga horária Técnico: ${cargaHorariaTecnico}h ${
-        parametros?.cargaHorariaTecnico ? "(customizada)" : "(do cargo/padrão)"
+      `  Carga horária Técnico: ${cargaHorariaTecnico}h ${parametros?.cargaHorariaTecnico ? "(customizada)" : "(do cargo/padrão)"
       }`
     );
 
@@ -579,6 +572,9 @@ export class DimensionamentoService {
       unidade.horas_extra_reais?.replace(",", ".") || "0"
     );
 
+    console.log("\n=== ========================================== ===");
+    console.log(unidade);
+
     const tabela = (unidade.cargosUnidade || []).map(
       (cu): LinhaAnaliseFinanceira => {
         const cargoNomeLower = cu.cargo.nome.toLowerCase();
@@ -625,8 +621,7 @@ export class DimensionamentoService {
       console.log(`   - Quantidade Atual: ${cargo.quantidadeAtual}`);
       console.log(`   - Quantidade Projetada: ${cargo.quantidadeProjetada}`);
       console.log(
-        `   - Diferença: ${
-          cargo.quantidadeProjetada - cargo.quantidadeAtual > 0 ? "+" : ""
+        `   - Diferença: ${cargo.quantidadeProjetada - cargo.quantidadeAtual > 0 ? "+" : ""
         }${cargo.quantidadeProjetada - cargo.quantidadeAtual}`
       );
       console.log(`   - Salário: R$ ${cargo.salario.toFixed(2)}`);
@@ -687,93 +682,37 @@ export class DimensionamentoService {
       unidade.horas_extra_reais?.replace(",", ".") || "0"
     );
 
+    // === ETAPA 1: PARÂMETROS DA UNIDADE ===
     const parametrosRepo = this.ds.getRepository(ParametrosNaoInternacao);
     const parametros = await parametrosRepo.findOne({
       where: { unidade: { id: unidadeId } },
     });
 
-    console.log("\n=== ⚙️ ETAPA 1: PARÂMETROS DA UNIDADE ===");
     const jornadaEnfermeiro = parametros?.jornadaSemanalEnfermeiro ?? 36;
     const jornadaTecnico = parametros?.jornadaSemanalTecnico ?? 36;
     const indiceSeguranca = Number(parametros?.indiceSegurancaTecnica ?? 0);
     const equipeComRestricao = parametros?.equipeComRestricao ?? false;
     const diasFuncionamentoMensal = parametros?.diasFuncionamentoMensal ?? 30;
-    const diasSemana = parametros?.diasSemana ?? 7;
+    const diasSemana = parametros?.diasSemana ?? 5;
     const periodoTrabalho =
       diasSemana === 7 ? 6 : diasSemana === 6 ? 5 : diasSemana === 5 ? 4 : 0;
 
-    console.log("Parâmetros carregados:");
-    console.log(`  Jornada Semanal Enfermeiro: ${jornadaEnfermeiro}h`);
-    console.log(`  Jornada Semanal Técnico: ${jornadaTecnico}h`);
-    console.log(`  Índice de Segurança Técnica: ${indiceSeguranca}`);
-    console.log(
-      `  Equipe com Restrição: ${equipeComRestricao ? "SIM" : "NÃO"}`
-    );
-    console.log(`  Dias de Funcionamento Mensal: ${diasFuncionamentoMensal}`);
-    console.log(`  Dias da Semana: ${diasSemana}`);
-    console.log(`  Período de Trabalho: ${periodoTrabalho}`);
-
-    console.log("\n=== 📊 ETAPA 2: CÁLCULO DAS CONSTANTES KM ===");
     const fatorBase = equipeComRestricao ? 1.1 : 1.0;
-    console.log(`Fator Base (Restrição): ${fatorBase}`);
 
-    console.log("\n🔹 CÁLCULO KM ENFERMEIRO:");
-    console.log(
-      `  Fórmula CORRETA: (periodoTrabalho / jornadaEnfermeiro) × (fatorBase + indiceSeguranca)`
-    );
-    console.log(
-      `  Substituindo: (${periodoTrabalho} / ${jornadaEnfermeiro}) × (${fatorBase} + ${indiceSeguranca})`
-    );
     const kmEnfermeiro =
       jornadaEnfermeiro > 0
         ? (periodoTrabalho / jornadaEnfermeiro) * (fatorBase + indiceSeguranca)
         : 0;
-    console.log(
-      `  Passo 1: ${periodoTrabalho} / ${jornadaEnfermeiro} = ${(
-        periodoTrabalho / jornadaEnfermeiro
-      ).toFixed(4)}`
-    );
-    console.log(
-      `  Passo 2: ${fatorBase} + ${indiceSeguranca} = ${(
-        fatorBase + indiceSeguranca
-      ).toFixed(4)}`
-    );
-    console.log(
-      `  Resultado: ${(periodoTrabalho / jornadaEnfermeiro).toFixed(4)} × ${(
-        fatorBase + indiceSeguranca
-      ).toFixed(4)} = ${kmEnfermeiro.toFixed(4)}`
-    );
-    console.log(`  ✅ KM Enfermeiro = ${kmEnfermeiro.toFixed(4)}`);
 
-    console.log("\n🔹 CÁLCULO KM TÉCNICO:");
-    console.log(
-      `  Fórmula CORRETA: (periodoTrabalho / jornadaTecnico) × (fatorBase + indiceSeguranca)`
-    );
-    console.log(
-      `  Substituindo: (${periodoTrabalho} / ${jornadaTecnico}) × (${fatorBase} + ${indiceSeguranca})`
-    );
     const kmTecnico =
       jornadaTecnico > 0
         ? (periodoTrabalho / jornadaTecnico) * (fatorBase + indiceSeguranca)
         : 0;
-    console.log(
-      `  Passo 1: ${periodoTrabalho} / ${jornadaTecnico} = ${(
-        periodoTrabalho / jornadaTecnico
-      ).toFixed(4)}`
-    );
-    console.log(
-      `  Passo 2: ${fatorBase} + ${indiceSeguranca} = ${(
-        fatorBase + indiceSeguranca
-      ).toFixed(4)}`
-    );
-    console.log(
-      `  Resultado: ${(periodoTrabalho / jornadaTecnico).toFixed(4)} × ${(
-        fatorBase + indiceSeguranca
-      ).toFixed(4)} = ${kmTecnico.toFixed(4)}`
-    );
-    console.log(`  ✅ KM Técnico = ${kmTecnico.toFixed(4)}`);
-    console.log("=== FIM ETAPA 2 ===\n");
 
+    console.log(`🔹 KM Enfermeiro = ${kmEnfermeiro.toFixed(4)}`);
+    console.log(`🔹 KM Técnico = ${kmTecnico.toFixed(4)}`);
+
+    // === ETAPA 2: DISTRIBUIÇÕES E CÁLCULOS POR SÍTIO ===
     const distribDetalhada: {
       sitioId: string;
       sitioNome?: string;
@@ -786,183 +725,110 @@ export class DimensionamentoService {
     let totalSitiosEnfermeiro = 0;
     let totalSitiosTecnico = 0;
 
-    console.log(
-      "\n=== 📋 ETAPA 3: PROCESSAMENTO DOS SÍTIOS E DISTRIBUIÇÕES ==="
-    );
+    const tabela: GrupoCargosNaoInternacao[] = (unidade.sitiosFuncionais || []).map(
+      (sitio, index) => {
+        console.log(`\n🔹 Sítio ${index + 1}: ${sitio.nome}`);
 
-    const tabela: GrupoCargosNaoInternacao[] = (
-      unidade.sitiosFuncionais || []
-    ).map((sitio, index) => {
-      console.log(`\n🔹 Sítio ${index + 1}: ${sitio.nome}`);
+        let totalEnf = 0;
+        let totalTec = 0;
 
-      const cargosDoSitio = (sitio.cargosSitio || []).map((cs) => {
-        const cargo = cs.cargoUnidade.cargo;
-        const cargoNomeLower = cargo.nome.toLowerCase();
+        for (const dist of sitio.distribuicoes || []) {
+          const segSexManha = dist.segSexManha ?? 0;
+          const segSexTarde = dist.segSexTarde ?? 0;
+          const segSexNoite1 = dist.segSexNoite1 ?? 0;
+          const segSexNoite2 = dist.segSexNoite2 ?? 0;
+          const sabDomManha = dist.sabDomManha ?? 0;
+          const sabDomTarde = dist.sabDomTarde ?? 0;
+          const sabDomNoite1 = dist.sabDomNoite1 ?? 0;
+          const sabDomNoite2 = dist.sabDomNoite2 ?? 0;
 
-        // Identificar se é Enfermeiro ou Técnico de Enfermagem
-        const isEnfermeiro = cargoNomeLower.includes("enfermeiro");
-        const isTecnico =
-          cargoNomeLower.includes("técnico de enfermagem") ||
-          cargoNomeLower.includes("tecnico de enfermagem");
-        const isScpCargo = isEnfermeiro || isTecnico;
+          const totalSemana =
+            (segSexManha + segSexTarde + segSexNoite1 + segSexNoite2) * 5;
+          const totalFimSemana =
+            (sabDomManha + sabDomTarde + sabDomNoite1 + sabDomNoite2) * 2;
+          const total = totalSemana + totalFimSemana;
 
-        const salario = parseFloat(cargo.salario?.replace(",", ".") || "0");
-        const adicionais = parseFloat(
-          cargo.adicionais_tributos?.replace(",", ".") || "0"
+          const categoria = (dist.categoria || "").toUpperCase();
+          if (categoria.includes("ENF")) totalEnf += total;
+          if (categoria.includes("TEC")) totalTec += total;
+
+          distribDetalhada.push({
+            sitioId: sitio.id,
+            sitioNome: sitio.nome,
+            categoria: categoria as "ENF" | "TEC",
+            totalSemana,
+            totalFimSemana,
+            total,
+          });
+        }
+
+        console.log(`   Totais do sítio → ENF=${totalEnf}, TEC=${totalTec}`);
+
+        // 🔹 Cálculo projetado individual por sítio
+        const pessoalEnfermeiroBruto = kmEnfermeiro * totalEnf;
+        const pessoalTecnicoBruto = kmTecnico * totalTec;
+
+        const pessoalEnfermeiroArredondado = Math.round(pessoalEnfermeiroBruto);
+        const pessoalTecnicoArredondado = Math.round(pessoalTecnicoBruto);
+
+        console.log(
+          `   📈 Projetado: ENF=${pessoalEnfermeiroArredondado}, TEC=${pessoalTecnicoArredondado}`
         );
-        const cargaHoraria = parseFloat(cargo.carga_horaria || "0");
+
+        // Atualiza os cargos do sítio
+        const cargosDoSitio: LinhaAnaliseFinanceira[] = (sitio.cargosSitio || []).map(
+          (cs) => {
+            const cargo = cs.cargoUnidade.cargo;
+            const cargoNomeLower = cargo.nome.toLowerCase();
+
+            const isEnfermeiro = cargoNomeLower.includes("enfermeiro");
+            const isTecnico =
+              cargoNomeLower.includes("técnico de enfermagem") ||
+              cargoNomeLower.includes("tecnico de enfermagem");
+
+            const salario = parseFloat(cargo.salario?.replace(",", ".") || "0");
+            const adicionais = parseFloat(
+              cargo.adicionais_tributos?.replace(",", ".") || "0"
+            );
+            const cargaHoraria = parseFloat(cargo.carga_horaria || "0");
+            const custoPorFuncionario = salario + adicionais + valorHorasExtras;
+            const quantidadeAtual = cs.quantidade_funcionarios ?? 0;
+
+            const quantidadeProjetada = isEnfermeiro
+              ? pessoalEnfermeiroArredondado
+              : isTecnico
+                ? pessoalTecnicoArredondado
+                : quantidadeAtual;
+
+            return {
+              cargoId: cargo.id,
+              cargoNome: cargo.nome,
+              isScpCargo: isEnfermeiro || isTecnico,
+              salario,
+              adicionais,
+              valorHorasExtras,
+              custoPorFuncionario,
+              cargaHoraria,
+              quantidadeAtual,
+              quantidadeProjetada,
+            };
+          }
+        );
+
+        totalSitiosEnfermeiro += totalEnf;
+        totalSitiosTecnico += totalTec;
 
         return {
-          cargoId: cargo.id,
-          cargoNome: cargo.nome,
-          isScpCargo: isScpCargo, // ✅ Marca ENF/TEC como true
-          salario,
-          adicionais,
-          valorHorasExtras,
-          cargaHoraria,
-          custoPorFuncionario: salario + adicionais + valorHorasExtras,
-          quantidadeAtual: cs.quantidade_funcionarios,
-          quantidadeProjetada: cs.quantidade_funcionarios, // Será calculado depois
+          id: sitio.id,
+          nome: sitio.nome || "Sítio Sem Nome",
+          cargos: cargosDoSitio,
         };
-      });
-
-      console.log(`   Cargos no sítio: ${cargosDoSitio.length}`);
-
-      const distribs = sitio.distribuicoes || [];
-      console.log(`   Distribuições configuradas: ${distribs.length}`);
-
-      for (const dist of distribs) {
-        const segSexManha = dist.segSexManha ?? 0;
-        const segSexTarde = dist.segSexTarde ?? 0;
-        const segSexNoite1 = dist.segSexNoite1 ?? 0;
-        const segSexNoite2 = dist.segSexNoite2 ?? 0;
-        const sabDomManha = dist.sabDomManha ?? 0;
-        const sabDomTarde = dist.sabDomTarde ?? 0;
-        const sabDomNoite1 = dist.sabDomNoite1 ?? 0;
-        const sabDomNoite2 = dist.sabDomNoite2 ?? 0;
-
-        console.log(`\n   📊 Distribuição ${dist.categoria}:`);
-        console.log(
-          `      Seg-Sex: Manhã=${segSexManha}, Tarde=${segSexTarde}, Noite1=${segSexNoite1}, Noite2=${segSexNoite2}`
-        );
-        console.log(
-          `      Sab-Dom: Manhã=${sabDomManha}, Tarde=${sabDomTarde}, Noite1=${sabDomNoite1}, Noite2=${sabDomNoite2}`
-        );
-
-        const totalSemana =
-          (segSexManha + segSexTarde + segSexNoite1 + segSexNoite2) * 5;
-        const totalFimSemana =
-          (sabDomManha + sabDomTarde + sabDomNoite1 + sabDomNoite2) * 2;
-        const total = totalSemana + totalFimSemana;
-
-        console.log(
-          `      Cálculo Semana: (${segSexManha} + ${segSexTarde} + ${segSexNoite1} + ${segSexNoite2}) × 5 = ${totalSemana}`
-        );
-        console.log(
-          `      Cálculo Fim de Semana: (${sabDomManha} + ${sabDomTarde} + ${sabDomNoite1} + ${sabDomNoite2}) × 2 = ${totalFimSemana}`
-        );
-        console.log(
-          `      Total: ${totalSemana} + ${totalFimSemana} = ${total}`
-        );
-
-        distribDetalhada.push({
-          sitioId: sitio.id,
-          sitioNome: sitio.nome,
-          categoria: dist.categoria,
-          totalSemana,
-          totalFimSemana,
-          total,
-        });
-
-        if (dist.categoria === "ENF") {
-          console.log(`      ✅ Somando ao total ENF: ${total}`);
-          totalSitiosEnfermeiro += total;
-        }
-        if (dist.categoria === "TEC") {
-          console.log(`      ✅ Somando ao total TEC: ${total}`);
-          totalSitiosTecnico += total;
-        }
       }
-
-      return {
-        id: sitio.id,
-        nome: sitio.nome || "Sítio Sem Nome",
-        cargos: cargosDoSitio,
-      };
-    });
-
-    console.log("\n📊 TOTAIS ACUMULADOS DE TODOS OS SÍTIOS:");
-    console.log(`   Total Sítios Enfermeiro: ${totalSitiosEnfermeiro}`);
-    console.log(`   Total Sítios Técnico: ${totalSitiosTecnico}`);
-    console.log("=== FIM ETAPA 3 ===\n");
-
-    console.log("\n=== 🎯 ETAPA 4: CÁLCULO DO PESSOAL NECESSÁRIO ===");
-    console.log("\n🔹 PESSOAL ENFERMEIRO:");
-    console.log(`  Fórmula: KM × Total de Sítios`);
-    console.log(
-      `  Substituindo: ${kmEnfermeiro.toFixed(4)} × ${totalSitiosEnfermeiro}`
-    );
-    const pessoalEnfermeiroBruto = kmEnfermeiro * totalSitiosEnfermeiro;
-    console.log(
-      `  Resultado (bruto): ${pessoalEnfermeiroBruto.toFixed(2)} profissionais`
     );
 
-    console.log("\n🔹 PESSOAL TÉCNICO:");
-    console.log(`  Fórmula: KM × Total de Sítios`);
-    console.log(
-      `  Substituindo: ${kmTecnico.toFixed(4)} × ${totalSitiosTecnico}`
-    );
-    const pessoalTecnicoBruto = kmTecnico * totalSitiosTecnico;
-    console.log(
-      `  Resultado (bruto): ${pessoalTecnicoBruto.toFixed(2)} profissionais`
-    );
-
-    // ✅ Arredondamento matemático: >= 0.5 arredonda para cima, < 0.5 para baixo
-    const pessoalEnfermeiroArredondado = Math.round(pessoalEnfermeiroBruto);
-    const pessoalTecnicoArredondado = Math.round(pessoalTecnicoBruto);
-
-    console.log("\n✅ ARREDONDAMENTO MATEMÁTICO (≥0.5 → cima, <0.5 → baixo):");
-    console.log(
-      `  Enfermeiros: ${pessoalEnfermeiroBruto.toFixed(
-        2
-      )} → ${pessoalEnfermeiroArredondado} profissionais`
-    );
-    console.log(
-      `  Técnicos: ${pessoalTecnicoBruto.toFixed(
-        2
-      )} → ${pessoalTecnicoArredondado} profissionais`
-    );
-    console.log("=== FIM ETAPA 4 ===\n");
-
-    console.log("\n=== 🔄 ETAPA 5: ATUALIZAÇÃO DAS QUANTIDADES PROJETADAS ===");
-    tabela.forEach((sitio) => {
-      console.log(`\nSítio: ${sitio.nome}`);
-      sitio.cargos.forEach((cargo) => {
-        const cargoNomeLower = cargo.cargoNome.toLowerCase();
-        const isEnfermeiro = cargoNomeLower.includes("enfermeiro");
-        const isTecnico =
-          cargoNomeLower.includes("técnico de enfermagem") ||
-          cargoNomeLower.includes("tecnico de enfermagem");
-
-        const quantidadeAnterior = cargo.quantidadeProjetada;
-        if (isEnfermeiro) {
-          cargo.quantidadeProjetada = pessoalEnfermeiroArredondado;
-          console.log(
-            `  ${cargo.cargoNome}: ${quantidadeAnterior} → ${cargo.quantidadeProjetada} (Enfermeiro)`
-          );
-        } else if (isTecnico) {
-          cargo.quantidadeProjetada = pessoalTecnicoArredondado;
-          console.log(
-            `  ${cargo.cargoNome}: ${quantidadeAnterior} → ${cargo.quantidadeProjetada} (Técnico)`
-          );
-        } else {
-          console.log(
-            `  ${cargo.cargoNome}: ${cargo.quantidadeProjetada} (Não SCP - mantido)`
-          );
-        }
-      });
-    });
-    console.log("=== FIM ETAPA 5 ===\n");
+    // === ETAPA 3: RESUMO FINAL (mantendo formato original) ===
+    const pessoalEnfermeiro = kmEnfermeiro * totalSitiosEnfermeiro;
+    const pessoalTecnico = kmTecnico * totalSitiosTecnico;
 
     const resumoDimensionamento = {
       periodoTrabalho,
@@ -970,10 +836,10 @@ export class DimensionamentoService {
       kmTecnico: Number(kmTecnico.toFixed(4)),
       totalSitiosEnfermeiro,
       totalSitiosTecnico,
-      pessoalEnfermeiro: Number(pessoalEnfermeiroBruto.toFixed(2)),
-      pessoalTecnico: Number(pessoalTecnicoBruto.toFixed(2)),
-      pessoalEnfermeiroArredondado: pessoalEnfermeiroArredondado,
-      pessoalTecnicoArredondado: pessoalTecnicoArredondado,
+      pessoalEnfermeiro: Number(pessoalEnfermeiro.toFixed(2)),
+      pessoalTecnico: Number(pessoalTecnico.toFixed(2)),
+      pessoalEnfermeiroArredondado: Math.round(pessoalEnfermeiro),
+      pessoalTecnicoArredondado: Math.round(pessoalTecnico),
     };
 
     const resumoDistribuicao = {
@@ -990,7 +856,6 @@ export class DimensionamentoService {
       JSON.stringify(resumoDimensionamento, null, 2)
     );
     console.log("\nDistribuição:", JSON.stringify(resumoDistribuicao, null, 2));
-    console.log("=== FIM RESUMO ===\n");
 
     console.log(
       "\n╔════════════════════════════════════════════════════════════════╗"
@@ -1019,3 +884,4 @@ export class DimensionamentoService {
     };
   }
 }
+
