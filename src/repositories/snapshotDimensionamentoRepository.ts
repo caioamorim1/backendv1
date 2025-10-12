@@ -236,4 +236,93 @@ export class SnapshotDimensionamentoRepository {
       ultimoSnapshot: datas?.ultimo || null,
     };
   }
+
+  /**
+   * Buscar snapshots pela dataHora exata (útil para agregação de snapshots capturados no mesmo instante)
+   */
+  async buscarPorDataHora(dataHora: Date): Promise<SnapshotDimensionamento[]> {
+    return await this.repo
+      .createQueryBuilder("snapshot")
+      .where("snapshot.dataHora = :dataHora", { dataHora })
+      .getMany();
+  }
+
+  /**
+   * Buscar snapshots dentro de um range (inclusive) - helper caso seja necessário
+   */
+  async buscarPorPeriodoExato(
+    dataInicio: Date,
+    dataFim: Date
+  ): Promise<SnapshotDimensionamento[]> {
+    return await this.repo
+      .createQueryBuilder("snapshot")
+      .where("snapshot.dataHora BETWEEN :dataInicio AND :dataFim", {
+        dataInicio,
+        dataFim,
+      })
+      .getMany();
+  }
+
+  /**
+   * Buscar hierarquia das entidades (rede -> grupo -> regiao) para um conjunto de hospitais
+   * Retorna mapa hospitalId => { hospitalId, hospitalName, regiaoId, regiaoName, grupoId, grupoName, redeId, redeName }
+   */
+  async getHospitalHierarchy(
+    hospitalIds: string[]
+  ): Promise<Record<string, any>> {
+    if (!hospitalIds || hospitalIds.length === 0) return {};
+
+    const query = `
+      SELECT h.id as hospital_id, h.nome as hospital_name,
+        r.id as regiao_id, r.nome as regiao_name,
+        g.id as grupo_id, g.nome as grupo_name,
+        n.id as rede_id, n.nome as rede_name
+      FROM public.hospitais h
+      LEFT JOIN public.regiao r ON r.id = h."regiaoId"
+      LEFT JOIN public.grupo g ON g.id = r."grupoId"
+      LEFT JOIN public.rede n ON n.id = g."redeId"
+      WHERE h.id = ANY($1)
+    `;
+
+    const rows: any[] = await this.ds.query(query, [hospitalIds]);
+    const map: Record<string, any> = {};
+    for (const r of rows) {
+      map[r.hospital_id] = {
+        hospitalId: r.hospital_id,
+        hospitalName: r.hospital_name,
+        regiaoId: r.regiao_id,
+        regiaoName: r.regiao_name,
+        grupoId: r.grupo_id,
+        grupoName: r.grupo_name,
+        redeId: r.rede_id,
+        redeName: r.rede_name,
+      };
+    }
+
+    return map;
+  }
+
+  /**
+   * Buscar o último snapshot (escopo HOSPITAL) para cada hospital existente
+   * Retorna array de SnapshotDimensionamento (um por hospital)
+   */
+  async buscarUltimosSnapshotsTodosHospitais(): Promise<
+    SnapshotDimensionamento[]
+  > {
+    // Primeiro pegar os últimos ids por hospital
+    const rows: any[] = await this.ds.query(`
+      SELECT DISTINCT ON (hospitalId) id
+      FROM snapshots_dimensionamento
+      WHERE escopo = 'HOSPITAL'
+      ORDER BY hospitalId, "dataHora" DESC
+    `);
+
+    const ids = rows.map((r) => r.id).filter(Boolean);
+    if (ids.length === 0) return [];
+
+    return await this.repo
+      .createQueryBuilder("snapshot")
+      .where("snapshot.id IN (:...ids)", { ids })
+      .getMany();
+  }
 }
