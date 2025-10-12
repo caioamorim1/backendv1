@@ -275,4 +275,57 @@ export class SnapshotDimensionamentoController {
       });
     }
   };
+
+  /**
+   * GET /snapshots/aggregated
+   * Query: snapshotId=... (opcional) & groupBy=rede|grupo|regiao|hospital
+   * - Se snapshotId não for informado, retorna agregação dos ÚLTIMOS snapshots de todos os hospitais.
+   */
+  buscarSnapshotAgregado = async (req: Request, res: Response) => {
+    try {
+      const { snapshotId } = req.query as any;
+      const groupBy = (req.query.groupBy as string) || "hospital";
+
+      // snapshotId é opcional. Se ausente, o serviço agrega os últimos snapshots de todos hospitais.
+      const result = await this.service.agregarSnapshot(snapshotId, groupBy);
+
+      res.json(result);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro desconhecido";
+      res
+        .status(500)
+        .json({ error: "Erro ao agregar snapshot", details: message });
+    }
+  };
+
+  /**
+   * GET /snapshots/aggregated/all
+   * Retorna um objeto com agregações prontas para frontend nos níveis: hospital, regiao, grupo, rede
+   * Exemplo: { hospital: {...}, regiao: {...}, grupo: {...}, rede: {...} }
+   */
+  buscarSnapshotAgregadoAll = async (req: Request, res: Response) => {
+    try {
+      // Sem snapshotId - agregamos últimos snapshots de todos os hospitais
+      const [hospitalAgg, regiaoAgg, grupoAgg, redeAgg] = await Promise.all([
+        this.service.agregarSnapshot(undefined, "hospital"),
+        this.service.agregarSnapshot(undefined, "regiao"),
+        this.service.agregarSnapshot(undefined, "grupo"),
+        this.service.agregarSnapshot(undefined, "rede"),
+      ]);
+
+      res.json({
+        hospital: hospitalAgg,
+        regiao: regiaoAgg,
+        grupo: grupoAgg,
+        rede: redeAgg,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro desconhecido";
+      res
+        .status(500)
+        .json({ error: "Erro ao agregar snapshots (all)", details: message });
+    }
+  };
 }

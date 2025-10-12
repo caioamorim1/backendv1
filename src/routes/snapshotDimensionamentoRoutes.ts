@@ -39,6 +39,15 @@ export const snapshotDimensionamentoRoutes = (ds: DataSource): Router => {
   router.get("/hospital/:hospitalId/estatisticas", controller.estatisticas);
 
   // Buscar snapshot específico por ID
+  // Agregar snapshot por groupBy (rede|grupo|regiao|hospital)
+  // Example: GET /snapshot/aggregated?snapshotId=...&groupBy=regiao
+  // NOTE: esta rota precisa ficar antes da rota genérica '/:id' para não ser capturada como id='aggregated'
+  router.get("/aggregated", controller.buscarSnapshotAgregado);
+
+  // Agregações prontas para frontend: retorna agregados por hospital, regiao, grupo e rede
+  router.get("/aggregated/all", controller.buscarSnapshotAgregadoAll);
+
+  // Buscar snapshot específico por ID
   router.get("/:id", controller.buscarSnapshotPorId);
 
   // ===== COMPARAR SNAPSHOTS =====
