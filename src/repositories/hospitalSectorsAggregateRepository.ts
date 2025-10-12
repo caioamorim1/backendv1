@@ -9,6 +9,7 @@ import {
   ProjectedInternationSectorDTO,
   ProjectedAssistanceSectorDTO,
 } from "../dto/hospitalSectorsAggregate.dto";
+import { DimensionamentoService } from "../services/dimensionamentoService";
 
 export class HospitalSectorsAggregateRepository {
   constructor(private ds: DataSource) {}
@@ -1601,5 +1602,345 @@ export class HospitalSectorsAggregateRepository {
       aggregatedBy: "hospital",
       items,
     };
+  }
+
+  /**
+   * Busca setores projetados para um único hospital (otimizado)
+   */
+  async getProjectedSectorsByHospital(hospitalId: string): Promise<any> {
+    console.log(
+      `🔎 Buscando setores projetados para hospital ${hospitalId}...`
+    );
+
+    const internationQuery = `
+      SELECT 
+        h.id as entity_id,
+        h.nome as entity_name,
+        uni.id as unit_id,
+        'hospital-' || h.id || '|' || uni.nome as sector_id,
+        uni.nome as sector_name,
+        COALESCE(SUM(
+          cu.quantidade_funcionarios * 
+          (
+            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
+            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
+            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), '')::numeric, 0)
+          )
+        ), 0)::text as projected_cost_amount,
+        COALESCE(SUM(
+          cu.quantidade_funcionarios * 
+          (
+            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
+            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
+            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0)
+          )
+        ), 0)::text as cost_amount,
+        COALESCE(SUM(ls.bed_count), 0) as bed_count,
+        COALESCE(SUM(ls.minimum_care), 0) as minimum_care,
+        COALESCE(SUM(ls.intermediate_care), 0) as intermediate_care,
+        COALESCE(SUM(ls.high_dependency), 0) as high_dependency,
+        COALESCE(SUM(ls.semi_intensive), 0) as semi_intensive,
+        COALESCE(SUM(ls.intensive), 0) as intensive,
+        COALESCE(SUM(ls.evaluated), 0) as bed_status_evaluated,
+        COALESCE(SUM(ls.vacant), 0) as bed_status_vacant,
+        COALESCE(SUM(ls.inactive), 0) as bed_status_inactive,
+        COALESCE(
+          json_agg(
+            DISTINCT jsonb_build_object('role', c.nome, 'quantity', cu.quantidade_funcionarios)
+          ) FILTER (WHERE c.id IS NOT NULL),
+          '[]'::json
+        ) as staff,
+        COALESCE(
+          json_agg(
+            DISTINCT jsonb_build_object('role', c.nome, 'quantity', cu.quantidade_funcionarios)
+          ) FILTER (WHERE c.id IS NOT NULL),
+          '[]'::json
+        ) as projected_staff
+  FROM public.hospitais h
+  LEFT JOIN public.unidades_internacao uni ON uni."hospitalId" = h.id
+      LEFT JOIN public.cargos_unidade cu ON cu.unidade_id = uni.id
+      LEFT JOIN public.cargo c ON c.id = cu.cargo_id
+      LEFT JOIN public.leitos_status ls ON ls.unidade_id = uni.id
+      WHERE h.id = $1 AND uni.id IS NOT NULL
+  GROUP BY h.id, h.nome, uni.id, uni.nome
+      ORDER BY uni.nome
+    `;
+
+    const assistanceQuery = `
+      SELECT 
+        h.id as entity_id,
+        h.nome as entity_name,
+        uni.id as unit_id,
+        'hospital-' || h.id || '|' || uni.nome as sector_id,
+        uni.nome as sector_name,
+        COALESCE(SUM(
+          cu.quantidade_funcionarios * 
+          (
+            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
+            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
+            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), '')::numeric, 0)
+          )
+        ), 0)::text as projected_cost_amount,
+        COALESCE(SUM(
+          cu.quantidade_funcionarios * 
+          (
+            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
+            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
+            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0)
+          )
+        ), 0)::text as cost_amount,
+        COALESCE(
+          json_agg(
+            DISTINCT jsonb_build_object('role', c.nome, 'quantity', cu.quantidade_funcionarios)
+          ) FILTER (WHERE c.id IS NOT NULL),
+          '[]'::json
+        ) as staff,
+        COALESCE(
+          json_agg(
+            DISTINCT jsonb_build_object('role', c.nome, 'quantity', cu.quantidade_funcionarios)
+          ) FILTER (WHERE c.id IS NOT NULL),
+          '[]'::json
+        ) as projected_staff
+  FROM public.hospitais h
+  LEFT JOIN public.unidades_nao_internacao uni ON uni."hospitalId" = h.id
+      LEFT JOIN public.cargos_unidade cu ON cu.unidade_nao_internacao_id = uni.id
+      LEFT JOIN public.cargo c ON c.id = cu.cargo_id
+      WHERE h.id = $1 AND uni.id IS NOT NULL
+  GROUP BY h.id, h.nome, uni.id, uni.nome
+      ORDER BY uni.nome
+    `;
+
+    const [internationSectors, assistanceSectors] = await Promise.all([
+      this.ds.query(internationQuery, [hospitalId]),
+      this.ds.query(assistanceQuery, [hospitalId]),
+    ]);
+
+    // Instanciar serviço de dimensionamento para obter projetados por unidade
+    const dimService = new DimensionamentoService(this.ds);
+
+    // --- Pré-buscar dimensionamentos em paralelo (com batches) para reduzir latência ---
+    const intlUnitIds = Array.from(
+      new Set(internationSectors.map((r: any) => r.unit_id).filter(Boolean))
+    ) as string[];
+    const assistUnitIds = Array.from(
+      new Set(assistanceSectors.map((r: any) => r.unit_id).filter(Boolean))
+    ) as string[];
+
+    const batchFetch = async (
+      ids: string[],
+      fn: (id: string) => Promise<any>,
+      batchSize = 6
+    ) => {
+      const map = new Map<string, any>();
+      for (let i = 0; i < ids.length; i += batchSize) {
+        const batch = ids.slice(i, i + batchSize);
+        const promises = batch.map((id) =>
+          fn(id)
+            .then((res) => ({ id, res }))
+            .catch((err) => ({ id, res: null, err }))
+        );
+        const results = await Promise.all(promises);
+        for (const r of results) {
+          map.set(r.id, r.res ?? null);
+        }
+      }
+      return map;
+    };
+
+    // Fetch internacao and assistencia dimensionamentos in parallel batches
+    const [internationDimMap, assistanceDimMap] = await Promise.all([
+      batchFetch(intlUnitIds, (id) => dimService.calcularParaInternacao(id)),
+      batchFetch(assistUnitIds, (id) =>
+        dimService.calcularParaNaoInternacao(id)
+      ),
+    ]);
+
+    const hospital: any = {
+      id: hospitalId,
+      name:
+        internationSectors[0]?.entity_name ||
+        assistanceSectors[0]?.entity_name ||
+        null,
+      internation: [],
+      assistance: [],
+    };
+
+    for (const row of internationSectors) {
+      // tentar obter projeção via dimensionamento para a unidade de internação
+      let projectedStaff = row.projected_staff;
+      let projectedCostAmountNum: number | null = null;
+      try {
+        if (row.unit_id) {
+          const dim: any = await dimService.calcularParaInternacao(row.unit_id);
+          // dim.tabela contém linhas por cargo (LinhaAnaliseFinanceira)
+          const enfermeiro = (dim.tabela || []).find((t: any) =>
+            (t.cargoNome || "").toLowerCase().includes("enfermeiro")
+          );
+          const tecnico = (dim.tabela || []).find(
+            (t: any) =>
+              (t.cargoNome || "").toLowerCase().includes("técnico") ||
+              (t.cargoNome || "").toLowerCase().includes("tecnico")
+          );
+          projectedStaff = [];
+          if (enfermeiro)
+            projectedStaff.push({
+              role: "Enfermeiro",
+              quantity:
+                enfermeiro.quantidadeProjetada ??
+                enfermeiro.quantidadeProjetada ??
+                enfermeiro.quantidadeAtual,
+            });
+          if (tecnico)
+            projectedStaff.push({
+              role: "Técnico",
+              quantity:
+                tecnico.quantidadeProjetada ??
+                tecnico.quantidadeProjetada ??
+                tecnico.quantidadeAtual,
+            });
+          // calcular custo projetado usando quantidadeProjetada para cargos dimensionados
+          try {
+            const tabela: any[] = dim.tabela || [];
+            let totalProjectedCost = 0;
+            for (const c of tabela) {
+              const nome = (c.cargoNome || "").toLowerCase();
+              const costPer =
+                c.custoPorFuncionario ??
+                (c.salario || 0) +
+                  (c.adicionais || 0) +
+                  (c.valorHorasExtras || 0);
+              const isScp =
+                c.isScpCargo === true ||
+                nome.includes("enfermeiro") ||
+                nome.includes("técnico") ||
+                nome.includes("tecnico");
+              const qty = isScp
+                ? c.quantidadeProjetada ?? c.quantidadeAtual ?? 0
+                : c.quantidadeAtual ?? 0;
+              totalProjectedCost += Number(qty) * Number(costPer);
+            }
+            projectedCostAmountNum = Number(totalProjectedCost.toFixed(2));
+          } catch (err) {
+            // noop - manter null
+          }
+        }
+      } catch (e: any) {
+        console.warn(
+          `Dimensionamento interno falhou para unidade ${row.unit_id}:`,
+          e?.message || e
+        );
+      }
+
+      hospital.internation.push({
+        id: row.sector_id,
+        name: row.sector_name,
+        entityName: row.entity_name,
+        costAmount: row.cost_amount,
+        projectedCostAmount:
+          projectedCostAmountNum ?? row.projected_cost_amount,
+        staff: row.staff,
+        projectedStaff: projectedStaff,
+        bedCount: parseInt(row.bed_count) || 0,
+        careLevel: {
+          minimumCare: parseInt(row.minimum_care) || 0,
+          intermediateCare: parseInt(row.intermediate_care) || 0,
+          highDependency: parseInt(row.high_dependency) || 0,
+          semiIntensive: parseInt(row.semi_intensive) || 0,
+          intensive: parseInt(row.intensive) || 0,
+        },
+        bedStatus: {
+          evaluated: parseInt(row.bed_status_evaluated) || 0,
+          vacant: parseInt(row.bed_status_vacant) || 0,
+          inactive: parseInt(row.bed_status_inactive) || 0,
+        },
+      });
+    }
+
+    for (const row of assistanceSectors) {
+      // para unidades de não-internação o projetado é por UNIDADE (não por sítios)
+      let projectedStaff = row.projected_staff;
+      let projectedCostAmountAssistNum: number | null = null;
+      try {
+        if (row.unit_id) {
+          const dim: any = await dimService.calcularParaNaoInternacao(
+            row.unit_id
+          );
+          // Preferir os totais já calculados pelo dimensionamento no nível da UNIDADE
+          // (quando presentes em dim.dimensionamento.pessoalEnfermeiroArredondado / pessoalTecnicoArredondado)
+          const resumo = dim.dimensionamento;
+          projectedStaff = [];
+          if (
+            resumo &&
+            (resumo.pessoalEnfermeiroArredondado ||
+              resumo.pessoalTecnicoArredondado)
+          ) {
+            // Usar os totais por UNIDADE fornecidos pelo dimensionamento para enfermeiro/tecnico
+            const totalEnfermeiro = resumo.pessoalEnfermeiroArredondado ?? 0;
+            const totalTecnico = resumo.pessoalTecnicoArredondado ?? 0;
+            if (totalEnfermeiro > 0)
+              projectedStaff.push({
+                role: "Enfermeiro",
+                quantity: totalEnfermeiro,
+              });
+            if (totalTecnico > 0)
+              projectedStaff.push({ role: "Técnico", quantity: totalTecnico });
+
+            // Incluir outros cargos NÃO dimensionados vindos do SQL (row.projected_staff)
+            try {
+              const others: any[] = row.projected_staff || [];
+              for (const o of others) {
+                const rn = (o.role || "").toLowerCase();
+                if (
+                  !rn.includes("enfermeiro") &&
+                  !rn.includes("técnico") &&
+                  o.quantity
+                ) {
+                  projectedStaff.push({ role: o.role, quantity: o.quantity });
+                }
+              }
+            } catch (err) {
+              // noop
+            }
+          } else {
+            // Fallback: somar por sítios APENAS para cargos que NÃO são dimensionados
+            const tabela: any[] = dim.tabela || [];
+            const map: Record<string, number> = {};
+            for (const sitio of tabela) {
+              for (const cargo of sitio.cargos || []) {
+                const nome = (cargo.cargoNome || "").toLowerCase();
+                const isScp = cargo.isScpCargo === true; // cargos dimensionados
+                if (isScp) continue; // pular cargos dimensionados (enfermeiro/tecnico)
+                const qty =
+                  cargo.quantidadeProjetada ?? cargo.quantidadeAtual ?? 0;
+                if (qty <= 0) continue;
+                const key = cargo.cargoNome || "Outros";
+                map[key] = (map[key] || 0) + qty;
+              }
+            }
+            for (const [role, quantity] of Object.entries(map)) {
+              projectedStaff.push({ role, quantity });
+            }
+          }
+        }
+      } catch (e: any) {
+        console.warn(
+          `Dimensionamento nao-internacao falhou para unidade ${row.unit_id}:`,
+          e?.message || e
+        );
+      }
+
+      hospital.assistance.push({
+        id: row.sector_id,
+        name: row.sector_name,
+        entityName: row.entity_name,
+        costAmount: row.cost_amount,
+        projectedCostAmount:
+          projectedCostAmountAssistNum ?? row.projected_cost_amount,
+        staff: row.staff,
+        projectedStaff: projectedStaff,
+      });
+    }
+
+    return hospital;
   }
 }

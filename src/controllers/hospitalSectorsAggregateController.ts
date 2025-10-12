@@ -392,4 +392,33 @@ export class HospitalSectorsAggregateController {
         .json({ error: "Erro ao buscar hospitais com setores projetados" });
     }
   };
+
+  // GET projetado por hospital (único hospital)
+  getProjectedByHospital = async (req: Request, res: Response) => {
+    try {
+      const { hospitalId } = req.params;
+      if (!hospitalId)
+        return res.status(400).json({ error: "hospitalId é obrigatório" });
+
+      console.log(`Buscando agregado PROJETADO para hospital ${hospitalId}...`);
+      const result = await this.repo.getProjectedSectorsByHospital(hospitalId);
+
+      // Estrutura de retorno compatível com as rotas agregadas (items array com 1 item?)
+      return res.json({ aggregatedBy: "hospital", items: [result] });
+    } catch (error) {
+      console.error(
+        "[HospitalSectorsAggregateController] erro ao buscar hospital projetado:",
+        error
+      );
+      const msg = error instanceof Error ? error.message : String(error);
+      if (process.env.NODE_ENV !== "production") {
+        return res
+          .status(500)
+          .json({ error: "Erro ao buscar hospital projetado", details: msg });
+      }
+      return res
+        .status(500)
+        .json({ error: "Erro ao buscar hospital projetado" });
+    }
+  };
 }

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { DataSource } from "typeorm";
 import { HospitalSectorsAggregateRepository } from "../repositories/hospitalSectorsAggregateRepository";
+import { HospitalSectorsRepository } from "../repositories/hospitalSectorsRepository";
 import { HospitalSectorsAggregateController } from "../controllers/hospitalSectorsAggregateController";
 
 export const HospitalSectorsAggregateRoutes = (ds: DataSource): Router => {
@@ -64,6 +65,54 @@ export const HospitalSectorsAggregateRoutes = (ds: DataSource): Router => {
     "/hospitals/all-projected-aggregated",
     controller.getAllHospitalsProjectedAggregated
   );
+
+  // Rota para buscar PROJETADO para um único hospital
+  router.get(
+    "/hospitals/:hospitalId/projected",
+    controller.getProjectedByHospital
+  );
+
+  // Rota para buscar COMPARATIVO (atual + projetado) para um único hospital
+  router.get("/hospitals/:hospitalId/comparative", async (req, res) => {
+    try {
+      const { hospitalId } = req.params;
+      if (!hospitalId)
+        return res.status(400).json({ error: "hospitalId é obrigatório" });
+
+      // atual (live)
+      const sectorsRepo = new HospitalSectorsRepository(ds);
+      const atual = await sectorsRepo.getAllSectorsByHospital(hospitalId);
+
+      // projetado
+      const projected = await repo.getProjectedSectorsByHospital(hospitalId);
+
+      const hospitalObj = {
+        id: hospitalId,
+        name: projected?.name || null,
+        internation: atual?.internation || [],
+        assistance: atual?.assistance || [],
+      };
+
+      return res.json({ hospitalId, atual: hospitalObj, projetado: projected });
+    } catch (error) {
+      console.error(
+        "[HospitalSectorsAggregateRoutes] erro comparativo hospital:",
+        error
+      );
+      const msg = error instanceof Error ? error.message : String(error);
+      if (process.env.NODE_ENV !== "production") {
+        return res
+          .status(500)
+          .json({
+            error: "Erro ao buscar comparativo do hospital",
+            details: msg,
+          });
+      }
+      return res
+        .status(500)
+        .json({ error: "Erro ao buscar comparativo do hospital" });
+    }
+  });
 
   return router;
 };
