@@ -256,18 +256,26 @@ export class HospitalSectorsAggregateRepository {
             (COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) + 
              COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
              COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0))
-            * COALESCE(cuni.quantidade_funcionarios, 0)
-          )
-        ) AS "costAmount",
-        COALESCE(ls.bed_count, 0) AS "bedCount",
-        JSON_BUILD_OBJECT(
-          'minimumCare',      COALESCE(ls.minimum_care, 0),
-          'intermediateCare', COALESCE(ls.intermediate_care, 0),
-          'highDependency',   COALESCE(ls.high_dependency, 0),
-          'semiIntensive',    COALESCE(ls.semi_intensive, 0),
-          'intensive',        COALESCE(ls.intensive, 0)
-        ) AS "careLevel",
-        JSON_BUILD_OBJECT(
+            // Incluir outros cargos NÃO dimensionados usando a quantidade ATUAL (row.staff)
+            try {
+              const current: any[] = row.staff || [];
+              // construir mapa role -> soma quantidade atual (pode haver duplicatas)
+              const map: Record<string, number> = {};
+              for (const s of current) {
+                const roleName = (s.role || "").trim();
+                if (!roleName) continue;
+                const qty = Number(s.quantity) || 0;
+                map[roleName] = (map[roleName] || 0) + qty;
+              }
+              for (const [roleName, quantity] of Object.entries(map)) {
+                const rn = roleName.toLowerCase();
+                if (!rn.includes("enfermeiro") && !rn.includes("técnico")) {
+                  projectedStaff.push({ role: roleName, quantity });
+                }
+              }
+            } catch (err) {
+              // noop
+            }
           'evaluated', COALESCE(ls.evaluated, 0),
           'vacant',    COALESCE(ls.vacant, 0),
           'inactive',  COALESCE(ls.inactive, 0)
@@ -1771,7 +1779,9 @@ export class HospitalSectorsAggregateRepository {
       let projectedCostAmountNum: number | null = null;
       try {
         if (row.unit_id) {
-          const dim: any = await dimService.calcularParaInternacao(row.unit_id);
+          // tentar usar map pré-carregado para evitar chamadas redundantes
+          const dimFromMap = internationDimMap?.get?.(row.unit_id) ?? null;
+          const dim: any = dimFromMap ?? (await dimService.calcularParaInternacao(row.unit_id));
           // dim.tabela contém linhas por cargo (LinhaAnaliseFinanceira)
           const enfermeiro = (dim.tabela || []).find((t: any) =>
             (t.cargoNome || "").toLowerCase().includes("enfermeiro")
@@ -1782,22 +1792,22 @@ export class HospitalSectorsAggregateRepository {
               (t.cargoNome || "").toLowerCase().includes("tecnico")
           );
           projectedStaff = [];
-          if (enfermeiro)
-            projectedStaff.push({
-              role: "Enfermeiro",
-              quantity:
-                enfermeiro.quantidadeProjetada ??
-                enfermeiro.quantidadeProjetada ??
-                enfermeiro.quantidadeAtual,
-            });
-          if (tecnico)
-            projectedStaff.push({
-              role: "Técnico",
-              quantity:
-                tecnico.quantidadeProjetada ??
-                tecnico.quantidadeProjetada ??
-                tecnico.quantidadeAtual,
-            });
+          if (enfermeiro) {
+            const q =
+              enfermeiro.quantidadeProjetada !== undefined &&
+              enfermeiro.quantidadeProjetada !== null
+                ? enfermeiro.quantidadeProjetada
+                : enfermeiro.quantidadeAtual;
+            projectedStaff.push({ role: "Enfermeiro", quantity: q });
+          }
+          if (tecnico) {
+            const q =
+              tecnico.quantidadeProjetada !== undefined &&
+              tecnico.quantidadeProjetada !== null
+                ? tecnico.quantidadeProjetada
+                : tecnico.quantidadeAtual;
+            projectedStaff.push({ role: "Técnico", quantity: q });
+          }
           // calcular custo projetado usando quantidadeProjetada para cargos dimensionados
           try {
             const tabela: any[] = dim.tabela || [];
@@ -1814,8 +1824,12 @@ export class HospitalSectorsAggregateRepository {
                 nome.includes("enfermeiro") ||
                 nome.includes("técnico") ||
                 nome.includes("tecnico");
+              // Para cargos dimensionados (SCP), usar quantidadeProjetada se definida (mesmo que 0).
+              // Caso contrário, usar quantidadeAtual.
               const qty = isScp
-                ? c.quantidadeProjetada ?? c.quantidadeAtual ?? 0
+                ? (c.quantidadeProjetada !== undefined && c.quantidadeProjetada !== null
+                    ? c.quantidadeProjetada
+                    : c.quantidadeAtual ?? 0)
                 : c.quantidadeAtual ?? 0;
               totalProjectedCost += Number(qty) * Number(costPer);
             }
@@ -1862,63 +1876,105 @@ export class HospitalSectorsAggregateRepository {
       let projectedCostAmountAssistNum: number | null = null;
       try {
         if (row.unit_id) {
-          const dim: any = await dimService.calcularParaNaoInternacao(
-            row.unit_id
-          );
+          // tentar usar map pré-carregado para evitar chamadas redundantes
+          const dimFromMap = assistanceDimMap?.get?.(row.unit_id) ?? null;
+          const dim: any = dimFromMap ?? (await dimService.calcularParaNaoInternacao(row.unit_id));
           // Preferir os totais já calculados pelo dimensionamento no nível da UNIDADE
           // (quando presentes em dim.dimensionamento.pessoalEnfermeiroArredondado / pessoalTecnicoArredondado)
           const resumo = dim.dimensionamento;
           projectedStaff = [];
-          if (
-            resumo &&
-            (resumo.pessoalEnfermeiroArredondado ||
-              resumo.pessoalTecnicoArredondado)
-          ) {
-            // Usar os totais por UNIDADE fornecidos pelo dimensionamento para enfermeiro/tecnico
-            const totalEnfermeiro = resumo.pessoalEnfermeiroArredondado ?? 0;
-            const totalTecnico = resumo.pessoalTecnicoArredondado ?? 0;
-            if (totalEnfermeiro > 0)
-              projectedStaff.push({
-                role: "Enfermeiro",
-                quantity: totalEnfermeiro,
+          // Novo comportamento: projetado por SÍTIO
+          // Se dim.tabela existir, usar a lista de sítios e seus cargos (cada sítio possui cargos com quantidadeProjetada)
+          const tabela: any[] = dim.tabela || [];
+          if (Array.isArray(tabela) && tabela.length > 0) {
+            // Construir projectedStaff como lista por sítio
+            projectedStaff = tabela.map((sitio: any) => {
+              const cargos = (sitio.cargos || []).map((c: any) => {
+                const qty =
+                  c.quantidadeProjetada !== undefined && c.quantidadeProjetada !== null
+                    ? c.quantidadeProjetada
+                    : c.quantidadeAtual ?? 0;
+                return {
+                  role: c.cargoNome,
+                  quantity: qty,
+                  custoPorFuncionario: c.custoPorFuncionario,
+                };
               });
-            if (totalTecnico > 0)
-              projectedStaff.push({ role: "Técnico", quantity: totalTecnico });
 
-            // Incluir outros cargos NÃO dimensionados vindos do SQL (row.projected_staff)
+            return {
+              sitioId: sitio.id,
+              sitioNome: sitio.nome,
+              cargos,
+            };
+            });
+
+            // Calcular custo projetado para a unidade usando as quantidades por sítio quando possível
             try {
-              const others: any[] = row.projected_staff || [];
-              for (const o of others) {
-                const rn = (o.role || "").toLowerCase();
-                if (
-                  !rn.includes("enfermeiro") &&
-                  !rn.includes("técnico") &&
-                  o.quantity
-                ) {
-                  projectedStaff.push({ role: o.role, quantity: o.quantity });
+              let totalProjectedCost = 0;
+              for (const sitio of tabela) {
+                for (const c of sitio.cargos || []) {
+                  const nome = (c.cargoNome || "").toLowerCase();
+                  const costPer =
+                    c.custoPorFuncionario ??
+                    (c.salario || 0) +
+                      (c.adicionais || 0) +
+                      (c.valorHorasExtras || 0);
+                  const qty =
+                    c.quantidadeProjetada !== undefined && c.quantidadeProjetada !== null
+                      ? c.quantidadeProjetada
+                      : c.quantidadeAtual ?? 0;
+                  totalProjectedCost += Number(qty) * Number(costPer);
                 }
               }
+              projectedCostAmountAssistNum = Number(totalProjectedCost.toFixed(2));
             } catch (err) {
               // noop
             }
           } else {
-            // Fallback: somar por sítios APENAS para cargos que NÃO são dimensionados
-            const tabela: any[] = dim.tabela || [];
-            const map: Record<string, number> = {};
-            for (const sitio of tabela) {
-              for (const cargo of sitio.cargos || []) {
-                const nome = (cargo.cargoNome || "").toLowerCase();
-                const isScp = cargo.isScpCargo === true; // cargos dimensionados
-                if (isScp) continue; // pular cargos dimensionados (enfermeiro/tecnico)
-                const qty =
-                  cargo.quantidadeProjetada ?? cargo.quantidadeAtual ?? 0;
-                if (qty <= 0) continue;
-                const key = cargo.cargoNome || "Outros";
-                map[key] = (map[key] || 0) + qty;
+            // Fallback antigo: quando não há tabela por sítio, tentar usar resumo totals ou agregar não-dimensionados
+            const hasResumoEnf =
+              resumo &&
+              resumo.pessoalEnfermeiroArredondado !== undefined &&
+              resumo.pessoalEnfermeiroArredondado !== null;
+            const hasResumoTec =
+              resumo &&
+              resumo.pessoalTecnicoArredondado !== undefined &&
+              resumo.pessoalTecnicoArredondado !== null;
+
+            if (hasResumoEnf || hasResumoTec) {
+              const totalEnfermeiro = resumo.pessoalEnfermeiroArredondado ?? 0;
+              const totalTecnico = resumo.pessoalTecnicoArredondado ?? 0;
+              projectedStaff.push({ role: "Enfermeiro", quantity: totalEnfermeiro });
+              projectedStaff.push({ role: "Técnico", quantity: totalTecnico });
+
+              try {
+                const others: any[] = row.projected_staff || [];
+                for (const o of others) {
+                  const rn = (o.role || "").toLowerCase();
+                  if (!rn.includes("enfermeiro") && !rn.includes("técnico") && o.quantity) {
+                    projectedStaff.push({ role: o.role, quantity: o.quantity });
+                  }
+                }
+              } catch (err) {
+                // noop
               }
-            }
-            for (const [role, quantity] of Object.entries(map)) {
-              projectedStaff.push({ role, quantity });
+            } else {
+              const map: Record<string, number> = {};
+              for (const sitio of tabela) {
+                for (const cargo of sitio.cargos || []) {
+                  const nome = (cargo.cargoNome || "").toLowerCase();
+                  const isScp = cargo.isScpCargo === true; // cargos dimensionados
+                  if (isScp) continue; // pular cargos dimensionados (enfermeiro/tecnico)
+                  const qty =
+                    cargo.quantidadeProjetada ?? cargo.quantidadeAtual ?? 0;
+                  if (qty <= 0) continue;
+                  const key = cargo.cargoNome || "Outros";
+                  map[key] = (map[key] || 0) + qty;
+                }
+              }
+              for (const [role, quantity] of Object.entries(map)) {
+                projectedStaff.push({ role, quantity });
+              }
             }
           }
         }
