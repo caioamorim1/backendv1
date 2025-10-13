@@ -8,7 +8,7 @@ export class OccupationAnalysisController {
    * GET /hospital-sectors/:hospitalId/occupation-analysis
    *
    * Retorna análise de taxa de ocupação pré-calculada para o hospital
-   * 
+   *
    * Query params:
    * - dataReferencia (opcional): data no formato YYYY-MM-DD
    */
@@ -28,7 +28,7 @@ export class OccupationAnalysisController {
       if (dataReferencia) {
         const dateStr = String(dataReferencia);
         dataCalculo = new Date(dateStr);
-        
+
         if (isNaN(dataCalculo.getTime())) {
           return res.status(400).json({
             error: "dataReferencia deve estar no formato YYYY-MM-DD",
@@ -38,11 +38,16 @@ export class OccupationAnalysisController {
 
       console.log(
         `📊 [OccupationAnalysis] Request para hospital: ${hospitalId}${
-          dataCalculo ? ` - Data: ${dataCalculo.toISOString().split('T')[0]}` : ''
+          dataCalculo
+            ? ` - Data: ${dataCalculo.toISOString().split("T")[0]}`
+            : ""
         }`
       );
 
-      const result = await this.service.calcularAnaliseOcupacao(hospitalId, dataCalculo);
+      const result = await this.service.calcularAnaliseOcupacao(
+        hospitalId,
+        dataCalculo
+      );
 
       return res.json(result);
     } catch (error) {

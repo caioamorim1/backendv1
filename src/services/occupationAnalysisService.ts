@@ -9,7 +9,7 @@ import { ProjecaoParams } from "../calculoTaxaOcupacao/interfaces";
 
 /**
  * Service para cálculo de análise de taxa de ocupação
- * 
+ *
  * Regras de negócio:
  * - Taxa de Ocupação Atual = (leitos ocupados / total leitos) × 100
  * - Ocupação Máxima Atendível = calculada com base no quadro de profissionais (função calcularProjecao)
@@ -17,7 +17,6 @@ import { ProjecaoParams } from "../calculoTaxaOcupacao/interfaces";
  * - Superlotação = max(0, taxaOcupacao - ocupacaoMaximaAtendivel)
  */
 export class OccupationAnalysisService {
-
   constructor(private ds: DataSource) {}
 
   /**
@@ -28,11 +27,17 @@ export class OccupationAnalysisService {
     dataReferencia?: Date
   ): Promise<OccupationAnalysisResponse> {
     const dataCalculo = dataReferencia || new Date();
-    const dataInicioStr = new Date(dataCalculo.setHours(0, 0, 0, 0)).toISOString();
-    const dataFimStr = new Date(dataCalculo.setHours(23, 59, 59, 999)).toISOString();
+    const dataInicioStr = new Date(
+      dataCalculo.setHours(0, 0, 0, 0)
+    ).toISOString();
+    const dataFimStr = new Date(
+      dataCalculo.setHours(23, 59, 59, 999)
+    ).toISOString();
 
     console.log(
-      `\n🏥 Calculando análise de ocupação - Hospital: ${hospitalId} - Data: ${dataInicioStr.split('T')[0]}`
+      `\n🏥 Calculando análise de ocupação - Hospital: ${hospitalId} - Data: ${
+        dataInicioStr.split("T")[0]
+      }`
     );
 
     // Buscar dados do hospital, unidades, leitos e quadro de profissionais
@@ -137,7 +142,8 @@ export class OccupationAnalysisService {
         totalLeitos > 0 ? (leitosOcupados / totalLeitos) * 100 : 0;
 
       // Taxa de ocupação do DIA (média do dia inteiro)
-      const mediaOcupadosDia = ocupacaoDiaMap.get(row.sector_id) || leitosOcupados;
+      const mediaOcupadosDia =
+        ocupacaoDiaMap.get(row.sector_id) || leitosOcupados;
       const taxaOcupacaoDia =
         totalLeitos > 0 ? (mediaOcupadosDia / totalLeitos) * 100 : 0;
 
