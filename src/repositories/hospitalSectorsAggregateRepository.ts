@@ -10,9 +10,15 @@ import {
   ProjectedAssistanceSectorDTO,
 } from "../dto/hospitalSectorsAggregate.dto";
 import { DimensionamentoService } from "../services/dimensionamentoService";
+import { DimensionamentoCacheRepository } from "./dimensionamentoCacheRepository";
 
 export class HospitalSectorsAggregateRepository {
-  constructor(private ds: DataSource) {}
+  private cacheRepo: DimensionamentoCacheRepository;
+  private readonly CACHE_VALIDITY_MINUTES = 30; // Cache válido por 30 minutos
+
+  constructor(private ds: DataSource) {
+    this.cacheRepo = new DimensionamentoCacheRepository(ds);
+  }
 
   // Busca TODOS os hospitais
   async getAllSectors(): Promise<SectorsAggregateDTO> {
@@ -1613,7 +1619,56 @@ export class HospitalSectorsAggregateRepository {
   }
 
   /**
-   * Busca setores projetados para um único hospital (otimizado)
+   * Método auxiliar: Calcular dimensionamento com cache
+   * Verifica se existe cache válido, senão calcula e salva
+   */
+  private async calcularDimensionamentoComCache(
+    hospitalId: string,
+    unidadeId: string,
+    tipoUnidade: "INTERNACAO" | "NAO_INTERNACAO",
+    dimService: DimensionamentoService
+  ): Promise<any> {
+    const startCalc = Date.now();
+
+    // Tentar buscar do cache
+    const cache = await this.cacheRepo.buscarCacheValido(
+      unidadeId,
+      tipoUnidade,
+      this.CACHE_VALIDITY_MINUTES
+    );
+
+    if (cache) {
+      // Cache hit - retornar dados do cache
+      return cache.dados;
+    }
+
+    // Cache miss - calcular dimensionamento
+    console.log(`🧮 [CALCULANDO] ${tipoUnidade} - Unidade ${unidadeId}`);
+
+    let resultado: any;
+    if (tipoUnidade === "INTERNACAO") {
+      resultado = await dimService.calcularParaInternacao(unidadeId);
+    } else {
+      resultado = await dimService.calcularParaNaoInternacao(unidadeId);
+    }
+
+    const tempoCalculo = Date.now() - startCalc;
+
+    // Salvar no cache para próximas requisições
+    await this.cacheRepo.salvarCache(
+      hospitalId,
+      unidadeId,
+      tipoUnidade,
+      resultado,
+      undefined,
+      tempoCalculo
+    );
+
+    return resultado;
+  }
+
+  /**
+   * Busca setores projetados para um único hospital (otimizado com cache)
    */
   async getProjectedSectorsByHospital(hospitalId: string): Promise<any> {
     console.log(
@@ -1726,7 +1781,7 @@ export class HospitalSectorsAggregateRepository {
     // Instanciar serviço de dimensionamento para obter projetados por unidade
     const dimService = new DimensionamentoService(this.ds);
 
-    // --- Pré-buscar dimensionamentos em paralelo (com batches) para reduzir latência ---
+    // --- NOVO: Pré-buscar caches válidos em batch ---
     const intlUnitIds = Array.from(
       new Set(internationSectors.map((r: any) => r.unit_id).filter(Boolean))
     ) as string[];
@@ -1734,19 +1789,60 @@ export class HospitalSectorsAggregateRepository {
       new Set(assistanceSectors.map((r: any) => r.unit_id).filter(Boolean))
     ) as string[];
 
-    const batchFetch = async (
+    // Buscar caches válidos para todas as unidades de uma vez
+    const [cachesInternacao, cachesAssistencia] = await Promise.all([
+      this.cacheRepo.buscarCachesValidosBatch(
+        intlUnitIds.map((id) => ({
+          unidadeId: id,
+          tipoUnidade: "INTERNACAO" as const,
+        })),
+        this.CACHE_VALIDITY_MINUTES
+      ),
+      this.cacheRepo.buscarCachesValidosBatch(
+        assistUnitIds.map((id) => ({
+          unidadeId: id,
+          tipoUnidade: "NAO_INTERNACAO" as const,
+        })),
+        this.CACHE_VALIDITY_MINUTES
+      ),
+    ]);
+
+    // Identificar quais unidades precisam calcular (não estão no cache)
+    const intlUnitsToCalculate = intlUnitIds.filter(
+      (id) => !cachesInternacao.has(id)
+    );
+    const assistUnitsToCalculate = assistUnitIds.filter(
+      (id) => !cachesAssistencia.has(id)
+    );
+
+    console.log(
+      `📊 [CACHE STATS] Internação: ${cachesInternacao.size}/${intlUnitIds.length} cache hits | ` +
+        `Assistência: ${cachesAssistencia.size}/${assistUnitIds.length} cache hits`
+    );
+
+    // Calcular dimensionamentos faltantes em paralelo (batches de 6)
+    const batchCalculate = async (
       ids: string[],
-      fn: (id: string) => Promise<any>,
+      tipoUnidade: "INTERNACAO" | "NAO_INTERNACAO",
       batchSize = 6
     ) => {
       const map = new Map<string, any>();
       for (let i = 0; i < ids.length; i += batchSize) {
         const batch = ids.slice(i, i + batchSize);
-        const promises = batch.map((id) =>
-          fn(id)
-            .then((res) => ({ id, res }))
-            .catch((err) => ({ id, res: null, err }))
-        );
+        const promises = batch.map(async (id) => {
+          try {
+            const resultado = await this.calcularDimensionamentoComCache(
+              hospitalId,
+              id,
+              tipoUnidade,
+              dimService
+            );
+            return { id, res: resultado };
+          } catch (err) {
+            console.error(`❌ Erro ao calcular ${tipoUnidade} ${id}:`, err);
+            return { id, res: null, err };
+          }
+        });
         const results = await Promise.all(promises);
         for (const r of results) {
           map.set(r.id, r.res ?? null);
@@ -1755,13 +1851,28 @@ export class HospitalSectorsAggregateRepository {
       return map;
     };
 
-    // Fetch internacao and assistencia dimensionamentos in parallel batches
-    const [internationDimMap, assistanceDimMap] = await Promise.all([
-      batchFetch(intlUnitIds, (id) => dimService.calcularParaInternacao(id)),
-      batchFetch(assistUnitIds, (id) =>
-        dimService.calcularParaNaoInternacao(id)
-      ),
-    ]);
+    const [dimCalculadasInternacao, dimCalculadasAssistencia] =
+      await Promise.all([
+        batchCalculate(intlUnitsToCalculate, "INTERNACAO"),
+        batchCalculate(assistUnitsToCalculate, "NAO_INTERNACAO"),
+      ]);
+
+    // Combinar caches com cálculos novos
+    const internationDimMap = new Map<string, any>();
+    for (const [id, cache] of cachesInternacao) {
+      internationDimMap.set(id, cache.dados);
+    }
+    for (const [id, dim] of dimCalculadasInternacao) {
+      internationDimMap.set(id, dim);
+    }
+
+    const assistanceDimMap = new Map<string, any>();
+    for (const [id, cache] of cachesAssistencia) {
+      assistanceDimMap.set(id, cache.dados);
+    }
+    for (const [id, dim] of dimCalculadasAssistencia) {
+      assistanceDimMap.set(id, dim);
+    }
 
     const hospital: any = {
       id: hospitalId,
@@ -1793,22 +1904,65 @@ export class HospitalSectorsAggregateRepository {
               (t.cargoNome || "").toLowerCase().includes("técnico") ||
               (t.cargoNome || "").toLowerCase().includes("tecnico")
           );
+
+          // Inicializar projectedStaff com todos os cargos atuais (projetado = atual para não-dimensionados)
           projectedStaff = [];
+
+          // Criar map dos cargos atuais
+          const staffAtual: any[] = row.staff || [];
+          const cargoAtualMap = new Map<string, number>();
+          for (const s of staffAtual) {
+            const roleLower = (s.role || "").toLowerCase();
+            cargoAtualMap.set(roleLower, s.quantity || 0);
+          }
+
+          // Adicionar enfermeiro com quantidade PROJETADA (dimensionamento)
           if (enfermeiro) {
+            // Se quantidadeProjetada está definida (mesmo que 0), usar ela
+            // Caso contrário, significa que não foi calculada, então usar quantidadeAtual
             const q =
               enfermeiro.quantidadeProjetada !== undefined &&
               enfermeiro.quantidadeProjetada !== null
-                ? enfermeiro.quantidadeProjetada
-                : enfermeiro.quantidadeAtual;
+                ? enfermeiro.quantidadeProjetada // Usar projetada (pode ser 0)
+                : enfermeiro.quantidadeAtual ?? 0; // Fallback se não foi calculada
             projectedStaff.push({ role: "Enfermeiro", quantity: q });
+          } else if (cargoAtualMap.has("enfermeiro")) {
+            // Se não tem no dimensionamento, usar quantidade atual
+            projectedStaff.push({
+              role: "Enfermeiro",
+              quantity: cargoAtualMap.get("enfermeiro") ?? 0,
+            });
           }
+
+          // Adicionar técnico com quantidade PROJETADA (dimensionamento)
           if (tecnico) {
+            // Se quantidadeProjetada está definida (mesmo que 0), usar ela
             const q =
               tecnico.quantidadeProjetada !== undefined &&
               tecnico.quantidadeProjetada !== null
-                ? tecnico.quantidadeProjetada
-                : tecnico.quantidadeAtual;
+                ? tecnico.quantidadeProjetada // Usar projetada (pode ser 0)
+                : tecnico.quantidadeAtual ?? 0; // Fallback se não foi calculada
             projectedStaff.push({ role: "Técnico", quantity: q });
+          } else if (
+            cargoAtualMap.has("técnico") ||
+            cargoAtualMap.has("tecnico")
+          ) {
+            // Se não tem no dimensionamento, usar quantidade atual
+            const qtdTec =
+              cargoAtualMap.get("técnico") ?? cargoAtualMap.get("tecnico") ?? 0;
+            projectedStaff.push({ role: "Técnico", quantity: qtdTec });
+          }
+
+          // Adicionar TODOS os outros cargos (não-dimensionados) com quantidade ATUAL
+          for (const s of staffAtual) {
+            const roleLower = (s.role || "").toLowerCase();
+            if (
+              !roleLower.includes("enfermeiro") &&
+              !roleLower.includes("técnico") &&
+              !roleLower.includes("tecnico")
+            ) {
+              projectedStaff.push({ role: s.role, quantity: s.quantity || 0 });
+            }
           }
           // calcular custo projetado usando quantidadeProjetada para cargos dimensionados
           try {
@@ -1846,6 +2000,11 @@ export class HospitalSectorsAggregateRepository {
           `Dimensionamento interno falhou para unidade ${row.unit_id}:`,
           e?.message || e
         );
+        // FALLBACK: se falhar, usar staff atual como projetado
+        projectedStaff = (row.staff || []).map((s: any) => ({
+          role: s.role,
+          quantity: s.quantity || 0,
+        }));
       }
 
       hospital.internation.push({
@@ -1953,43 +2112,43 @@ export class HospitalSectorsAggregateRepository {
             if (hasResumoEnf || hasResumoTec) {
               const totalEnfermeiro = resumo.pessoalEnfermeiroArredondado ?? 0;
               const totalTecnico = resumo.pessoalTecnicoArredondado ?? 0;
+
+              // Adicionar enfermeiro e técnico com quantidades PROJETADAS (dimensionamento)
               projectedStaff.push({
                 role: "Enfermeiro",
                 quantity: totalEnfermeiro,
               });
               projectedStaff.push({ role: "Técnico", quantity: totalTecnico });
 
+              // Adicionar TODOS os outros cargos com quantidade ATUAL (row.staff)
               try {
-                const others: any[] = row.projected_staff || [];
-                for (const o of others) {
-                  const rn = (o.role || "").toLowerCase();
+                const staffAtual: any[] = row.staff || [];
+                for (const s of staffAtual) {
+                  const roleLower = (s.role || "").toLowerCase();
+                  // Pular enfermeiro e técnico (já adicionados acima com valores projetados)
                   if (
-                    !rn.includes("enfermeiro") &&
-                    !rn.includes("técnico") &&
-                    o.quantity
+                    !roleLower.includes("enfermeiro") &&
+                    !roleLower.includes("técnico") &&
+                    !roleLower.includes("tecnico")
                   ) {
-                    projectedStaff.push({ role: o.role, quantity: o.quantity });
+                    projectedStaff.push({
+                      role: s.role,
+                      quantity: s.quantity || 0,
+                    });
                   }
                 }
               } catch (err) {
                 // noop
               }
             } else {
-              const map: Record<string, number> = {};
-              for (const sitio of tabela) {
-                for (const cargo of sitio.cargos || []) {
-                  const nome = (cargo.cargoNome || "").toLowerCase();
-                  const isScp = cargo.isScpCargo === true; // cargos dimensionados
-                  if (isScp) continue; // pular cargos dimensionados (enfermeiro/tecnico)
-                  const qty =
-                    cargo.quantidadeProjetada ?? cargo.quantidadeAtual ?? 0;
-                  if (qty <= 0) continue;
-                  const key = cargo.cargoNome || "Outros";
-                  map[key] = (map[key] || 0) + qty;
-                }
-              }
-              for (const [role, quantity] of Object.entries(map)) {
-                projectedStaff.push({ role, quantity });
+              // Fallback final: sem dimensionamento válido
+              // Usar row.staff (atual) para todos os cargos (projetado = atual)
+              const staffAtual: any[] = row.staff || [];
+              for (const s of staffAtual) {
+                projectedStaff.push({
+                  role: s.role,
+                  quantity: s.quantity || 0,
+                });
               }
             }
           }
@@ -1999,6 +2158,11 @@ export class HospitalSectorsAggregateRepository {
           `Dimensionamento nao-internacao falhou para unidade ${row.unit_id}:`,
           e?.message || e
         );
+        // FALLBACK: se falhar, usar staff atual como projetado
+        projectedStaff = (row.staff || []).map((s: any) => ({
+          role: s.role,
+          quantity: s.quantity || 0,
+        }));
       }
 
       hospital.assistance.push({
@@ -2011,6 +2175,28 @@ export class HospitalSectorsAggregateRepository {
         staff: row.staff,
         projectedStaff: projectedStaff,
       });
+    }
+
+    console.log(`\n🎯 PROJETADO FINAL - Hospital ${hospitalId}:`);
+    console.log(`   Internação: ${hospital.internation.length} unidades`);
+    console.log(`   Assistência: ${hospital.assistance.length} unidades`);
+
+    // Log detalhado das primeiras unidades de assistência
+    for (let i = 0; i < Math.min(2, hospital.assistance.length); i++) {
+      const unit = hospital.assistance[i];
+      console.log(`\n   📍 Assistência ${i + 1}: ${unit.name}`);
+      console.log(
+        `      projectedStaff tipo:`,
+        Array.isArray(unit.projectedStaff)
+          ? unit.projectedStaff[0]?.sitioId
+            ? "ARRAY DE SÍTIOS"
+            : "ARRAY SIMPLES"
+          : typeof unit.projectedStaff
+      );
+      console.log(
+        `      projectedStaff:`,
+        JSON.stringify(unit.projectedStaff, null, 2).substring(0, 500)
+      );
     }
 
     return hospital;
