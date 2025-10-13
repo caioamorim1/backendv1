@@ -16,6 +16,31 @@ export class CargoController {
     res.json(items);
   };
 
+  /**
+   * Lista todos os cargos de um hospital específico
+   * GET /hospitals/:hospitalId/cargos
+   */
+  listarPorHospital = async (req: Request, res: Response) => {
+    try {
+      const { hospitalId } = req.params;
+
+      if (!hospitalId) {
+        return res.status(400).json({
+          mensagem: "hospitalId é obrigatório",
+        });
+      }
+
+      const items = await this.repo.listarPorHospital(hospitalId);
+      return res.json(items);
+    } catch (error) {
+      console.error("Erro ao listar cargos por hospital:", error);
+      return res.status(500).json({
+        mensagem: "Erro ao buscar cargos do hospital",
+        error: String(error),
+      });
+    }
+  };
+
   obter = async (req: Request, res: Response) => {
     try {
       const c = await this.repo.obter(req.params.id);

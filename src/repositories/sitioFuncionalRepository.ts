@@ -119,13 +119,62 @@ export class SitioFuncionalRepository {
           if (!cargoUnidadeId) {
             if (!cargoId)
               throw new Error("cargoUnidadeId ou cargoId é obrigatório");
-            const cuFound = await cargoUnidadeRepo.findOne({
+
+            // Primeiro: Tenta buscar CargoUnidade existente (RETROCOMPATÍVEL)
+            let cuFound = await cargoUnidadeRepo.findOne({
               where: { cargoId: cargoId, unidadeNaoInternacaoId: unidade.id },
             });
-            if (!cuFound)
-              throw new Error(
-                "CargoUnidade não encontrado para o cargo informado na unidade do sítio"
+
+            // Se NÃO existe CargoUnidade, cria automaticamente (NOVA LÓGICA)
+            if (!cuFound) {
+              console.log(
+                `⚠️  CargoUnidade não encontrado. Tentando criar automaticamente...`
               );
+
+              // Busca o hospital através da unidade
+              const unidadeComHospital = await manager
+                .getRepository(UnidadeNaoInternacao)
+                .findOne({
+                  where: { id: unidade.id },
+                  relations: ["hospital"],
+                });
+
+              if (!unidadeComHospital?.hospital) {
+                throw new Error("Hospital da unidade não encontrado");
+              }
+
+              // Valida se o cargo existe no hospital
+              const cargoRepo = manager.getRepository("Cargo");
+              const cargoExiste = await cargoRepo.findOne({
+                where: {
+                  id: cargoId,
+                  hospitalId: unidadeComHospital.hospital.id,
+                },
+              });
+
+              if (!cargoExiste) {
+                throw new Error(
+                  `Cargo não encontrado no hospital. Certifique-se de que o cargo está cadastrado.`
+                );
+              }
+
+              // Cria CargoUnidade automaticamente
+              console.log(
+                `✅ Criando CargoUnidade: Cargo ${cargoId} → Unidade ${unidade.id}`
+              );
+
+              const novoCU = new CargoUnidade();
+              novoCU.cargoId = cargoId;
+              novoCU.unidadeNaoInternacaoId = unidade.id;
+              novoCU.quantidade_funcionarios = 0;
+
+              cuFound = await cargoUnidadeRepo.save(novoCU);
+            }
+
+            if (!cuFound) {
+              throw new Error("Erro ao criar CargoUnidade");
+            }
+
             cargoUnidadeId = cuFound.id;
           }
 
@@ -138,7 +187,7 @@ export class SitioFuncionalRepository {
           const cs = cargoSitioRepo.create({
             cargoUnidadeId,
             sitioId: (sitioSalvo as any).id,
-            quantidade_funcionarios: c.quantidade_funcionarios ?? 1,
+            quantidade_funcionarios: c.quantidade_funcionarios ?? 0, // Padrão 0 ao invés de 1
           } as any);
 
           await cargoSitioRepo.save(cs);
@@ -241,22 +290,8 @@ export class SitioFuncionalRepository {
     });
     if (!existente) return null;
 
-    // ✅ VERIFICAR SE A UNIDADE TEM MÚLTIPLOS SÍTIOS
-    const totalSitios = await this.repo().count({
-      where: { unidade: { id: existente.unidade?.id } },
-    });
-    const temMultiplosSitios = totalSitios > 1;
-
     console.log(`\n🔍 UPDATE SÍTIO: ${existente.nome}`);
     console.log(`   Unidade: ${existente.unidade?.nome}`);
-    console.log(`   Total de sítios na unidade: ${totalSitios}`);
-    console.log(
-      `   Validação de quantidade: ${
-        temMultiplosSitios
-          ? "❌ DESABILITADA (múltiplos sítios)"
-          : "✅ HABILITADA"
-      }`
-    );
 
     // use transaction to update sitio and reconcile cargos if provided
     await this.ds.transaction(async (manager) => {
@@ -282,16 +317,65 @@ export class SitioFuncionalRepository {
           if (!cargoUnidadeId) {
             if (!cargoId)
               throw new Error("cargoUnidadeId ou cargoId é obrigatório");
-            const cuFound = await cargoUnidadeRepo.findOne({
+
+            // Primeiro: Tenta buscar CargoUnidade existente (RETROCOMPATÍVEL)
+            let cuFound = await cargoUnidadeRepo.findOne({
               where: {
                 cargoId: cargoId,
                 unidadeNaoInternacaoId: existente.unidade?.id,
               },
             });
-            if (!cuFound)
-              throw new Error(
-                "CargoUnidade não encontrado para o cargo informado na unidade do sítio"
+
+            // Se NÃO existe CargoUnidade, cria automaticamente (NOVA LÓGICA)
+            if (!cuFound) {
+              console.log(
+                `⚠️  CargoUnidade não encontrado na atualização. Criando automaticamente...`
               );
+
+              // Busca o hospital através da unidade
+              const unidadeComHospital = await manager
+                .getRepository(UnidadeNaoInternacao)
+                .findOne({
+                  where: { id: existente.unidade?.id },
+                  relations: ["hospital"],
+                });
+
+              if (!unidadeComHospital?.hospital) {
+                throw new Error("Hospital da unidade não encontrado");
+              }
+
+              // Valida se o cargo existe no hospital
+              const cargoRepo = manager.getRepository("Cargo");
+              const cargoExiste = await cargoRepo.findOne({
+                where: {
+                  id: cargoId,
+                  hospitalId: unidadeComHospital.hospital.id,
+                },
+              });
+
+              if (!cargoExiste) {
+                throw new Error(
+                  `Cargo não encontrado no hospital. Certifique-se de que o cargo está cadastrado.`
+                );
+              }
+
+              // Cria CargoUnidade automaticamente
+              console.log(
+                `✅ Criando CargoUnidade na atualização: Cargo ${cargoId} → Unidade ${existente.unidade?.id}`
+              );
+
+              const novoCU = new CargoUnidade();
+              novoCU.cargoId = cargoId;
+              novoCU.unidadeNaoInternacaoId = existente.unidade?.id;
+              novoCU.quantidade_funcionarios = 0; // Quantidade inicial zerada
+
+              cuFound = await cargoUnidadeRepo.save(novoCU);
+            }
+
+            if (!cuFound) {
+              throw new Error("Erro ao criar CargoUnidade");
+            }
+
             cargoUnidadeId = cuFound.id;
           }
 
@@ -302,35 +386,11 @@ export class SitioFuncionalRepository {
           if (existingAssoc) {
             // update only if quantidade_funcionarios provided, otherwise leave as-is
             if (typeof c.quantidade_funcionarios === "number") {
-              // ✅ SÓ VALIDAR SE NÃO FOR UNIDADE COM MÚLTIPLOS SÍTIOS
-              if (!temMultiplosSitios) {
-                // Lock CargoUnidade and validate availability (excluding current alloc)
-                const cuLocked = await manager
-                  .createQueryBuilder(CargoUnidade, "cu")
-                  .setLock("pessimistic_write")
-                  .where("cu.id = :id", { id: cargoUnidadeId })
-                  .getOne();
-                if (!cuLocked) throw new Error("CargoUnidade não encontrado");
-
-                const raw = await cargoSitioRepo
-                  .createQueryBuilder("cs")
-                  .select("COALESCE(SUM(cs.quantidade_funcionarios),0)", "sum")
-                  .where("cs.cargo_unidade_id = :id", { id: cargoUnidadeId })
-                  .andWhere("cs.id != :currentId", {
-                    currentId: existingAssoc.id,
-                  })
-                  .getRawOne();
-
-                const allocatedExcluding = Number(raw?.sum ?? 0);
-                if (
-                  allocatedExcluding + Number(c.quantidade_funcionarios) >
-                  (cuLocked.quantidade_funcionarios ?? 0)
-                ) {
-                  throw new Error(
-                    "Quantidade solicitada excede a disponibilidade do cargo na unidade"
-                  );
-                }
-              }
+              // ✅ REMOVIDA VALIDAÇÃO OBSOLETA DE DISPONIBILIDADE
+              // A quantidade é definida livremente nos sítios
+              console.log(
+                `📝 Atualizando quantidade: ${c.quantidade_funcionarios}`
+              );
 
               existingAssoc.quantidade_funcionarios = c.quantidade_funcionarios;
               await cargoSitioRepo.save(existingAssoc);
@@ -338,39 +398,13 @@ export class SitioFuncionalRepository {
             continue;
           }
 
-          // create new association with availability check
-          // ✅ SÓ VALIDAR SE NÃO FOR UNIDADE COM MÚLTIPLOS SÍTIOS
-          if (!temMultiplosSitios) {
-            const cuLockedForCreate = await manager
-              .createQueryBuilder(CargoUnidade, "cu")
-              .setLock("pessimistic_write")
-              .where("cu.id = :id", { id: cargoUnidadeId })
-              .getOne();
-            if (!cuLockedForCreate)
-              throw new Error("CargoUnidade não encontrado");
-
-            const raw2 = await cargoSitioRepo
-              .createQueryBuilder("cs")
-              .select("COALESCE(SUM(cs.quantidade_funcionarios),0)", "sum")
-              .where("cs.cargo_unidade_id = :id", { id: cargoUnidadeId })
-              .getRawOne();
-
-            const allocatedNow = Number(raw2?.sum ?? 0);
-            const requestedNow = Number(c.quantidade_funcionarios ?? 1);
-            if (
-              allocatedNow + requestedNow >
-              (cuLockedForCreate.quantidade_funcionarios ?? 0)
-            ) {
-              throw new Error(
-                "Quantidade solicitada excede a disponibilidade do cargo na unidade"
-              );
-            }
-          }
+          // create new association (SEM validação de disponibilidade)
+          console.log(`➕ Criando nova associação CargoSitio`);
 
           const cs = cargoSitioRepo.create({
             cargoUnidadeId,
             sitioId: id,
-            quantidade_funcionarios: c.quantidade_funcionarios ?? 1,
+            quantidade_funcionarios: c.quantidade_funcionarios ?? 0,
           } as any);
 
           await cargoSitioRepo.save(cs);
