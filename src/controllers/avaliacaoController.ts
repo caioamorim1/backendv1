@@ -75,6 +75,26 @@ export class AvaliacaoController {
     return res.json(lista);
   };
 
+  // Taxa de ocupação do dia baseada nas avaliações ativas
+  taxaOcupacaoDia = async (req: Request, res: Response) => {
+    try {
+      const { unidadeId, hospitalId } = req.query as {
+        unidadeId?: string;
+        hospitalId?: string;
+      };
+      const taxa = await this.repo.calcularTaxaOcupacaoDia({
+        unidadeId,
+        hospitalId,
+      });
+      return res.json(taxa);
+    } catch (err) {
+      const details = err instanceof Error ? err.message : String(err);
+      return res
+        .status(500)
+        .json({ error: "Erro ao calcular taxa de ocupação", details });
+    }
+  };
+
   // Lista todas as avaliações
   listarTodas = async (_req: Request, res: Response) => {
     const lista = await this.repo.listarTodas();

@@ -140,4 +140,25 @@ export class LeitoController {
         .json({ mensagem: "Erro ao atualizar status do leito" });
     }
   };
+
+  // Taxa de ocupação baseada no STATUS dos leitos (ATIVO vs VAGO)
+  taxaOcupacaoPorStatus = async (req: Request, res: Response) => {
+    try {
+      const { unidadeId, hospitalId } = req.query as {
+        unidadeId?: string;
+        hospitalId?: string;
+      };
+      const taxa = await this.repo.calcularTaxaOcupacaoPorStatus({
+        unidadeId,
+        hospitalId,
+      });
+      return res.json(taxa);
+    } catch (err) {
+      const details = err instanceof Error ? err.message : String(err);
+      return res.status(500).json({
+        error: "Erro ao calcular taxa de ocupação por status",
+        details,
+      });
+    }
+  };
 }

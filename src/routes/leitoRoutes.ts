@@ -10,6 +10,7 @@ export const LeitoRoutes = (ds: DataSource): Router => {
 
   r.post("/", ctrl.criar);
   r.get("/", ctrl.listar);
+  r.get("/taxa-ocupacao-status", ctrl.taxaOcupacaoPorStatus); // ?unidadeId=... OU ?hospitalId=... (sem params retorna tudo)
   r.patch("/:id", ctrl.atualizar);
   r.patch("/:id/status", ctrl.atualizarStatus);
   r.delete("/:id", ctrl.deletar);

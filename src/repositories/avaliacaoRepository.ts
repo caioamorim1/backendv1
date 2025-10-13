@@ -466,6 +466,166 @@ export class AvaliacaoRepository {
     );
   }
 
+  /**
+   * Calcula a taxa de ocupação do dia com base nas avaliações ativas
+   * @param params.unidadeId ID da unidade específica
+   * @param params.hospitalId ID do hospital (retorna todas unidades do hospital)
+   * @returns Taxa de ocupação com detalhes
+   */
+  async calcularTaxaOcupacaoDia(params?: {
+    unidadeId?: string;
+    hospitalId?: string;
+  }) {
+    const leitoRepo = this.repo.manager.getRepository(Leito);
+    const unidadeId = params?.unidadeId;
+    const hospitalId = params?.hospitalId;
+
+    if (unidadeId) {
+      // Taxa de ocupação para uma unidade específica
+      const leitos = await leitoRepo.find({
+        where: { unidade: { id: unidadeId }, status: StatusLeito.ATIVO },
+      });
+      const totalLeitos = leitos.length;
+
+      const avaliacoesAtivas = await this.listarSessoesAtivasPorUnidade(
+        unidadeId
+      );
+      const leitosOcupados = avaliacoesAtivas.filter((a) => a.leito?.id).length;
+
+      const taxaOcupacao =
+        totalLeitos > 0 ? (leitosOcupados / totalLeitos) * 100 : 0;
+
+      return {
+        unidadeId,
+        totalLeitos,
+        leitosOcupados,
+        leitosDisponiveis: totalLeitos - leitosOcupados,
+        taxaOcupacao: Number(taxaOcupacao.toFixed(2)),
+        avaliacoesAtivas: avaliacoesAtivas.length,
+      };
+    } else if (hospitalId) {
+      // Taxa de ocupação para todas as unidades de um hospital específico
+      const unidades = await this.unidadeRepo.find({
+        where: { hospital: { id: hospitalId } },
+        relations: ["leitos", "hospital"],
+      });
+
+      const resultados = await Promise.all(
+        unidades.map(async (unidade) => {
+          const leitosAtivos =
+            unidade.leitos?.filter((l) => l.status === StatusLeito.ATIVO) || [];
+          const totalLeitos = leitosAtivos.length;
+
+          const avaliacoesAtivas = await this.listarSessoesAtivasPorUnidade(
+            unidade.id
+          );
+          const leitosOcupados = avaliacoesAtivas.filter(
+            (a) => a.leito?.id
+          ).length;
+
+          const taxaOcupacao =
+            totalLeitos > 0 ? (leitosOcupados / totalLeitos) * 100 : 0;
+
+          return {
+            unidadeId: unidade.id,
+            unidadeNome: unidade.nome,
+            totalLeitos,
+            leitosOcupados,
+            leitosDisponiveis: totalLeitos - leitosOcupados,
+            taxaOcupacao: Number(taxaOcupacao.toFixed(2)),
+            avaliacoesAtivas: avaliacoesAtivas.length,
+          };
+        })
+      );
+
+      // Cálculo consolidado do hospital
+      const totalHospitalLeitos = resultados.reduce(
+        (sum, r) => sum + r.totalLeitos,
+        0
+      );
+      const totalHospitalOcupados = resultados.reduce(
+        (sum, r) => sum + r.leitosOcupados,
+        0
+      );
+      const taxaHospitalOcupacao =
+        totalHospitalLeitos > 0
+          ? (totalHospitalOcupados / totalHospitalLeitos) * 100
+          : 0;
+
+      return {
+        hospitalId,
+        hospitalNome: unidades[0]?.hospital?.nome || "N/A",
+        consolidadoHospital: {
+          totalLeitos: totalHospitalLeitos,
+          leitosOcupados: totalHospitalOcupados,
+          leitosDisponiveis: totalHospitalLeitos - totalHospitalOcupados,
+          taxaOcupacao: Number(taxaHospitalOcupacao.toFixed(2)),
+          totalUnidades: unidades.length,
+        },
+        porUnidade: resultados,
+      };
+    } else {
+      // Taxa de ocupação para todas as unidades (todos os hospitais)
+      const unidades = await this.unidadeRepo.find({
+        relations: ["leitos", "hospital"],
+      });
+
+      const resultados = await Promise.all(
+        unidades.map(async (unidade) => {
+          const leitosAtivos =
+            unidade.leitos?.filter((l) => l.status === StatusLeito.ATIVO) || [];
+          const totalLeitos = leitosAtivos.length;
+
+          const avaliacoesAtivas = await this.listarSessoesAtivasPorUnidade(
+            unidade.id
+          );
+          const leitosOcupados = avaliacoesAtivas.filter(
+            (a) => a.leito?.id
+          ).length;
+
+          const taxaOcupacao =
+            totalLeitos > 0 ? (leitosOcupados / totalLeitos) * 100 : 0;
+
+          return {
+            unidadeId: unidade.id,
+            unidadeNome: unidade.nome,
+            hospitalId: unidade.hospital?.id,
+            hospitalNome: unidade.hospital?.nome,
+            totalLeitos,
+            leitosOcupados,
+            leitosDisponiveis: totalLeitos - leitosOcupados,
+            taxaOcupacao: Number(taxaOcupacao.toFixed(2)),
+            avaliacoesAtivas: avaliacoesAtivas.length,
+          };
+        })
+      );
+
+      // Cálculo geral (todos os hospitais)
+      const totalGeralLeitos = resultados.reduce(
+        (sum, r) => sum + r.totalLeitos,
+        0
+      );
+      const totalGeralOcupados = resultados.reduce(
+        (sum, r) => sum + r.leitosOcupados,
+        0
+      );
+      const taxaGeralOcupacao =
+        totalGeralLeitos > 0
+          ? (totalGeralOcupados / totalGeralLeitos) * 100
+          : 0;
+
+      return {
+        geral: {
+          totalLeitos: totalGeralLeitos,
+          leitosOcupados: totalGeralOcupados,
+          leitosDisponiveis: totalGeralLeitos - totalGeralOcupados,
+          taxaOcupacao: Number(taxaGeralOcupacao.toFixed(2)),
+        },
+        porUnidade: resultados,
+      };
+    }
+  }
+
   listarTodas() {
     return this.repo.find({
       relations: ["unidade", "autor", "leito"],

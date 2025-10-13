@@ -109,4 +109,212 @@ export class LeitoRepository {
       throw e;
     }
   }
+
+  /**
+   * Calcula a taxa de ocupação baseada no STATUS dos leitos
+   * Taxa = (Leitos ATIVO / Total de Leitos) * 100
+   * @param params.unidadeId ID da unidade específica
+   * @param params.hospitalId ID do hospital (retorna todas unidades do hospital)
+   * @returns Taxa de ocupação com detalhes por status
+   */
+  async calcularTaxaOcupacaoPorStatus(params?: {
+    unidadeId?: string;
+    hospitalId?: string;
+  }) {
+    const unidadeId = params?.unidadeId;
+    const hospitalId = params?.hospitalId;
+
+    if (unidadeId) {
+      // Taxa de ocupação para uma unidade específica
+      const leitos = await this.repo.find({
+        where: { unidade: { id: unidadeId } },
+        relations: ["unidade"],
+      });
+
+      const totalLeitos = leitos.length;
+      const leitosAtivos = leitos.filter(
+        (l) => l.status === StatusLeito.ATIVO
+      ).length;
+      const leitosVagos = leitos.filter(
+        (l) => l.status === StatusLeito.VAGO
+      ).length;
+      const leitosPendentes = leitos.filter(
+        (l) => l.status === StatusLeito.PENDENTE
+      ).length;
+      const leitosInativos = leitos.filter(
+        (l) => l.status === StatusLeito.INATIVO
+      ).length;
+
+      // Taxa = leitos ATIVO / TOTAL * 100
+      const taxaOcupacao =
+        totalLeitos > 0 ? (leitosAtivos / totalLeitos) * 100 : 0;
+
+      return {
+        unidadeId,
+        unidadeNome: leitos[0]?.unidade?.nome || "N/A",
+        totalLeitos,
+        leitosAtivos,
+        leitosVagos,
+        leitosPendentes,
+        leitosInativos,
+        taxaOcupacao: Number(taxaOcupacao.toFixed(2)),
+      };
+    } else if (hospitalId) {
+      // Taxa de ocupação para todas as unidades de um hospital específico
+      const unidades = await this.unidadeRepo.find({
+        where: { hospital: { id: hospitalId } },
+        relations: ["leitos", "hospital"],
+      });
+
+      const resultados = await Promise.all(
+        unidades.map(async (unidade) => {
+          const leitos = unidade.leitos || [];
+          const totalLeitos = leitos.length;
+          const leitosAtivos = leitos.filter(
+            (l) => l.status === StatusLeito.ATIVO
+          ).length;
+          const leitosVagos = leitos.filter(
+            (l) => l.status === StatusLeito.VAGO
+          ).length;
+          const leitosPendentes = leitos.filter(
+            (l) => l.status === StatusLeito.PENDENTE
+          ).length;
+          const leitosInativos = leitos.filter(
+            (l) => l.status === StatusLeito.INATIVO
+          ).length;
+
+          const taxaOcupacao =
+            totalLeitos > 0 ? (leitosAtivos / totalLeitos) * 100 : 0;
+
+          return {
+            unidadeId: unidade.id,
+            unidadeNome: unidade.nome,
+            totalLeitos,
+            leitosAtivos,
+            leitosVagos,
+            leitosPendentes,
+            leitosInativos,
+            taxaOcupacao: Number(taxaOcupacao.toFixed(2)),
+          };
+        })
+      );
+
+      // Cálculo consolidado do hospital
+      const totalHospitalLeitos = resultados.reduce(
+        (sum, r) => sum + r.totalLeitos,
+        0
+      );
+      const totalHospitalAtivos = resultados.reduce(
+        (sum, r) => sum + r.leitosAtivos,
+        0
+      );
+      const totalHospitalVagos = resultados.reduce(
+        (sum, r) => sum + r.leitosVagos,
+        0
+      );
+      const totalHospitalPendentes = resultados.reduce(
+        (sum, r) => sum + r.leitosPendentes,
+        0
+      );
+      const totalHospitalInativos = resultados.reduce(
+        (sum, r) => sum + r.leitosInativos,
+        0
+      );
+      const taxaHospitalOcupacao =
+        totalHospitalLeitos > 0
+          ? (totalHospitalAtivos / totalHospitalLeitos) * 100
+          : 0;
+
+      return {
+        hospitalId,
+        hospitalNome: unidades[0]?.hospital?.nome || "N/A",
+        consolidadoHospital: {
+          totalLeitos: totalHospitalLeitos,
+          leitosAtivos: totalHospitalAtivos,
+          leitosVagos: totalHospitalVagos,
+          leitosPendentes: totalHospitalPendentes,
+          leitosInativos: totalHospitalInativos,
+          taxaOcupacao: Number(taxaHospitalOcupacao.toFixed(2)),
+          totalUnidades: unidades.length,
+        },
+        porUnidade: resultados,
+      };
+    } else {
+      // Taxa de ocupação para todas as unidades (todos os hospitais)
+      const unidades = await this.unidadeRepo.find({
+        relations: ["leitos", "hospital"],
+      });
+
+      const resultados = await Promise.all(
+        unidades.map(async (unidade) => {
+          const leitos = unidade.leitos || [];
+          const totalLeitos = leitos.length;
+          const leitosAtivos = leitos.filter(
+            (l) => l.status === StatusLeito.ATIVO
+          ).length;
+          const leitosVagos = leitos.filter(
+            (l) => l.status === StatusLeito.VAGO
+          ).length;
+          const leitosPendentes = leitos.filter(
+            (l) => l.status === StatusLeito.PENDENTE
+          ).length;
+          const leitosInativos = leitos.filter(
+            (l) => l.status === StatusLeito.INATIVO
+          ).length;
+
+          const taxaOcupacao =
+            totalLeitos > 0 ? (leitosAtivos / totalLeitos) * 100 : 0;
+
+          return {
+            unidadeId: unidade.id,
+            unidadeNome: unidade.nome,
+            hospitalId: unidade.hospital?.id,
+            hospitalNome: unidade.hospital?.nome,
+            totalLeitos,
+            leitosAtivos,
+            leitosVagos,
+            leitosPendentes,
+            leitosInativos,
+            taxaOcupacao: Number(taxaOcupacao.toFixed(2)),
+          };
+        })
+      );
+
+      // Cálculo geral (todos os hospitais)
+      const totalGeralLeitos = resultados.reduce(
+        (sum, r) => sum + r.totalLeitos,
+        0
+      );
+      const totalGeralAtivos = resultados.reduce(
+        (sum, r) => sum + r.leitosAtivos,
+        0
+      );
+      const totalGeralVagos = resultados.reduce(
+        (sum, r) => sum + r.leitosVagos,
+        0
+      );
+      const totalGeralPendentes = resultados.reduce(
+        (sum, r) => sum + r.leitosPendentes,
+        0
+      );
+      const totalGeralInativos = resultados.reduce(
+        (sum, r) => sum + r.leitosInativos,
+        0
+      );
+      const taxaGeralOcupacao =
+        totalGeralLeitos > 0 ? (totalGeralAtivos / totalGeralLeitos) * 100 : 0;
+
+      return {
+        geral: {
+          totalLeitos: totalGeralLeitos,
+          leitosAtivos: totalGeralAtivos,
+          leitosVagos: totalGeralVagos,
+          leitosPendentes: totalGeralPendentes,
+          leitosInativos: totalGeralInativos,
+          taxaOcupacao: Number(taxaGeralOcupacao.toFixed(2)),
+        },
+        porUnidade: resultados,
+      };
+    }
+  }
 }
