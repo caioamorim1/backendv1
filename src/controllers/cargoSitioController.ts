@@ -28,11 +28,9 @@ export class CargoSitioController {
       return res.status(201).json(novo);
     } catch (error) {
       console.error("Erro ao criar cargo por sitio:", error);
-      return res
-        .status(400)
-        .json({
-          message: error instanceof Error ? error.message : String(error),
-        });
+      return res.status(400).json({
+        message: error instanceof Error ? error.message : String(error),
+      });
     }
   };
 
@@ -43,11 +41,9 @@ export class CargoSitioController {
       return res.json(cs);
     } catch (error) {
       console.error("Erro ao obter cargo por sitio:", error);
-      return res
-        .status(404)
-        .json({
-          message: error instanceof Error ? error.message : String(error),
-        });
+      return res.status(404).json({
+        message: error instanceof Error ? error.message : String(error),
+      });
     }
   };
 
@@ -59,11 +55,9 @@ export class CargoSitioController {
       return res.json(updated);
     } catch (error) {
       console.error("Erro ao atualizar cargo por sitio:", error);
-      return res
-        .status(400)
-        .json({
-          message: error instanceof Error ? error.message : String(error),
-        });
+      return res.status(400).json({
+        message: error instanceof Error ? error.message : String(error),
+      });
     }
   };
 

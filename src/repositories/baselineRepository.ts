@@ -23,12 +23,16 @@ export class BaselineRepository {
 
       const baselineRepo = manager.getRepository(Baseline);
 
+      console.log("🔧 [BASELINE] Sanitizando dados antes de salvar...");
+      const dadosSanitizados = this.sanitizarDados(data);
+      console.log("✅ [BASELINE] Dados sanitizados:", dadosSanitizados);
+
       const baseline = baselineRepo.create({
         hospitalId: hospital.id,
-        nome: data.nome,
-        quantidade_funcionarios: data.quantidade_funcionarios,
-        custo_total: data.custo_total,
-        setores: data.setores as SetorBaseline[],
+        nome: dadosSanitizados.nome,
+        quantidade_funcionarios: dadosSanitizados.quantidade_funcionarios,
+        custo_total: dadosSanitizados.custo_total,
+        setores: dadosSanitizados.setores as SetorBaseline[],
       } as CriarBaselineDTO);
 
       await baselineRepo.save(baseline);
@@ -38,7 +42,11 @@ export class BaselineRepository {
   }
 
   async atualizar(data: AtualizarBaselineDTO, id: string) {
-    await this.repo.update(id, data);
+    console.log("🔧 [BASELINE] Sanitizando dados antes de atualizar...");
+    const dadosSanitizados = this.sanitizarDados(data);
+    console.log("✅ [BASELINE] Dados sanitizados:", dadosSanitizados);
+
+    await this.repo.update(id, dadosSanitizados);
     return this.buscarPorId(id);
   }
 
@@ -96,5 +104,80 @@ export class BaselineRepository {
   async deletar(id: string) {
     const r = await this.repo.delete(id);
     return (r.affected ?? 0) > 0;
+  }
+
+  /**
+   * ✅ SANITIZAR DADOS - Remove símbolos de porcentagem/moeda e converte para número
+   * Aplica a mesma lógica usada no SnapshotDimensionamentoService
+   */
+  private sanitizarDados(dados: any): any {
+    if (!dados) return dados;
+
+    // Se for array, sanitizar cada item
+    if (Array.isArray(dados)) {
+      return dados.map((item, index) => this.sanitizarDados(item));
+    }
+
+    // Se for objeto, sanitizar cada propriedade
+    if (typeof dados === "object") {
+      const sanitizado: any = {};
+
+      for (const [chave, valor] of Object.entries(dados)) {
+        // Se o valor for string com "%", remover e converter para número
+        if (typeof valor === "string" && valor.includes("%")) {
+          const numero = parseFloat(
+            valor.replace("%", "").replace(",", ".").trim()
+          );
+          const resultado = isNaN(numero) ? 0 : numero;
+          console.log(
+            `🔧 [BASELINE SANITIZAR] ${chave}: "${valor}" → ${resultado}`
+          );
+          sanitizado[chave] = resultado;
+        }
+        // Se for string numérica ou monetária (ex: "1.500,00" ou "R$ 1.500,00"), converter
+        else if (typeof valor === "string" && /[\d.,]/.test(valor)) {
+          // Remover prefixos monetários
+          let valorLimpo = valor.replace(/^[R$€£¥₹\s]+/i, "").trim();
+
+          // Se tem pontos E vírgulas, assumir formato brasileiro (1.500,00)
+          if (valorLimpo.includes(".") && valorLimpo.includes(",")) {
+            valorLimpo = valorLimpo.replace(/\./g, "").replace(",", ".");
+          }
+          // Se só tem vírgula, substituir por ponto
+          else if (valorLimpo.includes(",")) {
+            valorLimpo = valorLimpo.replace(",", ".");
+          }
+
+          // Tentar converter
+          if (/^[\d.]+$/.test(valorLimpo)) {
+            const numero = parseFloat(valorLimpo);
+            if (!isNaN(numero)) {
+              console.log(
+                `🔧 [BASELINE SANITIZAR] ${chave}: "${valor}" → ${numero}`
+              );
+              // Para campos de custo/valor, manter como número decimal
+              sanitizado[chave] = numero;
+            } else {
+              sanitizado[chave] = valor; // Manter original se não conseguir converter
+            }
+          } else {
+            sanitizado[chave] = valor; // Não é numérico, manter original
+          }
+        }
+        // Se for objeto ou array, sanitizar recursivamente
+        else if (typeof valor === "object" && valor !== null) {
+          sanitizado[chave] = this.sanitizarDados(valor);
+        }
+        // Outros casos, manter o valor original
+        else {
+          sanitizado[chave] = valor;
+        }
+      }
+
+      return sanitizado;
+    }
+
+    // Se for primitivo, retornar direto
+    return dados;
   }
 }

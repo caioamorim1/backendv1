@@ -4,6 +4,24 @@ export interface StaffDTO {
   quantity: number;
 }
 
+export interface CargoSitioDTO {
+  cargo_sitio_id?: string;
+  quantidade_funcionarios: number;
+  cargoUnidade: {
+    id: string;
+    cargo: {
+      id: string;
+      nome: string;
+    };
+  };
+}
+
+export interface SitioFuncionalDTO {
+  id: string;
+  nome: string;
+  cargosSitio: CargoSitioDTO[];
+}
+
 export interface CareLevelDTO {
   minimumCare: number;
   intermediateCare: number;
@@ -35,6 +53,7 @@ export interface AssistanceSectorDTO {
   descr: string | null;
   costAmount: number;
   staff: StaffDTO[];
+  sitiosFuncionais?: SitioFuncionalDTO[]; // ✨ NOVO CAMPO
 }
 
 export interface HospitalSectorsDTO {
