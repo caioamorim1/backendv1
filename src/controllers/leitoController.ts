@@ -161,4 +161,41 @@ export class LeitoController {
       });
     }
   };
+
+  // Taxa de ocupação agregada por diferentes níveis organizacionais
+  taxaOcupacaoAgregada = async (req: Request, res: Response) => {
+    try {
+      const { aggregationType, entityId } = req.query as {
+        aggregationType?: "hospital" | "grupo" | "regiao" | "rede";
+        entityId?: string;
+      };
+
+      if (!aggregationType) {
+        return res.status(400).json({
+          error: "Parâmetro 'aggregationType' é obrigatório",
+          hint: "Valores aceitos: 'hospital', 'grupo', 'regiao', 'rede'",
+        });
+      }
+
+      if (!["hospital", "grupo", "regiao", "rede"].includes(aggregationType)) {
+        return res.status(400).json({
+          error: "Tipo de agregação inválido",
+          hint: "Valores aceitos: 'hospital', 'grupo', 'regiao', 'rede'",
+        });
+      }
+
+      const taxa = await this.repo.calcularTaxaOcupacaoAgregada({
+        aggregationType,
+        entityId,
+      });
+
+      return res.json(taxa);
+    } catch (err) {
+      const details = err instanceof Error ? err.message : String(err);
+      return res.status(500).json({
+        error: "Erro ao calcular taxa de ocupação agregada",
+        details,
+      });
+    }
+  };
 }
