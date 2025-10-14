@@ -270,7 +270,61 @@ export class UnidadeRepository {
   }
 
   async deletar(id: string) {
-    const r = await this.repo.delete(id);
-    return (r.affected ?? 0) > 0;
+    // Perform a transactional cascade delete of related data to avoid FK violations
+    return await this.repo.manager.transaction(async (manager) => {
+      // Ensure unidade exists
+      const u = await manager.getRepository(UnidadeInternacao).findOne({
+        where: { id },
+        relations: ["leitos"],
+      });
+      if (!u) return false;
+
+      const leitoIds = (u.leitos || []).map((l: any) => l.id);
+
+      // 1) Delete historicos_ocupacao for these leitos
+      if (leitoIds.length > 0) {
+        await manager
+          .getRepository(
+            require("../entities/HistoricoOcupacao").HistoricoOcupacao
+          )
+          .createQueryBuilder()
+          .delete()
+          .where("leitoId IN (:...ids)", { ids: leitoIds })
+          .execute();
+      }
+
+      // 2) Delete avaliacoes_scp related to this unidade or these leitos
+      await manager
+        .getRepository(require("../entities/AvaliacaoSCP").AvaliacaoSCP)
+        .createQueryBuilder()
+        .delete()
+        .where("unidadeId = :unidadeId", { unidadeId: id })
+        .orWhere(leitoIds.length > 0 ? "leitoId IN (:...ids)" : "1=0", {
+          ids: leitoIds,
+        })
+        .execute();
+
+      // 3) Delete cargos_unidade for this unidade
+      await manager
+        .getRepository(require("../entities/CargoUnidade").CargoUnidade)
+        .createQueryBuilder()
+        .delete()
+        .where("unidadeId = :unidadeId", { unidadeId: id })
+        .execute();
+
+      // 4) Delete leitos of the unidade
+      if (leitoIds.length > 0) {
+        await manager
+          .getRepository(require("../entities/Leito").Leito)
+          .createQueryBuilder()
+          .delete()
+          .where("id IN (:...ids)", { ids: leitoIds })
+          .execute();
+      }
+
+      // 5) Finally delete the unidade
+      const del = await manager.getRepository(UnidadeInternacao).delete({ id });
+      return (del.affected ?? 0) > 0;
+    });
   }
 }

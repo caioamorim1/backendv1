@@ -95,6 +95,9 @@ export class AvaliacaoRepository {
         ? (metodo.faixas.find((f) => total >= f.min && total <= f.max)
             ?.classe as ClassificacaoCuidado)
         : classificarTotal(expectedKey as any, total);
+      console.log(
+        `criarSessaoPorLeito: leitoId=${leitoId} total=${total} classificacao=${classe}`
+      );
       const colaboradorRepo = manager.getRepository(Colaborador);
 
       let autor: Colaborador | null = await colaboradorRepo.findOne({
@@ -170,6 +173,9 @@ export class AvaliacaoRepository {
           });
 
           if (historicoAtivo) {
+            console.log(
+              `Atualizando historico ativo id=${historicoAtivo.id} com classificacao=${classe} total=${total}`
+            );
             historicoAtivo.totalPontos = total;
             historicoAtivo.classificacao = classe;
             historicoAtivo.itens = itens;
@@ -218,6 +224,9 @@ export class AvaliacaoRepository {
       }
 
       const saved = await manager.getRepository(AvaliacaoSCP).save(avaliacao);
+      console.log(
+        `Sessao criada id=${saved.id} leito=${leitoId} classificacao=${saved.classificacao} total=${saved.totalPontos}`
+      );
 
       // **CRIAR HISTÓRICO DE OCUPAÇÃO IMEDIATAMENTE**
       const historicoRepo = manager.getRepository(HistoricoOcupacao);
@@ -242,10 +251,19 @@ export class AvaliacaoRepository {
       });
 
       await historicoRepo.save(historico);
+      console.log(
+        `Historico criado id=${historico.id} leito=${leitoId} classificacao=${historico.classificacao} inicio=${historico.inicio}`
+      );
 
       // Atualiza leitos_status da unidade após criar/atualizar avaliação
       try {
-        await this.leitosStatusService.atualizarStatusUnidade(unidadeId);
+        console.log(
+          `Chamando leitosStatusService.atualizarStatusUnidade para unidadeId=${unidadeId} (within transaction)`
+        );
+        await this.leitosStatusService.atualizarStatusUnidade(
+          unidadeId,
+          manager
+        );
       } catch (e) {
         console.warn("Não foi possível atualizar leitos_status:", e);
       }
@@ -278,6 +296,9 @@ export class AvaliacaoRepository {
         });
 
         if (historicoAtivo) {
+          console.log(
+            `Finalizando historico id=${historicoAtivo.id} leito=${historicoAtivo.leito?.id}`
+          );
           historicoAtivo.fim = new Date();
           await historicoRepo.save(historicoAtivo);
         }
@@ -298,11 +319,20 @@ export class AvaliacaoRepository {
       }
 
       const saved = await manager.getRepository(AvaliacaoSCP).save(av);
+      console.log(
+        `Sessao liberada id=${saved.id} leito=${saved.leito?.id} statusSessao=${saved.statusSessao}`
+      );
 
       // Atualiza leitos_status da unidade após liberar sessão
       if (av.unidade?.id) {
         try {
-          await this.leitosStatusService.atualizarStatusUnidade(av.unidade.id);
+          console.log(
+            `Chamando leitosStatusService.atualizarStatusUnidade (liberar) unidadeId=${av.unidade.id} (within transaction)`
+          );
+          await this.leitosStatusService.atualizarStatusUnidade(
+            av.unidade.id,
+            manager
+          );
         } catch (e) {
           console.warn("Não foi possível atualizar leitos_status:", e);
         }

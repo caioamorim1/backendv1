@@ -186,6 +186,23 @@ export class AvaliacaoController {
     if (scp) {
       const key = scp.toUpperCase();
 
+      // Primeiro tenta encontrar um método dinâmico no banco (ScpMetodo)
+      try {
+        const metodoDb = await this.scpRepo.getByKey(key);
+        if (metodoDb) {
+          return res.json({
+            scp: metodoDb.key,
+            title: metodoDb.title,
+            description: metodoDb.description,
+            questions: metodoDb.questions,
+            faixas: metodoDb.faixas,
+          });
+        }
+      } catch (err) {
+        // se houver erro no DB, continuar para fallback estático
+        console.warn("Erro ao buscar ScpMetodo no DB:", err);
+      }
+
       // 🔹 Se não achar, busca no fallback estático
       const s = (scpSchemas as any)[key];
       if (!s) return res.status(404).json({ error: "SCP não encontrado" });
