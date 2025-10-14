@@ -135,8 +135,10 @@ export class DimensionamentoService {
     console.log("Total de históricos (todos os períodos):", totalHistoricos);
 
     // Busca todos os registros de histórico que se sobrepõem ao período do mês atual
+    // Carrega históricos do mês e a relação com leito para permitir deduplicação
     const historicosDoMes = await historicoRepo
       .createQueryBuilder("h")
+      .leftJoinAndSelect("h.leito", "leito")
       .where("h.unidadeId = :unidadeId", { unidadeId })
       .andWhere(
         "(h.inicio <= :fimPeriodo AND (h.fim IS NULL OR h.fim >= :inicioPeriodo))",
@@ -161,6 +163,16 @@ export class DimensionamentoService {
       avaliacoesHoje.length
     );
 
+    // Construir conjunto de leitos que já possuem histórico no período para evitar double-count
+    const leitosComHistorico = new Set(
+      historicosDoMes.map((h) => h.leito?.id).filter(Boolean) as string[]
+    );
+    console.log(
+      `Deduplicação: leitos com histórico no período: ${[
+        ...leitosComHistorico,
+      ].join(", ")}`
+    );
+
     if (historicosDoMes.length > 0) {
       console.log("Exemplo de histórico:", {
         id: historicosDoMes[0].id,
@@ -182,6 +194,34 @@ export class DimensionamentoService {
         classificacao: avaliacoesHoje[0].classificacao,
         dataAplicacao: avaliacoesHoje[0].dataAplicacao,
       });
+    }
+
+    // --- DEBUG ADICIONAL: DUMP CONTROLADO ---
+    try {
+      const dump = {
+        historicosDoMesCount: historicosDoMes.length,
+        avaliacoesHojeCount: avaliacoesHoje.length,
+        historicosSample: historicosDoMes.slice(0, 20).map((h) => ({
+          id: h.id,
+          leitoId: h.leito?.id ?? null,
+          inicio: h.inicio,
+          fim: h.fim,
+          classificacao: h.classificacao,
+          totalPontos: h.totalPontos,
+        })),
+        avaliacoesHojeSample: avaliacoesHoje.slice(0, 50).map((a) => ({
+          id: a.id,
+          leitoId: a.leito?.id ?? null,
+          classificacao: a.classificacao,
+          totalPontos: a.totalPontos,
+        })),
+      };
+      console.log(
+        "--- DEBUG DUMP INICIAL (historicos+avaliacoes) ---\n",
+        JSON.stringify(dump, null, 2)
+      );
+    } catch (err) {
+      console.warn("Falha ao gerar debug dump inicial:", err);
     }
 
     if (diasNoPeriodo > 0) {
@@ -223,6 +263,15 @@ export class DimensionamentoService {
         // Se for hoje, adicionar as avaliações ativas (que ainda não viraram histórico)
         if (isHoje && avaliacoesHoje.length > 0) {
           for (const aval of avaliacoesHoje) {
+            // Pular avaliações para leitos que já possuem um histórico ativo no período
+            const leitoIdAval = aval.leito?.id ?? null;
+            if (leitoIdAval && leitosComHistorico.has(leitoIdAval)) {
+              console.log(
+                `Pulando avaliação id=${aval.id} para leito=${leitoIdAval} pois já existe historico no período`
+              );
+              continue;
+            }
+
             pacientesNesteDia += 1;
             totalSomaDiariaPacientes += 1;
             if (aval.classificacao) {
@@ -580,7 +629,12 @@ export class DimensionamentoService {
     );
 
     console.log("\n=== ========================================== ===");
-    console.log(unidade);
+    console.log("UNIDADE (resumo):", {
+      id: unidade.id,
+      nome: unidade.nome,
+      numeroLeitos: unidade.leitos.length,
+      horas_extra_reais: unidade.horas_extra_reais,
+    });
 
     const tabela = (unidade.cargosUnidade || []).map(
       (cu): LinhaAnaliseFinanceira => {
@@ -643,8 +697,23 @@ export class DimensionamentoService {
 
     const response = { agregados, tabela };
 
-    console.log("\n=== 🚀 RESPOSTA FINAL ENVIADA AO FRONTEND ===");
-    console.log(JSON.stringify(response, null, 2));
+    // Debug final: imprime amostras para validação
+    try {
+      const finalDump = {
+        agregados,
+        tabelaSummary: tabela.map((t) => ({
+          cargoNome: t.cargoNome,
+          quantidadeAtual: t.quantidadeAtual,
+          quantidadeProjetada: t.quantidadeProjetada,
+        })),
+      };
+      console.log(
+        "\n=== 🚀 RESPOSTA FINAL ENVIADA AO FRONTEND (resumo) ===\n",
+        JSON.stringify(finalDump, null, 2)
+      );
+    } catch (err) {
+      console.warn("Falha ao gerar final debug dump:", err);
+    }
     console.log("=== FIM RESPOSTA ===\n");
 
     return response;
