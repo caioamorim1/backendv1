@@ -863,8 +863,11 @@ export class DimensionamentoService {
 
         const isEnfermeiro = cargoNomeLower.includes("enfermeiro");
         const isTecnico =
-          cargoNomeLower.includes("técnico de enfermagem") ||
-          cargoNomeLower.includes("tecnico de enfermagem");
+          cargoNomeLower.includes("técnico em enfermagem") ||
+          cargoNomeLower.includes("tecnico em enfermagem") ||
+          cargoNomeLower.includes("técnico enfermagem") ||
+          cargoNomeLower.includes("tec enfermagem") ||
+          cargoNomeLower.includes("técnico de enfermagem");
 
         const salario = parseFloat(cargo.salario?.replace(",", ".") || "0");
         const adicionais = parseFloat(
