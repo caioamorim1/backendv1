@@ -7,7 +7,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-  "db:prepare:qualitative": "ts-node-dev --transpile-only --exit-child --no-notify src/scripts/createQualitativeTables.ts",
+    "db:prepare:qualitative": "ts-node-dev --transpile-only --exit-child --no-notify src/scripts/createQualitativeTables.ts",
     "seed": "ts-node-dev --transpile-only --exit-child --no-notify src/scripts/seedDatabase.ts",
     "seed:fresh": "ts-node-dev --transpile-only --exit-child --no-notify src/scripts/seedFresh.ts",
     "seed:avaliacoes": "ts-node-dev --transpile-only --exit-child --no-notify src/scripts/migrateLegacyAvaliacoes.ts",
