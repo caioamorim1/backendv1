@@ -10,6 +10,9 @@ import {
   ProjectedAssistanceSectorDTO,
 } from "../dto/hospitalSectorsAggregate.dto";
 import { DimensionamentoService } from "../services/dimensionamentoService";
+import { ProjetadoFinalInternacao } from "../entities/ProjetadoFinalInternacao";
+import { ProjetadoFinalNaoInternacao } from "../entities/ProjetadoFinalNaoInternacao";
+import { Cargo } from "../entities/Cargo";
 import { DimensionamentoCacheRepository } from "./dimensionamentoCacheRepository";
 
 export class HospitalSectorsAggregateRepository {
@@ -1781,6 +1784,60 @@ export class HospitalSectorsAggregateRepository {
     // Instanciar serviço de dimensionamento para obter projetados por unidade
     const dimService = new DimensionamentoService(this.ds);
 
+    // ===== Carregar PROJETADO FINAL salvo pelo usuário e montar mapas de override =====
+    const projIntRepo = this.ds.getRepository(ProjetadoFinalInternacao);
+    const projNaoRepo = this.ds.getRepository(ProjetadoFinalNaoInternacao);
+
+    const [projIntRows, projNaoRows] = await Promise.all([
+      projIntRepo.find({ where: { hospitalId } }),
+      projNaoRepo.find({ where: { hospitalId } }),
+    ]);
+
+    // Buscar nomes de cargos para mapear cargoId -> role (nome)
+    const cargoIds = Array.from(
+      new Set([
+        ...projIntRows.map((r) => r.cargoId),
+        ...projNaoRows.map((r) => r.cargoId),
+      ])
+    );
+    const cargoNomeMap = new Map<string, string>();
+    if (cargoIds.length > 0) {
+      const cargos = await this.ds
+        .getRepository(Cargo)
+        .createQueryBuilder("c")
+        .where("c.id IN (:...ids)", { ids: cargoIds })
+        .select(["c.id", "c.nome"])
+        .getMany();
+      for (const c of cargos) cargoNomeMap.set(c.id, c.nome);
+    }
+
+    // Internação: unidadeId -> (roleLower -> qty)
+    const overrideIntByUnitRole = new Map<string, Map<string, number>>();
+    for (const r of projIntRows) {
+      const role = (cargoNomeMap.get(r.cargoId) || "").toLowerCase();
+      if (!role) continue;
+      if (!overrideIntByUnitRole.has(r.unidadeId)) {
+        overrideIntByUnitRole.set(r.unidadeId, new Map());
+      }
+      overrideIntByUnitRole.get(r.unidadeId)!.set(role, r.projetadoFinal);
+    }
+
+    // Não-Internação: unidadeId -> sitioId -> (roleLower -> qty)
+    const overrideNaoByUnitSitioRole = new Map<
+      string,
+      Map<string, Map<string, number>>
+    >();
+    for (const r of projNaoRows) {
+      const role = (cargoNomeMap.get(r.cargoId) || "").toLowerCase();
+      if (!role) continue;
+      if (!overrideNaoByUnitSitioRole.has(r.unidadeId)) {
+        overrideNaoByUnitSitioRole.set(r.unidadeId, new Map());
+      }
+      const bySitio = overrideNaoByUnitSitioRole.get(r.unidadeId)!;
+      if (!bySitio.has(r.sitioId)) bySitio.set(r.sitioId, new Map());
+      bySitio.get(r.sitioId)!.set(role, r.projetadoFinal);
+    }
+
     // --- NOVO: Pré-buscar caches válidos em batch ---
     const intlUnitIds = Array.from(
       new Set(internationSectors.map((r: any) => r.unit_id).filter(Boolean))
@@ -1905,7 +1962,7 @@ export class HospitalSectorsAggregateRepository {
               (t.cargoNome || "").toLowerCase().includes("tecnico")
           );
 
-          // Inicializar projectedStaff com todos os cargos atuais (projetado = atual para não-dimensionados)
+          // Inicializar projectedStaff com todos os cargos atuais (vamos sobrescrever abaixo)
           projectedStaff = [];
 
           // Criar map dos cargos atuais
@@ -1916,55 +1973,120 @@ export class HospitalSectorsAggregateRepository {
             cargoAtualMap.set(roleLower, s.quantity || 0);
           }
 
-          // Adicionar enfermeiro com quantidade PROJETADA (dimensionamento)
-          if (enfermeiro) {
-            // Se quantidadeProjetada está definida (mesmo que 0), usar ela
-            // Caso contrário, significa que não foi calculada, então usar quantidadeAtual
-            const q =
-              enfermeiro.quantidadeProjetada !== undefined &&
-              enfermeiro.quantidadeProjetada !== null
-                ? enfermeiro.quantidadeProjetada // Usar projetada (pode ser 0)
-                : enfermeiro.quantidadeAtual ?? 0; // Fallback se não foi calculada
-            projectedStaff.push({ role: "Enfermeiro", quantity: q });
-          } else if (cargoAtualMap.has("enfermeiro")) {
-            // Se não tem no dimensionamento, usar quantidade atual
-            projectedStaff.push({
-              role: "Enfermeiro",
-              quantity: cargoAtualMap.get("enfermeiro") ?? 0,
-            });
-          }
+          // Aplicar overrides de PROJETADO FINAL (se existirem para a unidade)
+          const overridesRole = overrideIntByUnitRole.get(row.unit_id) || null;
+          const overriddenRoles = new Set<string>();
 
-          // Adicionar técnico com quantidade PROJETADA (dimensionamento)
-          if (tecnico) {
-            // Se quantidadeProjetada está definida (mesmo que 0), usar ela
-            const q =
-              tecnico.quantidadeProjetada !== undefined &&
-              tecnico.quantidadeProjetada !== null
-                ? tecnico.quantidadeProjetada // Usar projetada (pode ser 0)
-                : tecnico.quantidadeAtual ?? 0; // Fallback se não foi calculada
-            projectedStaff.push({ role: "Técnico", quantity: q });
-          } else if (
-            cargoAtualMap.has("técnico") ||
-            cargoAtualMap.has("tecnico")
-          ) {
-            // Se não tem no dimensionamento, usar quantidade atual
-            const qtdTec =
-              cargoAtualMap.get("técnico") ?? cargoAtualMap.get("tecnico") ?? 0;
-            projectedStaff.push({ role: "Técnico", quantity: qtdTec });
-          }
-
-          // Adicionar TODOS os outros cargos (não-dimensionados) com quantidade ATUAL
-          for (const s of staffAtual) {
-            const roleLower = (s.role || "").toLowerCase();
+          if (overridesRole && overridesRole.size > 0) {
+            // 1) Adicionar todos os cargos com override
+            for (const [roleLower, qty] of overridesRole.entries()) {
+              const displayRole = roleLower.includes("enfermeiro")
+                ? "Enfermeiro"
+                : roleLower.includes("técnico") || roleLower.includes("tecnico")
+                ? "Técnico"
+                : // tentar encontrar o nome exato a partir do staff atual
+                  staffAtual.find(
+                    (s: any) => (s.role || "").toLowerCase() === roleLower
+                  )?.role ||
+                  // fallback para capitalização básica
+                  roleLower.charAt(0).toUpperCase() + roleLower.slice(1);
+              projectedStaff.push({ role: displayRole, quantity: qty });
+              overriddenRoles.add(roleLower);
+            }
+            // 2) Para cargos SEM override: aplicar antiga lógica (dim para ENF/TEC, atual para demais)
+            // ENFERMEIRO
+            if (!overriddenRoles.has("enfermeiro")) {
+              if (enfermeiro) {
+                const q =
+                  enfermeiro.quantidadeProjetada ??
+                  enfermeiro.quantidadeAtual ??
+                  0;
+                projectedStaff.push({ role: "Enfermeiro", quantity: q });
+              } else if (cargoAtualMap.has("enfermeiro")) {
+                projectedStaff.push({
+                  role: "Enfermeiro",
+                  quantity: cargoAtualMap.get("enfermeiro") ?? 0,
+                });
+              }
+            }
+            // TÉCNICO
             if (
-              !roleLower.includes("enfermeiro") &&
-              !roleLower.includes("técnico") &&
-              !roleLower.includes("tecnico")
+              !overriddenRoles.has("técnico") &&
+              !overriddenRoles.has("tecnico")
             ) {
-              projectedStaff.push({ role: s.role, quantity: s.quantity || 0 });
+              if (tecnico) {
+                const q =
+                  tecnico.quantidadeProjetada ?? tecnico.quantidadeAtual ?? 0;
+                projectedStaff.push({ role: "Técnico", quantity: q });
+              } else if (
+                cargoAtualMap.has("técnico") ||
+                cargoAtualMap.has("tecnico")
+              ) {
+                const qtdTec =
+                  cargoAtualMap.get("técnico") ??
+                  cargoAtualMap.get("tecnico") ??
+                  0;
+                projectedStaff.push({ role: "Técnico", quantity: qtdTec });
+              }
+            }
+            // Demais cargos
+            for (const s of staffAtual) {
+              const roleLower = (s.role || "").toLowerCase();
+              if (
+                !overriddenRoles.has(roleLower) &&
+                !roleLower.includes("enfermeiro") &&
+                !roleLower.includes("técnico") &&
+                !roleLower.includes("tecnico")
+              ) {
+                projectedStaff.push({
+                  role: s.role,
+                  quantity: s.quantity || 0,
+                });
+              }
+            }
+          } else {
+            // Sem overrides: usar antiga lógica (dim + atual)
+            if (enfermeiro) {
+              const q =
+                enfermeiro.quantidadeProjetada ??
+                enfermeiro.quantidadeAtual ??
+                0;
+              projectedStaff.push({ role: "Enfermeiro", quantity: q });
+            } else if (cargoAtualMap.has("enfermeiro")) {
+              projectedStaff.push({
+                role: "Enfermeiro",
+                quantity: cargoAtualMap.get("enfermeiro") ?? 0,
+              });
+            }
+            if (tecnico) {
+              const q =
+                tecnico.quantidadeProjetada ?? tecnico.quantidadeAtual ?? 0;
+              projectedStaff.push({ role: "Técnico", quantity: q });
+            } else if (
+              cargoAtualMap.has("técnico") ||
+              cargoAtualMap.has("tecnico")
+            ) {
+              const qtdTec =
+                cargoAtualMap.get("técnico") ??
+                cargoAtualMap.get("tecnico") ??
+                0;
+              projectedStaff.push({ role: "Técnico", quantity: qtdTec });
+            }
+            for (const s of staffAtual) {
+              const roleLower = (s.role || "").toLowerCase();
+              if (
+                !roleLower.includes("enfermeiro") &&
+                !roleLower.includes("técnico") &&
+                !roleLower.includes("tecnico")
+              ) {
+                projectedStaff.push({
+                  role: s.role,
+                  quantity: s.quantity || 0,
+                });
+              }
             }
           }
-          // calcular custo projetado usando quantidadeProjetada para cargos dimensionados
+          // calcular custo projetado usando OVERRIDES quando presentes
           try {
             const tabela: any[] = dim.tabela || [];
             let totalProjectedCost = 0;
@@ -1975,19 +2097,21 @@ export class HospitalSectorsAggregateRepository {
                 (c.salario || 0) +
                   (c.adicionais || 0) +
                   (c.valorHorasExtras || 0);
-              const isScp =
-                c.isScpCargo === true ||
-                nome.includes("enfermeiro") ||
-                nome.includes("técnico") ||
-                nome.includes("tecnico");
-              // Para cargos dimensionados (SCP), usar quantidadeProjetada se definida (mesmo que 0).
-              // Caso contrário, usar quantidadeAtual.
-              const qty = isScp
-                ? c.quantidadeProjetada !== undefined &&
-                  c.quantidadeProjetada !== null
-                  ? c.quantidadeProjetada
-                  : c.quantidadeAtual ?? 0
-                : c.quantidadeAtual ?? 0;
+              // Override de quantidade, se existir para este role
+              const overrideQty = overridesRole?.get(nome);
+              let qty: number;
+              if (overrideQty !== undefined) {
+                qty = overrideQty;
+              } else {
+                const isScp =
+                  c.isScpCargo === true ||
+                  nome.includes("enfermeiro") ||
+                  nome.includes("técnico") ||
+                  nome.includes("tecnico");
+                qty = isScp
+                  ? c.quantidadeProjetada ?? c.quantidadeAtual ?? 0
+                  : c.quantidadeAtual ?? 0;
+              }
               totalProjectedCost += Number(qty) * Number(costPer);
             }
             projectedCostAmountNum = Number(totalProjectedCost.toFixed(2));
@@ -2053,12 +2177,16 @@ export class HospitalSectorsAggregateRepository {
           if (Array.isArray(tabela) && tabela.length > 0) {
             // Construir projectedStaff como lista por sítio
             projectedStaff = tabela.map((sitio: any) => {
+              const overridesRole =
+                overrideNaoByUnitSitioRole.get(row.unit_id)?.get(sitio.id) ||
+                null;
               const cargos = (sitio.cargos || []).map((c: any) => {
+                const roleLower = (c.cargoNome || "").toLowerCase();
+                const overrideQty = overridesRole?.get(roleLower);
                 const qty =
-                  c.quantidadeProjetada !== undefined &&
-                  c.quantidadeProjetada !== null
-                    ? c.quantidadeProjetada
-                    : c.quantidadeAtual ?? 0;
+                  overrideQty !== undefined
+                    ? overrideQty
+                    : c.quantidadeProjetada ?? c.quantidadeAtual ?? 0;
                 return {
                   role: c.cargoNome,
                   quantity: qty,
@@ -2077,6 +2205,9 @@ export class HospitalSectorsAggregateRepository {
             try {
               let totalProjectedCost = 0;
               for (const sitio of tabela) {
+                const overridesRole =
+                  overrideNaoByUnitSitioRole.get(row.unit_id)?.get(sitio.id) ||
+                  null;
                 for (const c of sitio.cargos || []) {
                   const nome = (c.cargoNome || "").toLowerCase();
                   const costPer =
@@ -2084,11 +2215,11 @@ export class HospitalSectorsAggregateRepository {
                     (c.salario || 0) +
                       (c.adicionais || 0) +
                       (c.valorHorasExtras || 0);
+                  const overrideQty = overridesRole?.get(nome);
                   const qty =
-                    c.quantidadeProjetada !== undefined &&
-                    c.quantidadeProjetada !== null
-                      ? c.quantidadeProjetada
-                      : c.quantidadeAtual ?? 0;
+                    overrideQty !== undefined
+                      ? overrideQty
+                      : c.quantidadeProjetada ?? c.quantidadeAtual ?? 0;
                   totalProjectedCost += Number(qty) * Number(costPer);
                 }
               }

@@ -1,12 +1,10 @@
 import { DataSource } from "typeorm";
 import { QualitativeCategory, Questionnaire } from "../dto/qualitative.dto";
 
-
 export class QualitativeRepository {
-  constructor(private ds: DataSource) { }
+  constructor(private ds: DataSource) {}
 
   async listarCategorias(): Promise<QualitativeCategory[]> {
-
     console.log("listando categorias qualitativas...");
 
     const query = `
@@ -21,14 +19,20 @@ export class QualitativeRepository {
     return categorias;
   }
 
-  async atualizarCategoria(id: number, data: { name: string; meta: number; }): Promise<void> {
+  async atualizarCategoria(
+    id: number,
+    data: { name: string; meta: number }
+  ): Promise<void> {
     await this.ds.query(
       `UPDATE qualitative_category SET name = $1, meta = $2 WHERE id = $3`,
       [data.name, data.meta, id]
     );
   }
 
-  async criarCategoria(data: { name: string; meta: number; }): Promise<QualitativeCategory> {
+  async criarCategoria(data: {
+    name: string;
+    meta: number;
+  }): Promise<QualitativeCategory> {
     const result = await this.ds.query(
       `INSERT INTO qualitative_category (name, meta) VALUES ($1, $2) RETURNING *`,
       [data.name, data.meta]
@@ -43,8 +47,10 @@ export class QualitativeRepository {
     );
   }
 
-
-  async criarQuestionario(data: { name: string; questions: any[]; }): Promise<void> {
+  async criarQuestionario(data: {
+    name: string;
+    questions: any[];
+  }): Promise<void> {
     const query = `
     INSERT INTO qualitative_questionnaire 
       (name, questions, is_active, version, created_at, updated_at) 
@@ -56,7 +62,7 @@ export class QualitativeRepository {
       data.name,
       JSON.stringify(data.questions),
       true, // is_active padrão como true
-      1    // version inicial como 1
+      1, // version inicial como 1
     ];
 
     const result = await this.ds.query(query, values);
@@ -74,7 +80,10 @@ export class QualitativeRepository {
     return questionarios;
   }
 
-  async atualizarQuestionario(id: number, data: { name: string; questions: any[]; }): Promise<void> {
+  async atualizarQuestionario(
+    id: number,
+    data: { name: string; questions: any[] }
+  ): Promise<void> {
     const query = `
       UPDATE qualitative_questionnaire
       SET name = $1, questions = $2::jsonb
@@ -108,7 +117,7 @@ export class QualitativeRepository {
       data.questionnaire,
       JSON.stringify(data.answers),
       data.rate,
-      data.sectorId
+      data.sectorId,
     ];
 
     const result = await this.ds.query(query, values);
@@ -162,7 +171,7 @@ export class QualitativeRepository {
       JSON.stringify(data.answers),
       data.rate,
       data.sectorId,
-      id
+      id,
     ];
 
     await this.ds.query(query, values);
@@ -174,18 +183,33 @@ export class QualitativeRepository {
     );
   }
 
-  async saveCalculatedProjection(unidadeId: string, hospitalId: string, unidadeType: string, calculateRate: number, status: string): Promise<void> {
+  async saveCalculatedProjection(
+    unidadeId: string,
+    hospitalId: string,
+    unidadeType: string,
+    calculateRate: number,
+    status: string
+  ): Promise<void> {
     const query = `
       INSERT INTO qualitative_projection (unidade_id, hospital_id, unidade_type, status_available, rates, created_at, updated_at)
       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
       ON CONFLICT (unidade_id)
       DO UPDATE SET rates = EXCLUDED.rates, status_available = EXCLUDED.status_available, updated_at = NOW()
     `;
-    await this.ds.query(query, [unidadeId, hospitalId, unidadeType, status, JSON.stringify(calculateRate)]);
+    await this.ds.query(query, [
+      unidadeId,
+      hospitalId,
+      unidadeType,
+      status,
+      JSON.stringify(calculateRate),
+    ]);
   }
 
-  async getQualitativeAverages(unidade_id: string, unidade_type: string, hospital_id: string) {
-
+  async getQualitativeAverages(
+    unidade_id: string,
+    unidade_type: string,
+    hospital_id: string
+  ) {
     const query = `
       SELECT 
         qc.id AS category_id,
@@ -204,10 +228,10 @@ export class QualitativeRepository {
       ORDER BY qc.id;
     `;
 
-    return await this.ds.query(
-      query,
-      [unidade_id || null, unidade_type || null, hospital_id || null]
-    );
-
+    return await this.ds.query(query, [
+      unidade_id || null,
+      unidade_type || null,
+      hospital_id || null,
+    ]);
   }
 }

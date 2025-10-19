@@ -62,26 +62,10 @@ export class DimensionamentoService {
     });
 
     console.log("\n=== ⚙️ ETAPA 1: PARÂMETROS DA UNIDADE ===");
-    const ist = (parametros?.ist ?? 15) / 100;
+    const ist = Number(parametros?.ist ?? 15);
     const equipeComRestricoes = parametros?.aplicarIST ?? false;
     const diasTrabalhoSemana = parametros?.diasSemana ?? 7;
 
-    console.log("Parâmetros carregados:");
-    console.log(
-      `  IST: ${(ist * 100).toFixed(1)}% (${
-        parametros?.ist ? "customizado" : "padrão"
-      })`
-    );
-    console.log(
-      `  Aplicar IST (Equipe com restrições): ${
-        equipeComRestricoes ? "SIM" : "NÃO"
-      }`
-    );
-    console.log(
-      `  Dias de trabalho/semana: ${diasTrabalhoSemana} (${
-        parametros?.diasSemana ? "customizado" : "padrão"
-      })`
-    );
     console.log("=== FIM ETAPA 1 ===\n");
 
     // --- ETAPA 2: CALCULAR A MÉDIA DE PACIENTES DO MÊS ATUAL (LÓGICA CORRIGIDA) ---
@@ -313,7 +297,14 @@ export class DimensionamentoService {
 
       console.log("Média de pacientes/dia:", totalPacientesMedio);
       console.log("Número de leitos:", numeroLeitos);
-      console.log("Taxa de ocupação mensal:", taxaOcupacaoMensal);
+      console.log(
+        "Taxa de ocupação mensal (fração):",
+        taxaOcupacaoMensal.toFixed(4)
+      );
+      console.log(
+        "Taxa de ocupação mensal (%):",
+        `${(taxaOcupacaoMensal * 100).toFixed(2)}%`
+      );
       console.log(
         "Distribuição TOTAL por classificação (soma mensal):",
         somaTotalClassificacao
@@ -620,7 +611,10 @@ export class DimensionamentoService {
       },
       totalLeitosDia: unidade.leitos.length * diasNoPeriodo,
       totalAvaliacoes: Math.round(totalPacientesMedio * diasNoPeriodo),
+      // Mantido: fração 0..1 para compatibilidade
       taxaOcupacaoMensal,
+      // Novo: porcentagem 0..100 para consumo direto no frontend/logs
+      taxaOcupacaoMensalPercent: Number((taxaOcupacaoMensal * 100).toFixed(2)),
       distribuicaoTotalClassificacao: somaTotalClassificacao, // Adicionado para o frontend
     };
 
@@ -645,6 +639,8 @@ export class DimensionamentoService {
           cargoNomeLower.includes("tecnico em enfermagem") ||
           cargoNomeLower.includes("técnico enfermagem") ||
           cargoNomeLower.includes("tec enfermagem") ||
+          cargoNomeLower.includes("tec. enfermagem") ||
+          cargoNomeLower.includes("tec. em enfermagem") ||
           cargoNomeLower.includes("técnico de enfermagem");
         const isScp = isEnfermeiro || isTecnico;
 
@@ -787,6 +783,19 @@ export class DimensionamentoService {
         ? (periodoTrabalho / jornadaTecnico) * (fatorBase + indiceSeguranca)
         : 0;
 
+    // DEBUG: Parâmetros de entrada usados (Não-Internação)
+    console.log("=== ⚙️ PARÂMETROS (Não-Internação) ===");
+    console.log({
+      jornadaEnfermeiro,
+      jornadaTecnico,
+      indiceSeguranca,
+      equipeComRestricao,
+      diasFuncionamentoMensal,
+      diasSemana,
+      periodoTrabalho,
+      fatorBase,
+    });
+
     console.log(`🔹 KM Enfermeiro = ${kmEnfermeiro.toFixed(4)}`);
     console.log(`🔹 KM Técnico = ${kmTecnico.toFixed(4)}`);
 
@@ -867,6 +876,8 @@ export class DimensionamentoService {
           cargoNomeLower.includes("tecnico em enfermagem") ||
           cargoNomeLower.includes("técnico enfermagem") ||
           cargoNomeLower.includes("tec enfermagem") ||
+          cargoNomeLower.includes("tec. enfermagem") ||
+          cargoNomeLower.includes("tec. em enfermagem") ||
           cargoNomeLower.includes("técnico de enfermagem");
 
         const salario = parseFloat(cargo.salario?.replace(",", ".") || "0");

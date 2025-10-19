@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
 import { OccupationAnalysisService } from "../services/occupationAnalysisService";
+import { calcularProjecao } from "../calculoTaxaOcupacao/calculation";
+import { ProjecaoParams } from "../calculoTaxaOcupacao/interfaces";
 
 export class OccupationAnalysisController {
   constructor(private service: OccupationAnalysisService) {}
@@ -44,11 +46,20 @@ export class OccupationAnalysisController {
         }`
       );
 
+      const t0 = Date.now();
       const result = await this.service.calcularAnaliseOcupacao(
         hospitalId,
         dataCalculo
       );
-
+      const t1 = Date.now();
+      console.log(
+        `✅ [OccupationAnalysis] OK hospital=${hospitalId} setores=${
+          result.sectors.length
+        } tempo=${t1 - t0}ms`
+      );
+      console.log(
+        `   summary: taxa=${result.summary.taxaOcupacao}% max=${result.summary.ocupacaoMaximaAtendivel}% ocios=${result.summary.ociosidade}% super=${result.summary.superlotacao}%`
+      );
       return res.json(result);
     } catch (error) {
       console.error("[OccupationAnalysisController] Erro:", error);
@@ -73,6 +84,102 @@ export class OccupationAnalysisController {
       return res.status(500).json({
         error: "Erro ao calcular análise de ocupação",
       });
+    }
+  };
+
+  /**
+   * GET /hospital-sectors/:hospitalId/occupation-analysis/test
+   *
+   * Endpoint de verificação para o frontend: retorna a mesma análise
+   * junto com metadados da requisição e do período considerado.
+   */
+  getOccupationAnalysisTest = async (req: Request, res: Response) => {
+    try {
+      const { hospitalId } = req.params;
+      if (!hospitalId) {
+        return res.status(400).json({ error: "hospitalId é obrigatório" });
+      }
+
+      // Período: mês atual (sem precisar informar data)
+      const now = new Date();
+      const startOfMonth = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        1,
+        0,
+        0,
+        0,
+        0
+      );
+      const endOfPeriod = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        23,
+        59,
+        59,
+        999
+      );
+
+      const t0 = Date.now();
+      const analysis = await this.service.calcularAnaliseOcupacao(hospitalId);
+      const t1 = Date.now();
+
+      const sizes = {
+        sectors: analysis.sectors.length,
+        totalLeitos: analysis.sectors.reduce(
+          (s, x) => s + (x.totalLeitos || 0),
+          0
+        ),
+      };
+
+      return res.json({
+        request: {
+          hospitalId,
+          receivedAt: new Date().toISOString(),
+          period: {
+            startOfMonth: startOfMonth.toISOString(),
+            endOfPeriod: endOfPeriod.toISOString(),
+          },
+        },
+        sizes,
+        analysis,
+        perfMs: t1 - t0,
+      });
+    } catch (error) {
+      console.error("[OccupationAnalysisController:test] Erro:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      return res
+        .status(500)
+        .json({ error: "Erro ao calcular análise (test)", details: msg });
+    }
+  };
+
+  /**
+   * POST /hospital-sectors/occupation-analysis/simulate
+   * Body: ProjecaoParams
+   * Retorna o resultado bruto de calcularProjecao para validar unidade (% vs fração)
+   */
+  simulateProjection = async (req: Request, res: Response) => {
+    try {
+      const params = req.body as ProjecaoParams;
+      if (!params) {
+        return res.status(400).json({ error: "Body inválido" });
+      }
+
+      const result = calcularProjecao(params);
+      return res.json({
+        input: params,
+        raw: result,
+        // Conveniência: também retornamos em % caso o front queira comparar facilmente
+        ocupacaoMaximaAtendivelPct: Number(
+          (result.ocupacaoMaximaAtendivel * 100).toFixed(2)
+        ),
+      });
+    } catch (error) {
+      console.error("[OccupationAnalysisController:simulate] Erro:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      return res.status(500).json({ error: "Erro na simulação", details: msg });
     }
   };
 }

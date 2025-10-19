@@ -18,6 +18,8 @@ import { RedeRoutes } from "./redeRoutes";
 import { RegiaoRoutes } from "./regiaoRoutes";
 import { GrupoRoutes } from "./grupoRoutes";
 import { BaselineRoutes } from "./baselineRoutes";
+// import { BaselineSummaryRoutes } from "./baselineSummaryRoutes"; // deprecated wiring
+import { SnapshotSummaryRoutes } from "./snapshotSummaryRoutes";
 
 import { DataSource } from "typeorm";
 import { AuthRoutes } from "./authRoutes";
@@ -35,6 +37,7 @@ import { snapshotDimensionamentoRoutes } from "./snapshotDimensionamentoRoutes";
 import { HospitalSectorsAggregateRoutes } from "./hospitalSectorsAggregateRoutes";
 import { QualitativeRoutes } from "./QualitativeRoutes";
 import { OccupationAnalysisRoutes } from "./occupationAnalysisRoutes";
+import { AdminRoutes } from "./adminRoutes";
 
 export const createIndexRouter = (dataSource: DataSource): Router => {
   const router = Router();
@@ -83,6 +86,8 @@ export const createIndexRouter = (dataSource: DataSource): Router => {
   router.use("/grupos", GrupoRoutes(dataSource));
   // Baselines
   router.use("/baselines", BaselineRoutes(dataSource));
+  // Snapshot Summary (usar snapshots; sem fallback para Baseline)
+  router.use("/", SnapshotSummaryRoutes(dataSource));
   // Questionários
   //router.use("/questionarios", QuestionarioRoutes(dataSource));
   router.use("/qualitative", QualitativeRoutes(dataSource));

@@ -54,7 +54,19 @@ export class HospitalSectorsRepository {
           JSON_BUILD_OBJECT(
             'id', c.id,
             'role', c.nome,
-            'quantity', cuni.quantidade_funcionarios
+            'quantity', cuni.quantidade_funcionarios,
+            'unitCost', (
+              COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
+              COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
+              COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0)
+            ),
+            'totalCost', (
+              (
+                COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
+                COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
+                COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0)
+              ) * COALESCE(cuni.quantidade_funcionarios, 0)
+            )
           )
         ) FILTER (WHERE c.id IS NOT NULL) AS "staff"
       FROM public.unidades_internacao uni
@@ -121,7 +133,19 @@ export class HospitalSectorsRepository {
               SELECT 
                 c2.id as id,
                 c2.nome as role,
-                COALESCE(SUM(cs2.quantidade_funcionarios), 0) as quantity
+                COALESCE(SUM(cs2.quantidade_funcionarios), 0) as quantity,
+                (
+                  COALESCE(NULLIF(REPLACE(REPLACE(c2.salario, '%', ''), ',', '.'), '')::numeric, 0) +
+                  COALESCE(NULLIF(REPLACE(REPLACE(c2.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
+                  COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0)
+                ) as "unitCost",
+                (
+                  (
+                    COALESCE(NULLIF(REPLACE(REPLACE(c2.salario, '%', ''), ',', '.'), '')::numeric, 0) +
+                    COALESCE(NULLIF(REPLACE(REPLACE(c2.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
+                    COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0)
+                  ) * COALESCE(SUM(cs2.quantidade_funcionarios), 0)
+                ) as "totalCost"
               FROM public.sitios_funcionais sf2
               INNER JOIN public.cargos_sitio cs2 ON cs2.sitio_id = sf2.id
               INNER JOIN public.cargos_unidade cu2 ON cu2.id = cs2.cargo_unidade_id
@@ -136,7 +160,19 @@ export class HospitalSectorsRepository {
               JSON_BUILD_OBJECT(
                 'id', c_cu2.id,
                 'role', c_cu2.nome,
-                'quantity', cu2.quantidade_funcionarios
+                'quantity', cu2.quantidade_funcionarios,
+                'unitCost', (
+                  COALESCE(NULLIF(REPLACE(REPLACE(c_cu2.salario, '%', ''), ',', '.'), '')::numeric, 0) +
+                  COALESCE(NULLIF(REPLACE(REPLACE(c_cu2.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
+                  COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0)
+                ),
+                'totalCost', (
+                  (
+                    COALESCE(NULLIF(REPLACE(REPLACE(c_cu2.salario, '%', ''), ',', '.'), '')::numeric, 0) +
+                    COALESCE(NULLIF(REPLACE(REPLACE(c_cu2.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
+                    COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0)
+                  ) * COALESCE(cu2.quantidade_funcionarios, 0)
+                )
               )
             )
             FROM public.cargos_unidade cu2

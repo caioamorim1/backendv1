@@ -2,6 +2,10 @@ import { DataSource, Repository } from "typeorm";
 import { Cargo } from "../entities/Cargo";
 import { Hospital } from "../entities/Hospital";
 import { CreateCargoDTO, UpdateCargoDTO } from "../dto/cargo.dto";
+import { CargoUnidade } from "../entities/CargoUnidade";
+import { SnapshotDimensionamento } from "../entities/SnapshotDimensionamento";
+import { ProjetadoFinalInternacao } from "../entities/ProjetadoFinalInternacao";
+import { ProjetadoFinalNaoInternacao } from "../entities/ProjetadoFinalNaoInternacao";
 
 export class CargoRepository {
   private repo: Repository<Cargo>;
@@ -82,7 +86,33 @@ export class CargoRepository {
     // Verificar se o cargo pertence ao hospital
     await this.obterPorHospital(cargoId, hospitalId);
 
-    const r = await this.repo.delete({ id: cargoId, hospitalId });
-    return (r.affected ?? 0) > 0;
+    // Deletar com segurança: remover dependências antes do cargo
+    return await this.repo.manager.transaction(async (manager) => {
+      // 1) Remover vínculos em cargos_unidade (CASCADE apaga cargos_sitio)
+      await manager.getRepository(CargoUnidade).delete({ cargoId });
+
+      // 2) Limpar referências em snapshots (set NULL)
+      await manager
+        .getRepository(SnapshotDimensionamento)
+        .createQueryBuilder()
+        .update()
+        .set({ cargoId: null as any })
+        .where("cargoId = :cargoId", { cargoId })
+        .execute();
+
+      // 3) Limpar overrides de Projetado Final (não possuem FK, mas mantemos limpo)
+      await manager
+        .getRepository(ProjetadoFinalInternacao)
+        .delete({ hospitalId, cargoId });
+      await manager
+        .getRepository(ProjetadoFinalNaoInternacao)
+        .delete({ hospitalId, cargoId });
+
+      // 4) Deletar o cargo
+      const r = await manager
+        .getRepository(Cargo)
+        .delete({ id: cargoId, hospitalId });
+      return (r.affected ?? 0) > 0;
+    });
   }
 }
