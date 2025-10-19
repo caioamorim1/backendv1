@@ -24,7 +24,10 @@ export class CargoSitio {
   @Column({ type: "int", default: 1 })
   quantidade_funcionarios!: number;
 
-  @ManyToOne(() => CargoUnidade, (cu) => cu.id, { nullable: false })
+  @ManyToOne(() => CargoUnidade, (cu) => cu.id, {
+    nullable: false,
+    onDelete: "CASCADE",
+  })
   @JoinColumn({ name: "cargo_unidade_id" })
   cargoUnidade!: CargoUnidade;
 

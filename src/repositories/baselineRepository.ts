@@ -62,6 +62,13 @@ export class BaselineRepository {
       relations: ["hospital"],
     });
   }
+
+  async buscarPorHospitalId(hospitalId: string) {
+    return this.repo.findOne({
+      where: { hospital: { id: hospitalId } },
+      relations: ["hospital"],
+    });
+  }
   async setStatus(id: string, setorNome: string, ativo: boolean) {
     // buscar registro atual
     const baseline = await this.buscarPorId(id);

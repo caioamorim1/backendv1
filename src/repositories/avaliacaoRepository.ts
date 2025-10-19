@@ -99,7 +99,7 @@ export class AvaliacaoRepository {
         `criarSessaoPorLeito: leitoId=${leitoId} total=${total} classificacao=${classe}`
       );
       const colaboradorRepo = manager.getRepository(Colaborador);
-
+      console.log("Buscando colaborador por ID:", colaboradorId);
       let autor: Colaborador | null = await colaboradorRepo.findOne({
         where: { id: colaboradorId },
       });

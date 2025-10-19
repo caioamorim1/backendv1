@@ -45,5 +45,14 @@ export const OccupationAnalysisRoutes = (ds: DataSource): Router => {
     controller.getOccupationAnalysis
   );
 
+  // Endpoint de teste/comprovação para frontend
+  router.get(
+    "/:hospitalId/occupation-analysis/test",
+    controller.getOccupationAnalysisTest
+  );
+
+  // Simulação (debug): calcula projeção diretamente a partir de inputs
+  router.post("/occupation-analysis/simulate", controller.simulateProjection);
+
   return router;
 };

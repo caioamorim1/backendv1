@@ -18,6 +18,8 @@ import { RedeRoutes } from "./redeRoutes";
 import { RegiaoRoutes } from "./regiaoRoutes";
 import { GrupoRoutes } from "./grupoRoutes";
 import { BaselineRoutes } from "./baselineRoutes";
+// import { BaselineSummaryRoutes } from "./baselineSummaryRoutes"; // deprecated wiring
+import { SnapshotSummaryRoutes } from "./snapshotSummaryRoutes";
 
 import { DataSource } from "typeorm";
 import { AuthRoutes } from "./authRoutes";
@@ -83,6 +85,8 @@ export const createIndexRouter = (dataSource: DataSource): Router => {
   router.use("/grupos", GrupoRoutes(dataSource));
   // Baselines
   router.use("/baselines", BaselineRoutes(dataSource));
+  // Snapshot Summary (usar snapshots; sem fallback para Baseline)
+  router.use("/", SnapshotSummaryRoutes(dataSource));
   // Questionários
   //router.use("/questionarios", QuestionarioRoutes(dataSource));
   router.use("/qualitative", QualitativeRoutes(dataSource));
