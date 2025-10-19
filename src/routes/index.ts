@@ -37,7 +37,6 @@ import { snapshotDimensionamentoRoutes } from "./snapshotDimensionamentoRoutes";
 import { HospitalSectorsAggregateRoutes } from "./hospitalSectorsAggregateRoutes";
 import { QualitativeRoutes } from "./QualitativeRoutes";
 import { OccupationAnalysisRoutes } from "./occupationAnalysisRoutes";
-import { AdminRoutes } from "./adminRoutes";
 
 export const createIndexRouter = (dataSource: DataSource): Router => {
   const router = Router();

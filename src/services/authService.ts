@@ -27,10 +27,16 @@ export class AuthService {
    */
   async login(email: string, senha: string): Promise<AuthResult | null> {
     // try collaborator
+    console.log("AuthService: login attempt for email:", email);
+    console.log(
+      "ColaboradorRepository: buscando colaborador por email...",
+      senha
+    );
     const user = (await this.colaboradorRepo.findOne({
       where: { email },
       relations: ["hospital"],
     })) as Colaborador;
+    console.log("User found:", user);
     console.log("USER : ", user);
     if (!user) return null;
     if (!user.senha) return null;
