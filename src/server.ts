@@ -2,7 +2,10 @@ import "reflect-metadata";
 import { AppDataSource } from "./ormconfig";
 import { connectToDatabase } from "./database/connection";
 import { createApp } from "./app";
-import { scheduleSessionExpiry } from "./jobs/sessionExpiry";
+import {
+  scheduleSessionExpiry,
+  processPendingSessionExpiries,
+} from "./jobs/sessionExpiry";
 import { runInitialScpMetodoSeed } from "./startup/initialSeed";
 import dotenv from "dotenv";
 import express from "express"; // Importe o express
@@ -24,6 +27,8 @@ const PORT = process.env.PORT || 3110;
 
     // agenda job opcional para expirar sessões de avaliação (ocupação) automaticamente
     scheduleSessionExpiry(AppDataSource);
+    // ao iniciar, processa qualquer pendência de dias anteriores
+    await processPendingSessionExpiries(AppDataSource);
     // seed automático somente se faltarem métodos builtin
     await runInitialScpMetodoSeed(AppDataSource);
 

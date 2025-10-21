@@ -209,3 +209,57 @@ export function scheduleSessionExpiry(ds: DataSource) {
     clearTimeout(firstHandle);
   };
 }
+
+/**
+ * Ao iniciar o servidor, verifica se existem sessões ATIVAS em dias anteriores a hoje
+ * e executa o processamento de expiração para cada uma dessas datas.
+ */
+export async function processPendingSessionExpiries(ds: DataSource) {
+  const ZONE = "America/Sao_Paulo";
+  const today = DateTime.now().setZone(ZONE).toISODate();
+  if (!today) return;
+
+  try {
+    const repo = ds.getRepository(AvaliacaoSCP);
+    const rows = await repo
+      .createQueryBuilder("a")
+      .select("a.dataAplicacao", "date")
+      .addSelect("COUNT(*)", "count")
+      .where("a.statusSessao = :status", {
+        status: StatusSessaoAvaliacao.ATIVA,
+      })
+      .andWhere("a.dataAplicacao <> :today", { today })
+      .groupBy("a.dataAplicacao")
+      .orderBy("a.dataAplicacao", "ASC")
+      .getRawMany<{ date: string; count: string }>();
+
+    if (rows.length === 0) {
+      console.log(
+        "[SessionExpiry] Nenhuma sessão ativa pendente de dias anteriores."
+      );
+      return;
+    }
+
+    console.log(
+      `[SessionExpiry] Encontradas ${rows.length} datas com sessões ATIVAS pendentes (antes de ${today}).`
+    );
+
+    for (const r of rows) {
+      const date = r.date;
+      const count = parseInt(r.count, 10) || 0;
+      console.log(
+        `→ Processando expiração do dia ${date} (ativos: ${count})...`
+      );
+      try {
+        await runSessionExpiryForDate(ds, date);
+      } catch (e) {
+        console.error(`[SessionExpiry] Erro ao processar data ${date}:`, e);
+      }
+    }
+  } catch (e) {
+    console.error(
+      "[SessionExpiry] Falha ao verificar sessões pendentes no startup:",
+      e
+    );
+  }
+}
