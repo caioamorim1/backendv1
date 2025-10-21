@@ -66,6 +66,10 @@ export class DimensionamentoService {
     const equipeComRestricoes = parametros?.aplicarIST ?? false;
     const diasTrabalhoSemana = parametros?.diasSemana ?? 7;
 
+    console.log("Parâmetros encontrados:");
+    console.log(`  IST: ${ist}%`);
+    console.log(`  Aplicar IST: ${equipeComRestricoes ? "SIM" : "NÃO"}`);
+    console.log(`  Dias de trabalho/semana: ${diasTrabalhoSemana}`);
     console.log("=== FIM ETAPA 1 ===\n");
 
     // --- ETAPA 2: CALCULAR A MÉDIA DE PACIENTES DO MÊS ATUAL (LÓGICA CORRIGIDA) ---
@@ -354,60 +358,71 @@ export class DimensionamentoService {
     console.log("=== FIM ETAPA 3 ===\n");
 
     // --- ETAPA 4: CALCULAR PERCENTUAL DA EQUIPE (ENF / TEC) ---
-    // NOTA: Para determinar o percentual, usamos a MÉDIA DIÁRIA (não o total mensal)
-    const minimos = mediaDiariaClassificacao["MINIMOS"] || 0; // PCM = D24
-    const intermediarios = mediaDiariaClassificacao["INTERMEDIARIOS"] || 0; // PCI = D25
-    const altaDependencia = mediaDiariaClassificacao["ALTA_DEPENDENCIA"] || 0; // PADC = D26
-    const semiIntensivos = mediaDiariaClassificacao["SEMI_INTENSIVOS"] || 0; // PCSI = D27
-    const intensivos = mediaDiariaClassificacao["INTENSIVOS"] || 0; // PCIt = D28
-    const S = minimos + intermediarios; // S = PCM + PCI (D24 + D25)
+    // Agora: usar o TOTAL DE HORAS por classificação (não a média diária)
+    // Total de horas por classificação já tem as "horas por paciente" multiplicadas pelo total mensal de pacientes daquela classificação
+    const hMinimos =
+      (horasPorClassificacao["MINIMOS"] || 0) *
+      (somaTotalClassificacao["MINIMOS"] || 0);
+    const hIntermediarios =
+      (horasPorClassificacao["INTERMEDIARIOS"] || 0) *
+      (somaTotalClassificacao["INTERMEDIARIOS"] || 0);
+    const hAltaDependencia =
+      (horasPorClassificacao["ALTA_DEPENDENCIA"] || 0) *
+      (somaTotalClassificacao["ALTA_DEPENDENCIA"] || 0);
+    const hSemiIntensivos =
+      (horasPorClassificacao["SEMI_INTENSIVOS"] || 0) *
+      (somaTotalClassificacao["SEMI_INTENSIVOS"] || 0);
+    const hIntensivos =
+      (horasPorClassificacao["INTENSIVOS"] || 0) *
+      (somaTotalClassificacao["INTENSIVOS"] || 0);
+
+    // Equivalente do S (PCM + PCI), mas em HORAS totais
+    const S = hMinimos + hIntermediarios;
 
     console.log("\n=== 👥 ETAPA 4: CÁLCULO DE PERCENTUAL ENF/TEC ===");
     console.log(
-      "⚠️ IMPORTANTE: Usando MÉDIA DIÁRIA para determinar predominância"
+      "⚠️ IMPORTANTE: Usando TOTAL DE HORAS por classificação para determinar predominância"
     );
-    console.log("Classificações médias diárias:");
-    console.log(`  MINIMOS (PCM / D24): ${minimos.toFixed(2)}`);
-    console.log(`  INTERMEDIARIOS (PCI / D25): ${intermediarios.toFixed(2)}`);
-    console.log(
-      `  ALTA_DEPENDENCIA (PADC / D26): ${altaDependencia.toFixed(2)}`
-    );
-    console.log(`  SEMI_INTENSIVOS (PCSI / D27): ${semiIntensivos.toFixed(2)}`);
-    console.log(`  INTENSIVOS (PCIt / D28): ${intensivos.toFixed(2)}`);
-    console.log(`  S (PCM + PCI): ${S.toFixed(2)}`);
+    console.log("Horas por classificação no mês (totais):");
+    console.log(`  MINIMOS (PCM): ${hMinimos.toFixed(2)}h`);
+    console.log(`  INTERMEDIARIOS (PCI): ${hIntermediarios.toFixed(2)}h`);
+    console.log(`  ALTA_DEPENDENCIA (PADC): ${hAltaDependencia.toFixed(2)}h`);
+    console.log(`  SEMI_INTENSIVOS (PCSI): ${hSemiIntensivos.toFixed(2)}h`);
+    console.log(`  INTENSIVOS (PCIt): ${hIntensivos.toFixed(2)}h`);
+    console.log(`  S (PCM + PCI): ${S.toFixed(2)}h`);
 
     let percentualEnfermeiro = 0.52;
     let criterioAplicado = "Padrão (0.52)";
 
     console.log("\n🔍 Avaliando critérios:");
 
-    // Critério 1: if (S >= D26 and S >= D27 and S >= D28) then f = 0.33
+    // Critério 1 (agora com HORAS): if (S >= PADC and S >= PCSI and S >= PCIt) then f = 0.33
     console.log(
-      `  Critério 1: S(${S.toFixed(2)}) >= PADC(${altaDependencia.toFixed(
+      `  Critério 1: S(${S.toFixed(2)}h) >= PADC(${hAltaDependencia.toFixed(
         2
-      )}) AND S >= PCSI(${semiIntensivos.toFixed(
+      )}h) AND S >= PCSI(${hSemiIntensivos.toFixed(
         2
-      )}) AND S >= PCIt(${intensivos.toFixed(2)})`
+      )}h) AND S >= PCIt(${hIntensivos.toFixed(2)}h)`
     );
-    if (S >= altaDependencia && S >= semiIntensivos && S >= intensivos) {
+    if (S >= hAltaDependencia && S >= hSemiIntensivos && S >= hIntensivos) {
       percentualEnfermeiro = 0.33;
       criterioAplicado = "S (PCM+PCI) predominante (0.33)";
       console.log(`    ✅ VERDADEIRO → 33%`);
     } else {
       console.log(`    ❌ FALSO`);
 
-      // Critério 2: else if (D26 > S and D26 >= D27 and D26 >= D28) then f = 0.37
+      // Critério 2 (HORAS): else if (PADC > S and PADC >= PCSI and PADC >= PCIt) then f = 0.37
       console.log(
-        `  Critério 2: PADC(${altaDependencia.toFixed(2)}) > S(${S.toFixed(
+        `  Critério 2: PADC(${hAltaDependencia.toFixed(2)}h) > S(${S.toFixed(
           2
-        )}) AND PADC >= PCSI(${semiIntensivos.toFixed(
+        )}h) AND PADC >= PCSI(${hSemiIntensivos.toFixed(
           2
-        )}) AND PADC >= PCIt(${intensivos.toFixed(2)})`
+        )}h) AND PADC >= PCIt(${hIntensivos.toFixed(2)}h)`
       );
       if (
-        altaDependencia > S &&
-        altaDependencia >= semiIntensivos &&
-        altaDependencia >= intensivos
+        hAltaDependencia > S &&
+        hAltaDependencia >= hSemiIntensivos &&
+        hAltaDependencia >= hIntensivos
       ) {
         percentualEnfermeiro = 0.37;
         criterioAplicado = "ALTA_DEPENDENCIA (PADC) predominante (0.37)";
@@ -415,18 +430,18 @@ export class DimensionamentoService {
       } else {
         console.log(`    ❌ FALSO`);
 
-        // Critério 3: else if (D27 > S and D27 > D26 and D27 >= D28) then f = 0.42
+        // Critério 3 (HORAS): else if (PCSI > S and PCSI > PADC and PCSI >= PCIt) then f = 0.42
         console.log(
-          `  Critério 3: PCSI(${semiIntensivos.toFixed(2)}) > S(${S.toFixed(
+          `  Critério 3: PCSI(${hSemiIntensivos.toFixed(2)}h) > S(${S.toFixed(
             2
-          )}) AND PCSI > PADC(${altaDependencia.toFixed(
+          )}h) AND PCSI > PADC(${hAltaDependencia.toFixed(
             2
-          )}) AND PCSI >= PCIt(${intensivos.toFixed(2)})`
+          )}h) AND PCSI >= PCIt(${hIntensivos.toFixed(2)}h)`
         );
         if (
-          semiIntensivos > S &&
-          semiIntensivos > altaDependencia &&
-          semiIntensivos >= intensivos
+          hSemiIntensivos > S &&
+          hSemiIntensivos > hAltaDependencia &&
+          hSemiIntensivos >= hIntensivos
         ) {
           percentualEnfermeiro = 0.42;
           criterioAplicado = "SEMI_INTENSIVOS (PCSI) predominante (0.42)";
