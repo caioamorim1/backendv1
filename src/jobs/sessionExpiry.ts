@@ -27,7 +27,9 @@ export async function runSessionExpiryForDate(
       : DateTime.fromJSDate(dateInput, { zone: ZONE }).toISODate();
 
   if (!dateStr) {
-    throw new Error(`Data inválida recebida em runSessionExpiryForDate: ${String(dateInput)}`);
+    throw new Error(
+      `Data inválida recebida em runSessionExpiryForDate: ${String(dateInput)}`
+    );
   }
 
   console.log(`🌙 [SessionExpiry] Processando fim do dia: ${dateStr}`);
@@ -65,9 +67,7 @@ export async function runSessionExpiryForDate(
       );
 
       const unidadesAfetadas = new Set<string>();
-      const endLocal = DateTime.fromISO(dateStr, { zone: ZONE }).endOf(
-        "day"
-      );
+      const endLocal = DateTime.fromISO(dateStr, { zone: ZONE }).endOf("day");
       const fimDodia = endLocal.toUTC().toJSDate();
 
       // 2. Finalizar históricos ativos
