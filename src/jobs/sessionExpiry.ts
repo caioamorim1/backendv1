@@ -17,10 +17,20 @@ import { LeitosStatusService } from "../services/leitosStatusService";
  */
 export async function runSessionExpiryForDate(
   ds: DataSource,
-  dateYYYYMMDD: string
+  dateInput: string | Date
 ) {
   const ZONE = "America/Sao_Paulo";
-  console.log(`🌙 [SessionExpiry] Processando fim do dia: ${dateYYYYMMDD}`);
+  // Normaliza entrada (banco pode retornar Date em getRawMany)
+  const dateStr =
+    typeof dateInput === "string"
+      ? DateTime.fromISO(dateInput, { zone: ZONE }).toISODate()
+      : DateTime.fromJSDate(dateInput, { zone: ZONE }).toISODate();
+
+  if (!dateStr) {
+    throw new Error(`Data inválida recebida em runSessionExpiryForDate: ${String(dateInput)}`);
+  }
+
+  console.log(`🌙 [SessionExpiry] Processando fim do dia: ${dateStr}`);
 
   try {
     await ds.transaction(async (manager) => {
@@ -31,7 +41,7 @@ export async function runSessionExpiryForDate(
       // 1. Buscar avaliações ativas do dia
       const avals = await avalRepo.find({
         where: {
-          dataAplicacao: dateYYYYMMDD,
+          dataAplicacao: dateStr,
           statusSessao: StatusSessaoAvaliacao.ATIVA,
         },
         relations: ["leito", "unidade"],
@@ -55,7 +65,7 @@ export async function runSessionExpiryForDate(
       );
 
       const unidadesAfetadas = new Set<string>();
-      const endLocal = DateTime.fromISO(dateYYYYMMDD, { zone: ZONE }).endOf(
+      const endLocal = DateTime.fromISO(dateStr, { zone: ZONE }).endOf(
         "day"
       );
       const fimDodia = endLocal.toUTC().toJSDate();
@@ -103,7 +113,7 @@ export async function runSessionExpiryForDate(
         .createQueryBuilder()
         .update(AvaliacaoSCP)
         .set({ statusSessao: StatusSessaoAvaliacao.EXPIRADA })
-        .where('"dataAplicacao" = :d', { d: dateYYYYMMDD })
+        .where('"dataAplicacao" = :d', { d: dateStr })
         .execute();
 
       console.log(
@@ -133,7 +143,7 @@ export async function runSessionExpiryForDate(
       }
 
       console.log(
-        `🌙 [SessionExpiry] Processamento concluído para ${dateYYYYMMDD}!`
+        `🌙 [SessionExpiry] Processamento concluído para ${dateStr}!`
       );
     });
   } catch (e) {
@@ -245,7 +255,8 @@ export async function processPendingSessionExpiries(ds: DataSource) {
     );
 
     for (const r of rows) {
-      const date = r.date;
+      const raw: any = (r as any).date;
+      const date: string | Date = raw instanceof Date ? raw : String(raw);
       const count = parseInt(r.count, 10) || 0;
       console.log(
         `→ Processando expiração do dia ${date} (ativos: ${count})...`
