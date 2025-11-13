@@ -19,10 +19,18 @@ export interface AnaliseInternacaoResponse {
       inicio: string;
       fim: string;
       dias: number;
+      origem?: "mes_corrente" | "intervalo_customizado";
+      parametrosEntrada?: { inicio: string | null; fim: string | null };
     };
     totalLeitosDia: number;
     totalAvaliacoes: number;
     taxaOcupacaoMensal: number;
+    taxaOcupacaoMensalPercent?: number;
+    // Métrica pedida pelo cliente: % de leitos avaliados HOJE (não PENDENTES)
+    percentualLeitosAvaliadosHojePercent?: number;
+    leitosAvaliadosHoje?: number;
+    leitosPendentesHoje?: number;
+    totalLeitosHoje?: number;
     distribuicaoTotalClassificacao?: { [key: string]: number }; // Adicionado para o frontend
   };
   tabela: LinhaAnaliseFinanceira[];

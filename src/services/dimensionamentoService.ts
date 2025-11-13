@@ -12,6 +12,7 @@ import {
   GrupoCargosNaoInternacao,
 } from "../dto/dimensionamento.dto";
 import { HistoricoOcupacao } from "../entities/HistoricoOcupacao";
+import { StatusLeito } from "../entities/Leito";
 
 export class DimensionamentoService {
   private avaliacaoRepo: AvaliacaoRepository;
@@ -22,7 +23,9 @@ export class DimensionamentoService {
 
   // Lógica para Unidades de INTERNAÇÃO
   async calcularParaInternacao(
-    unidadeId: string
+    unidadeId: string,
+    inicio?: string,
+    fim?: string
   ): Promise<AnaliseInternacaoResponse> {
     console.log(
       "\n╔════════════════════════════════════════════════════════════════╗"
@@ -56,6 +59,18 @@ export class DimensionamentoService {
       unidade.cargosUnidade?.length || 0
     );
 
+    // === MÉTRICA DO CLIENTE: % LEITOS AVALIADOS HOJE (NÃO PENDENTES) ===
+    // Independente do período analisado, esta métrica reflete o status ATUAL (hoje)
+    const totalLeitosHoje = unidade.leitos.length;
+    const leitosAvaliadosHoje = unidade.leitos.filter(
+      (l) => l.status !== StatusLeito.PENDENTE
+    ).length;
+    const leitosPendentesHoje = totalLeitosHoje - leitosAvaliadosHoje;
+    const percentualLeitosAvaliadosHojePercent =
+      totalLeitosHoje > 0
+        ? Number(((leitosAvaliadosHoje / totalLeitosHoje) * 100).toFixed(2))
+        : 0;
+
     // --- ETAPA 1: BUSCAR INPUTS ---
     const parametros = await parametrosRepo.findOne({
       where: { unidade: { id: unidadeId } },
@@ -72,28 +87,74 @@ export class DimensionamentoService {
     console.log(`  Dias de trabalho/semana: ${diasTrabalhoSemana}`);
     console.log("=== FIM ETAPA 1 ===\n");
 
-    // --- ETAPA 2: CALCULAR A MÉDIA DE PACIENTES DO MÊS ATUAL (LÓGICA CORRIGIDA) ---
-    // Usar horário do Brasil (UTC-3) para garantir cálculos corretos
+    // --- ETAPA 2: DEFINIÇÃO DO PERÍODO (MÊS ATUAL OU INTERVALO PERSONALIZADO) ---
+    // Se inicio/fim forem fornecidos (YYYY-MM-DD), usamos intervalo customizado; senão mês corrente até hoje.
     const agora = new Date();
-    const hoje = new Date(
-      agora.getFullYear(),
-      agora.getMonth(),
-      agora.getDate(),
-      23,
-      59,
-      59,
-      999
-    );
-    const inicioDoMes = new Date(
-      agora.getFullYear(),
-      agora.getMonth(),
-      1,
-      0,
-      0,
-      0,
-      0
-    );
-    const diasNoPeriodo = agora.getDate(); // Dias decorridos no mês atual
+    let inicioPeriodoDate: Date;
+    let fimPeriodoDate: Date;
+
+    const isISODate = (v?: string) => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
+
+    if (isISODate(inicio) && isISODate(fim)) {
+      // Intervalo customizado completo
+      const [y1, m1, d1] = (inicio as string).split("-").map(Number);
+      const [y2, m2, d2] = (fim as string).split("-").map(Number);
+      inicioPeriodoDate = new Date(y1, m1 - 1, d1, 0, 0, 0, 0);
+      fimPeriodoDate = new Date(y2, m2 - 1, d2, 23, 59, 59, 999);
+    } else if (isISODate(inicio) && !fim) {
+      // Apenas inicio fornecido: considerar somente aquele dia
+      const [y1, m1, d1] = (inicio as string).split("-").map(Number);
+      inicioPeriodoDate = new Date(y1, m1 - 1, d1, 0, 0, 0, 0);
+      fimPeriodoDate = new Date(y1, m1 - 1, d1, 23, 59, 59, 999);
+    } else if (!inicio && isISODate(fim)) {
+      // Apenas fim fornecido: considerar somente aquele dia
+      const [y2, m2, d2] = (fim as string).split("-").map(Number);
+      inicioPeriodoDate = new Date(y2, m2 - 1, d2, 0, 0, 0, 0);
+      fimPeriodoDate = new Date(y2, m2 - 1, d2, 23, 59, 59, 999);
+    } else {
+      // Fallback: mês atual até hoje
+      fimPeriodoDate = new Date(
+        agora.getFullYear(),
+        agora.getMonth(),
+        agora.getDate(),
+        23,
+        59,
+        59,
+        999
+      );
+      inicioPeriodoDate = new Date(
+        agora.getFullYear(),
+        agora.getMonth(),
+        1,
+        0,
+        0,
+        0,
+        0
+      );
+    }
+
+    // Normaliza caso inicio > fim
+    if (inicioPeriodoDate.getTime() > fimPeriodoDate.getTime()) {
+      console.warn(
+        "[calcularParaInternacao] Intervalo invertido recebido. Trocando inicio/fim.",
+        { inicio, fim }
+      );
+      const tmp = inicioPeriodoDate;
+      inicioPeriodoDate = fimPeriodoDate;
+      fimPeriodoDate = tmp;
+    }
+
+    // Dias no período (inclusive) calculado pela diferença +1
+    const MS_PER_DAY = 24 * 60 * 60 * 1000;
+    const diasNoPeriodo =
+      Math.floor(
+        (fimPeriodoDate.setHours(0, 0, 0, 0) -
+          inicioPeriodoDate.setHours(0, 0, 0, 0)) /
+          MS_PER_DAY
+      ) + 1;
+
+    const hoje = fimPeriodoDate; // Mantém compatibilidade com nomenclatura existente
+    const inicioDoMes = inicioPeriodoDate; // usar variável já referenciada depois
 
     console.log("=== DEBUG OCUPAÇÃO MENSAL ===");
     console.log("Unidade ID:", unidadeId);
@@ -108,6 +169,11 @@ export class DimensionamentoService {
       hoje.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })
     );
     console.log("Dias no período:", diasNoPeriodo);
+    if (inicio || fim) {
+      console.log("Intervalo customizado aplicado", { inicio, fim });
+    } else {
+      console.log("Usando mês corrente até hoje (fallback)");
+    }
 
     let totalPacientesMedio = 0;
     let mediaDiariaClassificacao: { [key: string]: number } = {};
@@ -140,7 +206,8 @@ export class DimensionamentoService {
     console.log("Históricos encontrados no período:", historicosDoMes.length);
 
     // BUSCAR AVALIAÇÕES ATIVAS DO DIA ATUAL (que ainda não viraram histórico)
-    const dataHoje = agora.toISOString().split("T")[0]; // formato YYYY-MM-DD
+    // Considera o último dia do período como "hoje" para agregar avaliações ativas não historizadas
+    const dataHoje = hoje.toISOString().split("T")[0]; // formato YYYY-MM-DD
     const avaliacoesHoje = await this.avaliacaoRepo.listarPorDia({
       data: dataHoje,
       unidadeId: unidadeId,
@@ -623,6 +690,10 @@ export class DimensionamentoService {
         inicio: inicioDoMes.toISOString(),
         fim: hoje.toISOString(),
         dias: diasNoPeriodo,
+        origem: (inicio || fim ? "intervalo_customizado" : "mes_corrente") as
+          | "intervalo_customizado"
+          | "mes_corrente",
+        parametrosEntrada: { inicio: inicio || null, fim: fim || null },
       },
       totalLeitosDia: unidade.leitos.length * diasNoPeriodo,
       totalAvaliacoes: Math.round(totalPacientesMedio * diasNoPeriodo),
@@ -630,6 +701,11 @@ export class DimensionamentoService {
       taxaOcupacaoMensal,
       // Novo: porcentagem 0..100 para consumo direto no frontend/logs
       taxaOcupacaoMensalPercent: Number((taxaOcupacaoMensal * 100).toFixed(2)),
+      // Métrica: % de leitos avaliados HOJE (não PENDENTES)
+      percentualLeitosAvaliadosHojePercent,
+      leitosAvaliadosHoje,
+      leitosPendentesHoje,
+      totalLeitosHoje,
       distribuicaoTotalClassificacao: somaTotalClassificacao, // Adicionado para o frontend
     };
 

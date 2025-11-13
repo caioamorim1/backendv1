@@ -28,6 +28,9 @@ export class CargoUnidade {
   @Column({ type: "int" })
   quantidade_funcionarios!: number;
 
+  @Column({ type: "timestamptz", nullable: true })
+  quantidade_atualizada_em?: Date;
+
   @ManyToOne(() => Cargo, (cargo) => cargo.cargosUnidade)
   @JoinColumn({ name: "cargo_id" })
   cargo!: Cargo;

@@ -184,10 +184,44 @@ export class SitioFuncionalRepository {
           });
           if (exists) continue;
 
+          // Calcular total se vier por turnos
+          let quantidadeTotal = c.quantidade_funcionarios ?? 0;
+          const temTurnos =
+            c.seg_sex_manha !== undefined ||
+            c.seg_sex_tarde !== undefined ||
+            c.seg_sex_noite1 !== undefined ||
+            c.seg_sex_noite2 !== undefined ||
+            c.sab_dom_manha !== undefined ||
+            c.sab_dom_tarde !== undefined ||
+            c.sab_dom_noite1 !== undefined ||
+            c.sab_dom_noite2 !== undefined;
+
+          if (temTurnos) {
+            // Se informou turnos, calcular o total (soma de todos os turnos)
+            quantidadeTotal =
+              (c.seg_sex_manha ?? 0) +
+              (c.seg_sex_tarde ?? 0) +
+              (c.seg_sex_noite1 ?? 0) +
+              (c.seg_sex_noite2 ?? 0) +
+              (c.sab_dom_manha ?? 0) +
+              (c.sab_dom_tarde ?? 0) +
+              (c.sab_dom_noite1 ?? 0) +
+              (c.sab_dom_noite2 ?? 0);
+          }
+
           const cs = cargoSitioRepo.create({
             cargoUnidadeId,
             sitioId: (sitioSalvo as any).id,
-            quantidade_funcionarios: c.quantidade_funcionarios ?? 0, // Padrão 0 ao invés de 1
+            quantidade_funcionarios: quantidadeTotal,
+            quantidade_atualizada_em: new Date(),
+            seg_sex_manha: c.seg_sex_manha,
+            seg_sex_tarde: c.seg_sex_tarde,
+            seg_sex_noite1: c.seg_sex_noite1,
+            seg_sex_noite2: c.seg_sex_noite2,
+            sab_dom_manha: c.sab_dom_manha,
+            sab_dom_tarde: c.sab_dom_tarde,
+            sab_dom_noite1: c.sab_dom_noite1,
+            sab_dom_noite2: c.sab_dom_noite2,
           } as any);
 
           await cargoSitioRepo.save(cs);
@@ -384,27 +418,116 @@ export class SitioFuncionalRepository {
             where: { cargoUnidadeId, sitioId: id },
           });
           if (existingAssoc) {
-            // update only if quantidade_funcionarios provided, otherwise leave as-is
-            if (typeof c.quantidade_funcionarios === "number") {
-              // ✅ REMOVIDA VALIDAÇÃO OBSOLETA DE DISPONIBILIDADE
-              // A quantidade é definida livremente nos sítios
-              console.log(
-                `📝 Atualizando quantidade: ${c.quantidade_funcionarios}`
-              );
+            // Calcular total se vier por turnos
+            const temTurnos =
+              c.seg_sex_manha !== undefined ||
+              c.seg_sex_tarde !== undefined ||
+              c.seg_sex_noite1 !== undefined ||
+              c.seg_sex_noite2 !== undefined ||
+              c.sab_dom_manha !== undefined ||
+              c.sab_dom_tarde !== undefined ||
+              c.sab_dom_noite1 !== undefined ||
+              c.sab_dom_noite2 !== undefined;
 
-              existingAssoc.quantidade_funcionarios = c.quantidade_funcionarios;
-              await cargoSitioRepo.save(existingAssoc);
+            let quantidadeTotal = c.quantidade_funcionarios;
+            if (temTurnos) {
+              quantidadeTotal =
+                (c.seg_sex_manha ?? 0) +
+                (c.seg_sex_tarde ?? 0) +
+                (c.seg_sex_noite1 ?? 0) +
+                (c.seg_sex_noite2 ?? 0) +
+                (c.sab_dom_manha ?? 0) +
+                (c.sab_dom_tarde ?? 0) +
+                (c.sab_dom_noite1 ?? 0) +
+                (c.sab_dom_noite2 ?? 0);
             }
+
+            // Verificar se algo mudou (quantidade ou turnos)
+            const quantidadeMudou =
+              quantidadeTotal !== undefined &&
+              existingAssoc.quantidade_funcionarios !== quantidadeTotal;
+
+            const turnosMudaram =
+              temTurnos &&
+              (existingAssoc.seg_sex_manha !== c.seg_sex_manha ||
+                existingAssoc.seg_sex_tarde !== c.seg_sex_tarde ||
+                existingAssoc.seg_sex_noite1 !== c.seg_sex_noite1 ||
+                existingAssoc.seg_sex_noite2 !== c.seg_sex_noite2 ||
+                existingAssoc.sab_dom_manha !== c.sab_dom_manha ||
+                existingAssoc.sab_dom_tarde !== c.sab_dom_tarde ||
+                existingAssoc.sab_dom_noite1 !== c.sab_dom_noite1 ||
+                existingAssoc.sab_dom_noite2 !== c.sab_dom_noite2);
+
+            if (quantidadeTotal !== undefined) {
+              existingAssoc.quantidade_funcionarios = quantidadeTotal;
+            }
+
+            // Atualizar turnos se fornecidos
+            if (c.seg_sex_manha !== undefined)
+              existingAssoc.seg_sex_manha = c.seg_sex_manha;
+            if (c.seg_sex_tarde !== undefined)
+              existingAssoc.seg_sex_tarde = c.seg_sex_tarde;
+            if (c.seg_sex_noite1 !== undefined)
+              existingAssoc.seg_sex_noite1 = c.seg_sex_noite1;
+            if (c.seg_sex_noite2 !== undefined)
+              existingAssoc.seg_sex_noite2 = c.seg_sex_noite2;
+            if (c.sab_dom_manha !== undefined)
+              existingAssoc.sab_dom_manha = c.sab_dom_manha;
+            if (c.sab_dom_tarde !== undefined)
+              existingAssoc.sab_dom_tarde = c.sab_dom_tarde;
+            if (c.sab_dom_noite1 !== undefined)
+              existingAssoc.sab_dom_noite1 = c.sab_dom_noite1;
+            if (c.sab_dom_noite2 !== undefined)
+              existingAssoc.sab_dom_noite2 = c.sab_dom_noite2;
+
+            if (quantidadeMudou || turnosMudaram) {
+              existingAssoc.quantidade_atualizada_em = new Date();
+            }
+
+            await cargoSitioRepo.save(existingAssoc);
             continue;
           }
 
           // create new association (SEM validação de disponibilidade)
           console.log(`➕ Criando nova associação CargoSitio`);
 
+          // Calcular total se vier por turnos
+          let quantidadeTotal = c.quantidade_funcionarios ?? 0;
+          const temTurnos =
+            c.seg_sex_manha !== undefined ||
+            c.seg_sex_tarde !== undefined ||
+            c.seg_sex_noite1 !== undefined ||
+            c.seg_sex_noite2 !== undefined ||
+            c.sab_dom_manha !== undefined ||
+            c.sab_dom_tarde !== undefined ||
+            c.sab_dom_noite1 !== undefined ||
+            c.sab_dom_noite2 !== undefined;
+
+          if (temTurnos) {
+            quantidadeTotal =
+              (c.seg_sex_manha ?? 0) +
+              (c.seg_sex_tarde ?? 0) +
+              (c.seg_sex_noite1 ?? 0) +
+              (c.seg_sex_noite2 ?? 0) +
+              (c.sab_dom_manha ?? 0) +
+              (c.sab_dom_tarde ?? 0) +
+              (c.sab_dom_noite1 ?? 0) +
+              (c.sab_dom_noite2 ?? 0);
+          }
+
           const cs = cargoSitioRepo.create({
             cargoUnidadeId,
             sitioId: id,
-            quantidade_funcionarios: c.quantidade_funcionarios ?? 0,
+            quantidade_funcionarios: quantidadeTotal,
+            quantidade_atualizada_em: new Date(),
+            seg_sex_manha: c.seg_sex_manha,
+            seg_sex_tarde: c.seg_sex_tarde,
+            seg_sex_noite1: c.seg_sex_noite1,
+            seg_sex_noite2: c.seg_sex_noite2,
+            sab_dom_manha: c.sab_dom_manha,
+            sab_dom_tarde: c.sab_dom_tarde,
+            sab_dom_noite1: c.sab_dom_noite1,
+            sab_dom_noite2: c.sab_dom_noite2,
           } as any);
 
           await cargoSitioRepo.save(cs);
