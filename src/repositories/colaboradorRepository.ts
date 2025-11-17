@@ -82,6 +82,7 @@ export class ColaboradorRepository {
     const { nome, cpf, email, senha } = data;
     if (!senha) throw new Error("Senha é obrigatória para criar admin");
     if (!email) throw new Error("Email é obrigatório para criar admin");
+
     const hash = await bcrypt.hash(senha, 10);
 
     const novo = this.repo.create({
@@ -92,6 +93,7 @@ export class ColaboradorRepository {
       permissao: "ADMIN",
       mustChangePassword: true,
     });
+
     await this.repo.save(novo);
     const { senha: _, ...rest } = novo as any;
     return rest;

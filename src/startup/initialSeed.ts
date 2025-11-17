@@ -2,7 +2,6 @@ import { DataSource } from "typeorm";
 import { ScpMetodoRepository } from "../repositories/scpMetodoRepository";
 import { ColaboradorRepository } from "../repositories/colaboradorRepository";
 import { runColetaSeed } from "./coletaSeed";
-import bcrypt from "bcrypt";
 
 // Executa seed automático apenas se ainda não existem os 3 métodos builtin
 export async function runInitialScpMetodoSeed(ds: DataSource) {
@@ -30,11 +29,11 @@ export async function runInitialScpMetodoSeed(ds: DataSource) {
     const adminRepo = new ColaboradorRepository(ds);
     const admins = await adminRepo.listarAdmins();
     const exists = admins.some((a) => a.email === "admin@admin.com");
+
     if (!exists) {
-      const pass = await bcrypt.hash("admin123", 10);
       await adminRepo.criarAdmin({
         email: "admin@admin.com",
-        senha: pass,
+        senha: "admin123",
         nome: "Administrador",
         cpf: "00000000000",
       });
