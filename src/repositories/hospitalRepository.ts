@@ -2,6 +2,8 @@ import { DataSource, Repository } from "typeorm";
 import { Hospital } from "../entities/Hospital";
 import { Baseline } from "../entities/Baseline";
 import { Regiao } from "../entities/Regiao";
+import { Rede } from "../entities/Rede";
+import { Grupo } from "../entities/Grupo";
 import { AtualizarHospitalDTO, CreateHospitalDTO } from "../dto/hospital.dto";
 import { create } from "domain";
 
@@ -9,10 +11,14 @@ export class HospitalRepository {
   private repo: Repository<Hospital>;
   private baselineRepo: Repository<Baseline>;
   private regiaoRepo: Repository<Regiao>;
+  private redeRepo: Repository<Rede>;
+  private grupoRepo: Repository<Grupo>;
   constructor(private ds: DataSource) {
     this.repo = ds.getRepository(Hospital);
     this.baselineRepo = ds.getRepository(Baseline);
     this.regiaoRepo = ds.getRepository(Regiao);
+    this.redeRepo = ds.getRepository(Rede);
+    this.grupoRepo = ds.getRepository(Grupo);
   }
 
   async criar(data: CreateHospitalDTO) {
@@ -61,6 +67,36 @@ export class HospitalRepository {
         }
       }
 
+      // Se vier redeId, busca a Rede e associa ao hospital
+      if ((hospitalData as any).redeId) {
+        const rede = await this.redeRepo.findOne({
+          where: { id: (hospitalData as any).redeId },
+        });
+        if (rede) {
+          (hospital as any).rede = rede;
+        } else {
+          console.warn(
+            "[HospitalRepository] redeId informado mas Rede não encontrada:",
+            (hospitalData as any).redeId
+          );
+        }
+      }
+
+      // Se vier grupoId, busca o Grupo e associa ao hospital
+      if ((hospitalData as any).grupoId) {
+        const grupo = await this.grupoRepo.findOne({
+          where: { id: (hospitalData as any).grupoId },
+        });
+        if (grupo) {
+          (hospital as any).grupo = grupo;
+        } else {
+          console.warn(
+            "[HospitalRepository] grupoId informado mas Grupo não encontrado:",
+            (hospitalData as any).grupoId
+          );
+        }
+      }
+
       const savedHospital = await this.repo.save(hospital);
       console.log("[HospitalRepository] hospital salvo id=", savedHospital.id);
 
@@ -104,20 +140,24 @@ export class HospitalRepository {
 
   buscarTodos() {
     console.log(
-      "Buscando todos os hospitais com relações (baseline, regiao.grupo.rede)..."
+      "Buscando todos os hospitais com relações (baseline, regiao.grupo.rede, rede, grupo)..."
     );
     // Usamos QueryBuilder para garantir join em profundidade: regiao -> grupo -> rede
+    // E também os relacionamentos diretos com rede e grupo
     return this.repo
       .createQueryBuilder("hospital")
       .leftJoinAndSelect("hospital.baseline", "baseline")
       .leftJoinAndSelect("hospital.regiao", "regiao")
       .leftJoinAndSelect("regiao.grupo", "grupo")
       .leftJoinAndSelect("grupo.rede", "rede")
+      .leftJoinAndSelect("hospital.rede", "hospitalRede")
+      .leftJoinAndSelect("hospital.grupo", "hospitalGrupo")
       .getMany();
   }
 
   buscarPorId(id: string) {
     // Buscar hospital por id incluindo colaboradores, unidades e também regiao -> grupo -> rede
+    // Além dos relacionamentos diretos com rede e grupo
     return this.repo
       .createQueryBuilder("hospital")
       .where("hospital.id = :id", { id })
@@ -131,6 +171,8 @@ export class HospitalRepository {
       .leftJoinAndSelect("hospital.regiao", "regiao")
       .leftJoinAndSelect("regiao.grupo", "grupo")
       .leftJoinAndSelect("grupo.rede", "rede")
+      .leftJoinAndSelect("hospital.rede", "hospitalRede")
+      .leftJoinAndSelect("hospital.grupo", "hospitalGrupo")
       .getOne();
   }
 
@@ -149,26 +191,85 @@ export class HospitalRepository {
       patch.telefone = String((patch as any).telefone);
     }
     // Se veio regiaoId no patch, tentamos buscar e associar a Regiao
-    if ((patch as any).regiaoId) {
-      try {
-        const regiao = await this.regiaoRepo.findOne({
-          where: { id: (patch as any).regiaoId },
-        });
-        if (regiao) {
-          // atualizamos a relação atribuindo a entidade
-          (patch as any).regiao = regiao as any;
-        } else {
-          console.warn(
-            "[HospitalRepository] regiaoId informado mas Regiao não encontrada:",
-            (patch as any).regiaoId
-          );
+    if ((patch as any).regiaoId !== undefined) {
+      // Se for null ou string vazia, remove o relacionamento
+      if ((patch as any).regiaoId === null || (patch as any).regiaoId === "") {
+        (patch as any).regiao = null;
+      } else {
+        // Se for um ID válido, busca e associa
+        try {
+          const regiao = await this.regiaoRepo.findOne({
+            where: { id: (patch as any).regiaoId },
+          });
+          if (regiao) {
+            // atualizamos a relação atribuindo a entidade
+            (patch as any).regiao = regiao as any;
+          } else {
+            console.warn(
+              "[HospitalRepository] regiaoId informado mas Regiao não encontrada:",
+              (patch as any).regiaoId
+            );
+          }
+        } catch (e) {
+          console.error("Erro ao buscar Regiao para atualizar hospital:", e);
         }
-      } catch (e) {
-        console.error("Erro ao buscar Regiao para atualizar hospital:", e);
       }
       // removemos o campo regiaoId para evitar colunas inexistentes no update
       delete (patch as any).regiaoId;
     }
+
+    // Se veio redeId no patch, tentamos buscar e associar a Rede
+    if ((patch as any).redeId !== undefined) {
+      // Se for null ou string vazia, remove o relacionamento
+      if ((patch as any).redeId === null || (patch as any).redeId === "") {
+        (patch as any).rede = null;
+      } else {
+        // Se for um ID válido, busca e associa
+        try {
+          const rede = await this.redeRepo.findOne({
+            where: { id: (patch as any).redeId },
+          });
+          if (rede) {
+            (patch as any).rede = rede as any;
+          } else {
+            console.warn(
+              "[HospitalRepository] redeId informado mas Rede não encontrada:",
+              (patch as any).redeId
+            );
+          }
+        } catch (e) {
+          console.error("Erro ao buscar Rede para atualizar hospital:", e);
+        }
+      }
+      delete (patch as any).redeId;
+    }
+
+    // Se veio grupoId no patch, tentamos buscar e associar o Grupo
+    if ((patch as any).grupoId !== undefined) {
+      // Se for null ou string vazia, remove o relacionamento
+      if ((patch as any).grupoId === null || (patch as any).grupoId === "") {
+        (patch as any).grupo = null;
+      } else {
+        // Se for um ID válido, busca e associa
+        try {
+          const grupo = await this.grupoRepo.findOne({
+            where: { id: (patch as any).grupoId },
+          });
+          if (grupo) {
+            (patch as any).grupo = grupo as any;
+          } else {
+            console.warn(
+              "[HospitalRepository] grupoId informado mas Grupo não encontrado:",
+              (patch as any).grupoId
+            );
+          }
+        } catch (e) {
+          console.error("Erro ao buscar Grupo para atualizar hospital:", e);
+        }
+      }
+      delete (patch as any).grupoId;
+    }
+
     try {
       const result = await this.repo.update(id, patch);
       return (result.affected ?? 0) > 0;

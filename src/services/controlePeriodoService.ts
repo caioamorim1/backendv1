@@ -23,12 +23,26 @@ export class ControlePeriodoService {
     }
 
     const repo = this.ds.getRepository(UnidadePeriodoControle);
-    const registro = repo.create({
-      unidade: { id: unidadeId } as UnidadeInternacao,
-      travado: !!travado,
-      dataInicial,
-      dataFinal,
+
+    // Buscar registro existente da unidade
+    let registro = await repo.findOne({
+      where: { unidade: { id: unidadeId } },
     });
+
+    if (registro) {
+      // Atualizar registro existente
+      registro.travado = !!travado;
+      registro.dataInicial = dataInicial;
+      registro.dataFinal = dataFinal;
+    } else {
+      // Criar novo registro apenas se não existir
+      registro = repo.create({
+        unidade: { id: unidadeId } as UnidadeInternacao,
+        travado: !!travado,
+        dataInicial,
+        dataFinal,
+      });
+    }
 
     return await repo.save(registro);
   }
@@ -41,6 +55,20 @@ export class ControlePeriodoService {
     return await repo.findOne({
       where: { unidade: { id: unidadeId } },
       order: { updatedAt: "DESC" },
+    });
+  }
+
+  async buscarTravadoPorUnidade(
+    unidadeId: string
+  ): Promise<UnidadePeriodoControle | null> {
+    if (!unidadeId) throw new Error("unidadeId é obrigatório");
+    const repo = this.ds.getRepository(UnidadePeriodoControle);
+    return await repo.findOne({
+      where: {
+        unidade: { id: unidadeId },
+        travado: true,
+      },
+      order: { dataInicial: "DESC" },
     });
   }
 }

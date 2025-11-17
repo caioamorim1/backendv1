@@ -25,6 +25,12 @@ export class ProjetadoFinalInternacao {
   @Column({ type: "int", default: 0 })
   projetadoFinal!: number;
 
+  @Column({ type: "text", default: "" })
+  observacao!: string;
+
+  @Column({ type: "varchar", length: 50, default: "nao_iniciado" })
+  status!: string;
+
   @CreateDateColumn({ type: "timestamp with time zone" })
   createdAt!: Date;
 

@@ -1,9 +1,11 @@
 import { DataSource, EntityManager } from "typeorm";
 import { LeitosStatus } from "../entities/LeitosStatus";
+import { HistoricoLeitosStatus } from "../entities/HistoricoLeitosStatus";
 import { UnidadeInternacao } from "../entities/UnidadeInternacao";
 import { Leito, StatusLeito } from "../entities/Leito";
 import { HistoricoOcupacao } from "../entities/HistoricoOcupacao";
 import { ClassificacaoCuidado } from "../entities/AvaliacaoSCP";
+import { DateTime } from "luxon";
 
 export class LeitosStatusService {
   constructor(private ds: DataSource) {}
@@ -123,7 +125,106 @@ export class LeitosStatusService {
     leitoStatus.vacant = vagos;
     leitoStatus.inactive = inativos;
     console.log("leito status", leitoStatus);
-    return await leitosStatusRepo.save(leitoStatus);
+
+    const savedStatus = await leitosStatusRepo.save(leitoStatus);
+
+    // Salvar histórico
+    await this._salvarHistorico(manager, unidadeId, {
+      bedCount: totalLeitos,
+      minimumCare,
+      intermediateCare,
+      highDependency,
+      semiIntensive,
+      intensive,
+      evaluated: avaliados,
+      vacant: vagos,
+      inactive: inativos,
+      leitosVagos: vagos,
+      leitosInativos: inativos,
+    });
+
+    return savedStatus;
+  }
+
+  /**
+   * Salva um registro histórico do status dos leitos
+   * Mantém apenas 1 registro por unidade por dia (atualiza se já existir)
+   *
+   * ✅ Salva momento atual - PostgreSQL armazena em UTC automaticamente
+   */
+  private async _salvarHistorico(
+    manager: EntityManager,
+    unidadeId: string,
+    dados: {
+      bedCount: number;
+      minimumCare: number;
+      intermediateCare: number;
+      highDependency: number;
+      semiIntensive: number;
+      intensive: number;
+      evaluated: number;
+      vacant: number;
+      inactive: number;
+      leitosVagos: number;
+      leitosInativos: number;
+    }
+  ): Promise<void> {
+    const historicoRepo = manager.getRepository(HistoricoLeitosStatus);
+    const ZONE = "America/Sao_Paulo";
+
+    // Momento atual (JavaScript Date já está em UTC internamente)
+    const agora = new Date();
+
+    // Data em São Paulo para comparação
+    const agoraEmSP = DateTime.fromJSDate(agora).setZone(ZONE);
+    const dataStr = agoraEmSP.toISODate(); // YYYY-MM-DD em São Paulo
+
+    console.log(
+      `\n🔍 [HISTÓRICO] Salvando histórico para unidade ${unidadeId}`
+    );
+    console.log(`📅 Momento atual em São Paulo: ${agoraEmSP.toISO()}`);
+    console.log(`📅 Armazenado como UTC no banco: ${agora.toISOString()}`);
+    console.log(`📅 Data para comparação: ${dataStr}`);
+
+    // ✅ Query timezone-aware: compara apenas a DATA em São Paulo
+    const registroExistente = await historicoRepo
+      .createQueryBuilder("h")
+      .leftJoinAndSelect("h.unidade", "unidade")
+      .where("unidade.id = :unidadeId", { unidadeId })
+      .andWhere(
+        "(h.data AT TIME ZONE 'America/Sao_Paulo')::DATE = :dataStr::DATE",
+        { dataStr }
+      )
+      .getOne();
+
+    if (registroExistente) {
+      console.log(
+        `♻️  Registro encontrado (id=${registroExistente.id}) - ATUALIZANDO`
+      );
+
+      Object.assign(registroExistente, dados);
+      registroExistente.data = agora;
+
+      await historicoRepo.save(registroExistente);
+      console.log(`✅ Histórico ATUALIZADO`);
+      console.log(
+        `   Dados: evaluated=${dados.evaluated}, vacant=${dados.vacant}, inactive=${dados.inactive}`
+      );
+    } else {
+      console.log(`🆕 CRIANDO novo histórico para ${dataStr}`);
+
+      const historico = historicoRepo.create({
+        unidade: { id: unidadeId } as UnidadeInternacao,
+        data: agora,
+        ...dados,
+      });
+
+      await historicoRepo.save(historico);
+      console.log(`✅ Novo histórico CRIADO`);
+      console.log(
+        `   Dados: evaluated=${dados.evaluated}, vacant=${dados.vacant}, inactive=${dados.inactive}`
+      );
+    }
   }
 
   /**

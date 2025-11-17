@@ -14,5 +14,8 @@ export const ControlePeriodoRoutes = (ds: DataSource): Router => {
   // GET /controle-periodo/:unidadeId  (último registro dessa unidade)
   router.get("/:unidadeId", controller.buscar);
 
+  // GET /controle-periodo/:unidadeId/travado  (período travado dessa unidade)
+  router.get("/:unidadeId/travado", controller.buscarTravado);
+
   return router;
 };

@@ -35,4 +35,21 @@ export class ControlePeriodoController {
       });
     }
   };
+
+  buscarTravado = async (req: Request, res: Response) => {
+    try {
+      const { unidadeId } = req.params;
+      const registro = await this.service.buscarTravadoPorUnidade(unidadeId);
+      if (!registro) {
+        return res
+          .status(404)
+          .json({ message: "Nenhum período travado encontrado" });
+      }
+      res.json({ data: registro });
+    } catch (err) {
+      res.status(400).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
 }

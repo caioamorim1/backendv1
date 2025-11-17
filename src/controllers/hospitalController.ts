@@ -53,6 +53,18 @@ export class HospitalController {
   atualizar = async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
+      
+      console.log("═══════════════════════════════════════════════════");
+      console.log("🔄 [ATUALIZAR HOSPITAL] Requisição recebida");
+      console.log("═══════════════════════════════════════════════════");
+      console.log("ID do Hospital:", id);
+      console.log("Dados recebidos (req.body):", JSON.stringify(req.body, null, 2));
+      console.log("Tipos dos campos:");
+      Object.entries(req.body).forEach(([key, value]) => {
+        console.log(`  - ${key}: ${typeof value} = ${JSON.stringify(value)}`);
+      });
+      console.log("═══════════════════════════════════════════════════\n");
+      
       const sucesso = await this.repo.atualizar(id, req.body);
 
       if (!sucesso) {

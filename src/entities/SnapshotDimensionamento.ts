@@ -99,9 +99,9 @@ export class SnapshotDimensionamento {
   // ===== METADADOS DO SNAPSHOT =====
 
   /**
-   * Data e hora do snapshot
+   * Data e hora do snapshot (timezone: America/Sao_Paulo)
    */
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamp with time zone" })
   dataHora!: Date;
 
   /**
@@ -196,6 +196,12 @@ export class SnapshotDimensionamento {
    */
   @Column({ type: "varchar", length: 32, nullable: true })
   hashDados?: string;
+
+  /**
+   * Indica se este snapshot está selecionado para uso/comparação
+   */
+  @Column({ type: "boolean", default: false })
+  selecionado!: boolean;
 }
 
 // ===== TIPOS AUXILIARES =====

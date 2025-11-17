@@ -325,4 +325,31 @@ export class SnapshotDimensionamentoRepository {
       .where("snapshot.id IN (:...ids)", { ids })
       .getMany();
   }
+
+  /**
+   * Atualizar campo selecionado de um snapshot
+   */
+  async atualizarSelecionado(
+    id: string,
+    selecionado: boolean
+  ): Promise<SnapshotDimensionamento | null> {
+    await this.repo.update(id, { selecionado });
+    return await this.buscarPorId(id);
+  }
+
+  /**
+   * Buscar snapshot selecionado de um hospital
+   */
+  async buscarSelecionadoPorHospital(
+    hospitalId: string
+  ): Promise<SnapshotDimensionamento | null> {
+    return await this.repo.findOne({
+      where: {
+        hospitalId,
+        escopo: "HOSPITAL",
+        selecionado: true,
+      },
+      order: { dataHora: "DESC" },
+    });
+  }
 }

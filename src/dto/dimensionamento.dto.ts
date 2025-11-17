@@ -24,14 +24,15 @@ export interface AnaliseInternacaoResponse {
     };
     totalLeitosDia: number;
     totalAvaliacoes: number;
-    taxaOcupacaoMensal: number;
-    taxaOcupacaoMensalPercent?: number;
-    // Métrica pedida pelo cliente: % de leitos avaliados HOJE (não PENDENTES)
-    percentualLeitosAvaliadosHojePercent?: number;
-    leitosAvaliadosHoje?: number;
-    leitosPendentesHoje?: number;
-    totalLeitosHoje?: number;
-    distribuicaoTotalClassificacao?: { [key: string]: number }; // Adicionado para o frontend
+    taxaOcupacaoPeriodo: number;
+    taxaOcupacaoPeriodoPercent?: number;
+    // Percentual de leitos avaliados: leitos ocupados / leitos vagos
+    percentualLeitosAvaliados?: number;
+    leitosOcupados?: number;
+    leitosVagos?: number;
+    leitosInativos?: number;
+    totalLeitos?: number;
+    distribuicaoTotalClassificacao?: { [key: string]: number };
   };
   tabela: LinhaAnaliseFinanceira[];
 }
