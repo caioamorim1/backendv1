@@ -24,16 +24,22 @@ export class SnapshotDimensionamentoController {
       console.log("Observação:", observacao);
       console.log("User:", usuarioId);
 
-      const snapshot = await this.service.criarSnapshotHospital(
+      const resultado = await this.service.criarSnapshotHospital(
         hospitalId,
         usuarioId,
         observacao
       );
 
+      // Verificar se retornou erro de validação
+      if ("error" in resultado) {
+        console.log("⚠️ [CONTROLLER] Validação de status falhou");
+        return res.status(400).json(resultado);
+      }
+
       console.log("✅ [CONTROLLER] Snapshot criado com sucesso");
       res.status(201).json({
         message: "Snapshot do hospital criado com sucesso",
-        snapshot,
+        snapshot: resultado,
       });
     } catch (error) {
       console.error("❌ [CONTROLLER] Erro ao criar snapshot:", error);
@@ -271,6 +277,71 @@ export class SnapshotDimensionamentoController {
         error instanceof Error ? error.message : "Erro desconhecido";
       res.status(500).json({
         error: "Erro ao limpar snapshots",
+        details: message,
+      });
+    }
+  };
+
+  /**
+   * PATCH /snapshots/:id/selecionado
+   * Alterar status de selecionado de um snapshot
+   */
+  alterarSelecionado = async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { selecionado } = req.body;
+
+      if (typeof selecionado !== "boolean") {
+        return res.status(400).json({
+          error: "O campo 'selecionado' deve ser um booleano (true/false)",
+        });
+      }
+
+      const snapshot = await this.service.alterarSelecionado(id, selecionado);
+
+      if (!snapshot) {
+        return res.status(404).json({ error: "Snapshot não encontrado" });
+      }
+
+      res.json({
+        message:
+          "Status de selecionado atualizado com sucesso, status atual : " +
+          selecionado,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro desconhecido";
+      res.status(500).json({
+        error: "Erro ao atualizar snapshot",
+        message,
+      });
+    }
+  };
+
+  /**
+   * GET /snapshots/hospital/:hospitalId/selecionado
+   * Buscar snapshot selecionado de um hospital
+   */
+  buscarSelecionado = async (req: Request, res: Response) => {
+    try {
+      const { hospitalId } = req.params;
+
+      const snapshot = await this.service.buscarSelecionadoPorHospital(
+        hospitalId
+      );
+
+      if (!snapshot) {
+        return res.status(404).json({
+          message: "Nenhum snapshot selecionado encontrado para este hospital",
+        });
+      }
+
+      res.json({ snapshot });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro desconhecido";
+      res.status(500).json({
+        error: "Erro ao buscar snapshot selecionado",
         details: message,
       });
     }

@@ -51,6 +51,20 @@ export class BaselineController {
     }
   };
 
+  buscarPorHospitalId = async (req: Request, res: Response) => {
+    try {
+      const { hospitalId } = req.params;
+      const item = await this.repo.buscarPorHospitalId(hospitalId);
+      if (!item)
+        return res
+          .status(404)
+          .json({ error: "Baseline não encontrado para este hospital" });
+      res.json(item);
+    } catch (error) {
+      res.status(500).json({ error: "Erro ao buscar baseline" });
+    }
+  };
+
   deletar = async (req: Request, res: Response) => {
     try {
       const { id } = req.params;

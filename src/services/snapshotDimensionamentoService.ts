@@ -2,15 +2,181 @@ import { DataSource } from "typeorm";
 import { SnapshotDimensionamento } from "../entities/SnapshotDimensionamento";
 import { SnapshotDimensionamentoRepository } from "../repositories/snapshotDimensionamentoRepository";
 import { HospitalSectorsRepository } from "../repositories/hospitalSectorsRepository";
+import { ProjetadoFinalService } from "./projetadoFinalService";
+import { ControlePeriodoService } from "./controlePeriodoService";
+import { DimensionamentoService } from "./dimensionamentoService";
+import { ProjetadoFinalInternacao } from "../entities/ProjetadoFinalInternacao";
+import { UnidadeInternacao } from "../entities/UnidadeInternacao";
 import { createHash } from "crypto";
 
 export class SnapshotDimensionamentoService {
   private snapshotRepo: SnapshotDimensionamentoRepository;
   private hospitalSectorsRepo: HospitalSectorsRepository;
+  private projetadoFinalService: ProjetadoFinalService;
+  private controlePeriodoService: ControlePeriodoService;
+  private dimensionamentoService: DimensionamentoService;
 
   constructor(private ds: DataSource) {
     this.snapshotRepo = new SnapshotDimensionamentoRepository(ds);
     this.hospitalSectorsRepo = new HospitalSectorsRepository(ds);
+    this.projetadoFinalService = new ProjetadoFinalService(ds);
+    this.controlePeriodoService = new ControlePeriodoService(ds);
+    this.dimensionamentoService = new DimensionamentoService(ds);
+  }
+
+  /**
+   * Validar se todos os setores do hospital têm projetado final com status válido
+   * e período travado
+   */
+  private async validarStatusProjetadoFinal(
+    hospitalId: string
+  ): Promise<{ valido: boolean; setoresPendentes: string[] }> {
+    console.log(
+      "\n╔════════════════════════════════════════════════════════════════╗"
+    );
+    console.log(
+      "║  🔍 VALIDANDO STATUS DO PROJETADO FINAL E PERÍODO TRAVADO   ║"
+    );
+    console.log(
+      "╚════════════════════════════════════════════════════════════════╝\n"
+    );
+    console.log(`📋 Hospital ID: ${hospitalId}`);
+
+    const statusValidos = ["concluido_parcial", "concluido_final"];
+    const setoresPendentes: string[] = [];
+
+    console.log(`✅ Status válidos aceitos: ${statusValidos.join(", ")}\n`);
+
+    // Buscar todas as unidades de internação do hospital
+    const unidadesInternacao = await this.ds
+      .getRepository(UnidadeInternacao)
+      .find({
+        where: { hospital: { id: hospitalId } },
+        select: ["id", "nome"],
+      });
+
+    console.log(
+      `🏥 Encontradas ${unidadesInternacao.length} unidades de INTERNAÇÃO\n`
+    );
+
+    // Validar internação (período travado + status)
+    console.log("═══ VALIDANDO UNIDADES DE INTERNAÇÃO ═══");
+    for (const unidade of unidadesInternacao) {
+      console.log(`\n📍 Unidade: ${unidade.nome} (ID: ${unidade.id})`);
+
+      // Verificar se tem período travado
+      const periodoTravado =
+        await this.controlePeriodoService.buscarTravadoPorUnidade(unidade.id);
+
+      console.log(
+        `   🔍 Período encontrado: ${
+          periodoTravado
+            ? `travado=${periodoTravado.travado}, ${periodoTravado.dataInicial} a ${periodoTravado.dataFinal}`
+            : "NENHUM"
+        }`
+      );
+
+      if (!periodoTravado || periodoTravado.travado !== true) {
+        console.log(
+          `   ❌ PENDENTE: Período não está travado (travado=${
+            periodoTravado?.travado ?? "undefined"
+          })`
+        );
+        setoresPendentes.push(
+          `${unidade.nome} (Internação) - Período não travado`
+        );
+        continue;
+      }
+
+      console.log(
+        `   ✅ Período travado confirmado: ${periodoTravado.dataInicial} a ${periodoTravado.dataFinal}`
+      );
+
+      const projetados = await this.ds
+        .getRepository(ProjetadoFinalInternacao)
+        .find({
+          where: { unidadeId: unidade.id },
+        });
+
+      console.log(
+        `   📊 Encontrados ${projetados.length} registros de projetado final`
+      );
+
+      // Se não tem nenhum projetado final, setor está pendente
+      if (projetados.length === 0) {
+        console.log(
+          `   ❌ PENDENTE: Nenhum registro de projetado final encontrado`
+        );
+        setoresPendentes.push(`${unidade.nome} (Internação)`);
+        continue;
+      }
+
+      // Log de cada projetado
+      projetados.forEach((p, index) => {
+        const isValido = statusValidos.includes(p.status);
+        const emoji = isValido ? "✅" : "⚠️";
+        console.log(
+          `   ${emoji} Cargo ${index + 1}: cargoId=${p.cargoId.substring(
+            0,
+            8
+          )}... | status="${p.status}" | projetadoFinal=${p.projetadoFinal}`
+        );
+      });
+
+      // Verificar se todos os projetados têm status válido
+      const temStatusInvalido = projetados.some(
+        (p) => !statusValidos.includes(p.status)
+      );
+
+      if (temStatusInvalido) {
+        const statusInvalidos = projetados
+          .filter((p) => !statusValidos.includes(p.status))
+          .map((p) => p.status);
+        console.log(
+          `   ❌ PENDENTE: Encontrados status inválidos: ${[
+            ...new Set(statusInvalidos),
+          ].join(", ")}`
+        );
+        setoresPendentes.push(`${unidade.nome} (Internação)`);
+      } else {
+        console.log(
+          `   ✅ OK: Todos os ${projetados.length} registros estão com status válido`
+        );
+      }
+    }
+
+    console.log("\n═══════════════════════════════════════════");
+    console.log(`📋 RESUMO DA VALIDAÇÃO:`);
+    console.log(
+      `   Total de unidades de internação verificadas: ${unidadesInternacao.length}`
+    );
+    console.log(`   Setores pendentes: ${setoresPendentes.length}`);
+
+    if (setoresPendentes.length > 0) {
+      console.log(`\n❌ VALIDAÇÃO FALHOU - Setores pendentes:`);
+      setoresPendentes.forEach((setor, index) => {
+        console.log(`   ${index + 1}. ${setor}`);
+      });
+      console.log(
+        `\n🚫 SNAPSHOT BLOQUEADO - Corrija os problemas acima antes de continuar.`
+      );
+    } else {
+      console.log(
+        `\n✅ VALIDAÇÃO OK - Todos os setores estão prontos para snapshot`
+      );
+    }
+    console.log("═══════════════════════════════════════════\n");
+
+    const resultado = {
+      valido: setoresPendentes.length === 0,
+      setoresPendentes,
+    };
+
+    console.log(
+      `🔒 Retornando validação: valido=${resultado.valido}, pendentes=${resultado.setoresPendentes.length}`
+    );
+
+    return resultado;
   }
 
   /**
@@ -20,10 +186,43 @@ export class SnapshotDimensionamentoService {
     hospitalId: string,
     usuarioId?: string,
     observacao?: string
-  ): Promise<SnapshotDimensionamento> {
+  ): Promise<
+    SnapshotDimensionamento | { error: string; setoresPendentes: string[] }
+  > {
+    console.log(
+      `\n🏥 [SNAPSHOT] Iniciando criação de snapshot para hospital ${hospitalId}`
+    );
+
+    // Validar status do projetado final e período travado
+    const validacao = await this.validarStatusProjetadoFinal(hospitalId);
+
+    console.log(
+      `\n🔍 [SNAPSHOT] Resultado da validação: valido=${validacao.valido}`
+    );
+
+    if (!validacao.valido) {
+      console.log(
+        `\n🚫 [SNAPSHOT] BLOQUEANDO criação - ${validacao.setoresPendentes.length} setores pendentes`
+      );
+      return {
+        error:
+          "Não é possível criar snapshot. Todos os setores de internação devem ter período travado e status válido:",
+        setoresPendentes: validacao.setoresPendentes,
+      };
+    }
+
+    console.log(
+      `\n✅ [SNAPSHOT] Validação aprovada - prosseguindo com criação do snapshot`
+    );
+
     // Buscar dados completos do hospital
     const dadosHospital =
       await this.hospitalSectorsRepo.getAllSectorsByHospital(hospitalId);
+
+    // Buscar projetado final de todas as unidades
+    const projetadoFinalData = await this.buscarTodoProjetadoFinal(
+      dadosHospital
+    );
 
     console.log(
       "Dados Hospital (brutos)",
@@ -33,6 +232,8 @@ export class SnapshotDimensionamentoService {
     console.log("🧹 [SERVICE] Iniciando sanitização...");
     // ✅ SANITIZAR dados antes de salvar
     const dadosSanitizados = this.sanitizarDados(dadosHospital, "root");
+    // Adicionar projetado final aos dados
+    dadosSanitizados.projetadoFinal = projetadoFinalData;
     console.log("✅ [SERVICE] Sanitização completa!");
 
     console.log(
@@ -78,6 +279,18 @@ export class SnapshotDimensionamentoService {
     usuarioId?: string,
     observacao?: string
   ): Promise<SnapshotDimensionamento> {
+    // Verificar se o período está travado
+    const periodoTravado =
+      await this.controlePeriodoService.buscarTravadoPorUnidade(unidadeId);
+
+    if (!periodoTravado || periodoTravado.travado !== true) {
+      throw new Error(
+        `Não é possível criar snapshot. A unidade não possui período travado (travado=${
+          periodoTravado?.travado ?? "undefined"
+        })`
+      );
+    }
+
     // Buscar dados do hospital e extrair unidade específica
     const dadosHospital =
       await this.hospitalSectorsRepo.getAllSectorsByHospital(hospitalId);
@@ -89,6 +302,14 @@ export class SnapshotDimensionamentoService {
 
     // ✅ Sanitizar dados da unidade
     const unidadeSanitizada = this.sanitizarDados(unidade);
+
+    // Buscar projetado final da unidade
+    const projetadoFinal = await this.projetadoFinalService.buscarInternacao(
+      unidadeId
+    );
+    if (projetadoFinal) {
+      unidadeSanitizada.projetadoFinal = projetadoFinal;
+    }
 
     // Calcular resumo
     const resumo = {
@@ -139,6 +360,14 @@ export class SnapshotDimensionamentoService {
 
     // ✅ Sanitizar dados da unidade
     const unidadeSanitizada = this.sanitizarDados(unidade);
+
+    // Buscar projetado final da unidade
+    const projetadoFinal = await this.projetadoFinalService.buscarNaoInternacao(
+      unidadeId
+    );
+    if (projetadoFinal) {
+      unidadeSanitizada.projetadoFinal = projetadoFinal;
+    }
 
     const resumo = {
       totalProfissionais:
@@ -228,6 +457,20 @@ export class SnapshotDimensionamentoService {
 
     const removidos = await this.snapshotRepo.deletarAnterioresA(dataLimite);
     return { removidos, dataLimite };
+  }
+
+  /**
+   * Alterar status de selecionado de um snapshot
+   */
+  async alterarSelecionado(id: string, selecionado: boolean) {
+    return await this.snapshotRepo.atualizarSelecionado(id, selecionado);
+  }
+
+  /**
+   * Buscar snapshot selecionado de um hospital
+   */
+  async buscarSelecionadoPorHospital(hospitalId: string) {
+    return await this.snapshotRepo.buscarSelecionadoPorHospital(hospitalId);
   }
 
   /**
@@ -549,6 +792,92 @@ export class SnapshotDimensionamentoService {
       totalUnidadesInternacao: dados.internation?.length || 0,
       totalUnidadesAssistencia: dados.assistance?.length || 0,
     };
+  }
+
+  /**
+   * Buscar projetado final de todas as unidades do hospital
+   */
+  private async buscarTodoProjetadoFinal(dadosHospital: any) {
+    const resultado: any = {
+      internacao: [],
+      naoInternacao: [],
+    };
+
+    // Buscar projetado final de unidades de internação
+    if (dadosHospital.internation && Array.isArray(dadosHospital.internation)) {
+      for (const unidade of dadosHospital.internation) {
+        const projetado = await this.projetadoFinalService.buscarInternacao(
+          unidade.id
+        );
+
+        // Buscar período travado da unidade de internação
+        const periodoTravado =
+          await this.controlePeriodoService.buscarTravadoPorUnidade(unidade.id);
+
+        // Buscar dados de dimensionamento (métricas de leitos e distribuição)
+        let dimensionamentoData = null;
+        if (periodoTravado) {
+          try {
+            const dimensionamento =
+              await this.dimensionamentoService.calcularParaInternacao(
+                unidade.id,
+                periodoTravado.dataInicial,
+                periodoTravado.dataFinal
+              );
+
+            // Extrair apenas as informações relevantes
+            if (dimensionamento?.agregados) {
+              dimensionamentoData = {
+                leitosOcupados: dimensionamento.agregados.leitosOcupados,
+                leitosVagos: dimensionamento.agregados.leitosVagos,
+                leitosInativos: dimensionamento.agregados.leitosInativos,
+                totalLeitos: dimensionamento.agregados.totalLeitos,
+                totalLeitosDia: dimensionamento.agregados.totalLeitosDia,
+                distribuicaoClassificacao:
+                  dimensionamento.agregados.distribuicaoTotalClassificacao,
+              };
+            }
+          } catch (error) {
+            console.error(
+              `Erro ao buscar dimensionamento para unidade ${unidade.id}:`,
+              error
+            );
+          }
+        }
+
+        if (projetado) {
+          resultado.internacao.push({
+            ...projetado,
+            unidadeNome: unidade.name,
+            periodoTravado: periodoTravado
+              ? {
+                  dataInicial: periodoTravado.dataInicial,
+                  dataFinal: periodoTravado.dataFinal,
+                  travado: periodoTravado.travado,
+                }
+              : null,
+            dimensionamento: dimensionamentoData,
+          });
+        }
+      }
+    }
+
+    // Buscar projetado final de unidades de não-internação
+    if (dadosHospital.assistance && Array.isArray(dadosHospital.assistance)) {
+      for (const unidade of dadosHospital.assistance) {
+        const projetado = await this.projetadoFinalService.buscarNaoInternacao(
+          unidade.id
+        );
+        if (projetado) {
+          resultado.naoInternacao.push({
+            ...projetado,
+            unidadeNome: unidade.name,
+          });
+        }
+      }
+    }
+
+    return resultado;
   }
 
   /**

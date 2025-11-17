@@ -2,6 +2,7 @@ import { Router } from "express";
 import { DataSource } from "typeorm";
 import { HospitalSectorsAggregateRepository } from "../repositories/hospitalSectorsAggregateRepository";
 import { HospitalComparativeService } from "../services/hospitalComparativeService";
+import { HospitalComparativeSnapshotService } from "../services/hospitalComparativeSnapshotService";
 import { HospitalSectorsAggregateController } from "../controllers/hospitalSectorsAggregateController";
 
 export const HospitalSectorsAggregateRoutes = (ds: DataSource): Router => {
@@ -73,12 +74,14 @@ export const HospitalSectorsAggregateRoutes = (ds: DataSource): Router => {
   );
 
   // Rota para buscar COMPARATIVO (atual + projetado) para um único hospital
+  // NOVA VERSÃO: Usa snapshot selecionado
   router.get("/hospitals/:hospitalId/comparative", async (req, res) => {
     try {
       const { hospitalId } = req.params;
       if (!hospitalId)
         return res.status(400).json({ error: "hospitalId é obrigatório" });
-      const service = new HospitalComparativeService(ds);
+
+      const service = new HospitalComparativeSnapshotService(ds);
       const payload = await service.getHospitalComparative(hospitalId);
       return res.json(payload);
     } catch (error) {

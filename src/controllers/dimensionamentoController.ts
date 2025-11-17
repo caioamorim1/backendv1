@@ -8,7 +8,14 @@ export class DimensionamentoController {
   analiseInternacao = async (req: Request, res: Response) => {
     try {
       const { unidadeId } = req.params;
-      const resultado = await this.service.calcularParaInternacao(unidadeId);
+      const inicio = (req.query.inicio as string) || undefined;
+      const fim = (req.query.fim as string) || undefined;
+      console.log("Inicio:", inicio, "Fim:", fim);
+      const resultado = await this.service.calcularParaInternacao(
+        unidadeId,
+        inicio,
+        fim
+      );
       res.json(resultado);
     } catch (error) {
       const message =

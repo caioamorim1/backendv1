@@ -139,6 +139,7 @@ export class UnidadeRepository {
           id: cu.id,
           cargoId: cu.cargoId,
           quantidade_funcionarios: cu.quantidade_funcionarios,
+          quantidade_atualizada_em: cu.quantidade_atualizada_em ?? null,
           cargo: {
             id: cu.cargo.id,
             nome: cu.cargo.nome,
@@ -193,6 +194,7 @@ export class UnidadeRepository {
           id: cu.id,
           cargoId: cu.cargoId,
           quantidade_funcionarios: cu.quantidade_funcionarios,
+          quantidade_atualizada_em: cu.quantidade_atualizada_em ?? null,
           cargo: {
             id: cu.cargo.id,
             nome: cu.cargo.nome,

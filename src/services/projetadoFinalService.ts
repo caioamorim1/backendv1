@@ -2,7 +2,12 @@ import { DataSource } from "typeorm";
 import { ProjetadoFinalInternacao } from "../entities/ProjetadoFinalInternacao";
 import { ProjetadoFinalNaoInternacao } from "../entities/ProjetadoFinalNaoInternacao";
 
-type CargoProjetado = { cargoId: string; projetadoFinal: number };
+type CargoProjetado = {
+  cargoId: string;
+  projetadoFinal: number;
+  observacao?: string;
+  status?: string;
+};
 type SitioEntrada = { sitioId: string; cargos: CargoProjetado[] };
 
 export class ProjetadoFinalService {
@@ -26,6 +31,8 @@ export class ProjetadoFinalService {
           hospitalId,
           cargoId: c.cargoId,
           projetadoFinal: Math.max(0, Math.floor(c.projetadoFinal || 0)),
+          observacao: c.observacao || "",
+          status: c.status || "nao_iniciado",
         })
       );
       if (rows.length > 0) {
@@ -44,6 +51,8 @@ export class ProjetadoFinalService {
       cargos: rows.map((r) => ({
         cargoId: r.cargoId,
         projetadoFinal: r.projetadoFinal,
+        observacao: r.observacao,
+        status: r.status,
       })),
     };
   }
@@ -69,6 +78,8 @@ export class ProjetadoFinalService {
               sitioId: s.sitioId,
               cargoId: c.cargoId,
               projetadoFinal: Math.max(0, Math.floor(c.projetadoFinal || 0)),
+              observacao: c.observacao || "",
+              status: c.status || "nao_iniciado",
             })
           );
         }
@@ -92,9 +103,12 @@ export class ProjetadoFinalService {
       if (!map.has(r.sitioId)) {
         map.set(r.sitioId, { sitioId: r.sitioId, cargos: [] });
       }
-      map
-        .get(r.sitioId)!
-        .cargos.push({ cargoId: r.cargoId, projetadoFinal: r.projetadoFinal });
+      map.get(r.sitioId)!.cargos.push({
+        cargoId: r.cargoId,
+        projetadoFinal: r.projetadoFinal,
+        observacao: r.observacao,
+        status: r.status,
+      });
     }
     return {
       hospitalId: rows[0].hospitalId,

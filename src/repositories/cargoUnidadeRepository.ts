@@ -98,14 +98,42 @@ export class CargoUnidadeRepository {
     unidadeId: string,
     cargos: CreateCargoUnidadeDTO[]
   ) {
+    // Buscar cargos existentes para preservar timestamps e comparar quantidades
+    const cargosExistentes = await this.listarPorUnidade(unidadeId);
+    const mapaExistentes = new Map(
+      cargosExistentes.map((cu) => [
+        cu.cargoId,
+        {
+          quantidade: cu.quantidade_funcionarios,
+          timestamp: cu.quantidade_atualizada_em,
+        },
+      ])
+    );
+
     // Deletar todos os cargos existentes da unidade
     await this.deletarPorUnidade(unidadeId);
 
     // Criar os novos cargos
     const novosCargoUnidade = [];
+    const agora = new Date();
+
     for (const cargoData of cargos) {
-      const cargoUnidade = await this.criar(unidadeId, cargoData);
-      novosCargoUnidade.push(cargoUnidade);
+      const anterior = mapaExistentes.get(cargoData.cargoId);
+      const quantidadeMudou =
+        !anterior || anterior.quantidade !== cargoData.quantidade_funcionarios;
+
+      const cargoUnidade = this.repo.create({
+        unidadeId,
+        cargoId: cargoData.cargoId,
+        quantidade_funcionarios: cargoData.quantidade_funcionarios,
+        // Se mudou, usa agora; se não mudou, preserva o timestamp antigo
+        quantidade_atualizada_em: quantidadeMudou
+          ? agora
+          : anterior?.timestamp || undefined,
+      });
+
+      const saved = await this.repo.save(cargoUnidade);
+      novosCargoUnidade.push(saved);
     }
 
     return novosCargoUnidade;

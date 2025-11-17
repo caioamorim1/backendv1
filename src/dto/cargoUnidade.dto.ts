@@ -12,6 +12,7 @@ export interface CargoUnidadeResponseDTO {
   id: string;
   cargoId: string;
   quantidade_funcionarios: number;
+  quantidade_atualizada_em?: Date | string | null;
   cargo: {
     id: string;
     nome: string;

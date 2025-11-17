@@ -1,4 +1,5 @@
 import { DataSource } from "typeorm";
+import { DateTime } from "luxon";
 import { UnidadeInternacao } from "../entities/UnidadeInternacao";
 import { UnidadeNaoInternacao } from "../entities/UnidadeNaoInternacao";
 import { AvaliacaoRepository } from "../repositories/avaliacaoRepository";
@@ -12,6 +13,9 @@ import {
   GrupoCargosNaoInternacao,
 } from "../dto/dimensionamento.dto";
 import { HistoricoOcupacao } from "../entities/HistoricoOcupacao";
+import { StatusLeito } from "../entities/Leito";
+import { LeitosStatus } from "../entities/LeitosStatus";
+import { HistoricoLeitosStatus } from "../entities/HistoricoLeitosStatus";
 
 export class DimensionamentoService {
   private avaliacaoRepo: AvaliacaoRepository;
@@ -22,7 +26,9 @@ export class DimensionamentoService {
 
   // Lógica para Unidades de INTERNAÇÃO
   async calcularParaInternacao(
-    unidadeId: string
+    unidadeId: string,
+    inicio?: string,
+    fim?: string
   ): Promise<AnaliseInternacaoResponse> {
     console.log(
       "\n╔════════════════════════════════════════════════════════════════╗"
@@ -62,7 +68,7 @@ export class DimensionamentoService {
     });
 
     console.log("\n=== ⚙️ ETAPA 1: PARÂMETROS DA UNIDADE ===");
-    const ist = Number(parametros?.ist ?? 15);
+    const ist = Number(parametros?.ist ?? 0.15);
     const equipeComRestricoes = parametros?.aplicarIST ?? false;
     const diasTrabalhoSemana = parametros?.diasSemana ?? 7;
 
@@ -72,47 +78,60 @@ export class DimensionamentoService {
     console.log(`  Dias de trabalho/semana: ${diasTrabalhoSemana}`);
     console.log("=== FIM ETAPA 1 ===\n");
 
-    // --- ETAPA 2: CALCULAR A MÉDIA DE PACIENTES DO MÊS ATUAL (LÓGICA CORRIGIDA) ---
-    // Usar horário do Brasil (UTC-3) para garantir cálculos corretos
-    const agora = new Date();
-    const hoje = new Date(
-      agora.getFullYear(),
-      agora.getMonth(),
-      agora.getDate(),
-      23,
-      59,
-      59,
-      999
-    );
-    const inicioDoMes = new Date(
-      agora.getFullYear(),
-      agora.getMonth(),
-      1,
-      0,
-      0,
-      0,
-      0
-    );
-    const diasNoPeriodo = agora.getDate(); // Dias decorridos no mês atual
+    // --- ETAPA 2: DEFINIÇÃO DO PERÍODO ---
+    const ZONE = "America/Sao_Paulo";
+    const dataAtual = DateTime.now().setZone(ZONE);
+
+    let inicioPeriodo: DateTime;
+    let fimPeriodo: DateTime;
+
+    // Parse das datas de entrada (YYYY-MM-DD)
+    if (inicio && fim) {
+      inicioPeriodo = DateTime.fromISO(inicio, { zone: ZONE }).startOf("day");
+      fimPeriodo = DateTime.fromISO(fim, { zone: ZONE }).endOf("day");
+    } else if (inicio) {
+      inicioPeriodo = DateTime.fromISO(inicio, { zone: ZONE }).startOf("day");
+      fimPeriodo = inicioPeriodo.endOf("day");
+    } else if (fim) {
+      fimPeriodo = DateTime.fromISO(fim, { zone: ZONE }).endOf("day");
+      inicioPeriodo = fimPeriodo.startOf("day");
+    } else {
+      // Default: primeiro dia do mês até hoje
+      inicioPeriodo = dataAtual.startOf("month");
+      fimPeriodo = dataAtual.endOf("day");
+    }
+
+    // Garantir ordem correta
+    if (inicioPeriodo > fimPeriodo) {
+      [inicioPeriodo, fimPeriodo] = [fimPeriodo, inicioPeriodo];
+    }
+
+    // Calcular dias no período
+    const diasNoPeriodo =
+      Math.floor(fimPeriodo.diff(inicioPeriodo, "days").days) + 1;
+
+    // Converter para Date para queries do TypeORM
+    const inicioPeriodoDate = inicioPeriodo.toJSDate();
+    const fimPeriodoDate = fimPeriodo.toJSDate();
 
     console.log("=== DEBUG OCUPAÇÃO MENSAL ===");
     console.log("Unidade ID:", unidadeId);
-    console.log(
-      "Data/hora atual:",
-      agora.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })
-    );
+    console.log("Data atual:", dataAtual.toFormat("dd/MM/yyyy HH:mm:ss"));
     console.log(
       "Período:",
-      inicioDoMes.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }),
+      inicioPeriodo.toFormat("dd/MM/yyyy"),
       "até",
-      hoje.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })
+      fimPeriodo.toFormat("dd/MM/yyyy")
     );
     console.log("Dias no período:", diasNoPeriodo);
+    console.log(
+      inicio || fim ? "Intervalo customizado" : "Mês corrente até hoje"
+    );
 
     let totalPacientesMedio = 0;
     let mediaDiariaClassificacao: { [key: string]: number } = {};
     let somaTotalClassificacao: { [key: string]: number } = {};
-    let taxaOcupacaoMensal = 0;
+    let taxaOcupacaoPeriodo = 0;
 
     // PRIMEIRO: verificar se existem históricos para essa unidade (em qualquer período)
     const totalHistoricos = await historicoRepo
@@ -122,8 +141,7 @@ export class DimensionamentoService {
 
     console.log("Total de históricos (todos os períodos):", totalHistoricos);
 
-    // Busca todos os registros de histórico que se sobrepõem ao período do mês atual
-    // Carrega históricos do mês e a relação com leito para permitir deduplicação
+    // Busca todos os registros de histórico que se sobrepõem ao período
     const historicosDoMes = await historicoRepo
       .createQueryBuilder("h")
       .leftJoinAndSelect("h.leito", "leito")
@@ -131,18 +149,18 @@ export class DimensionamentoService {
       .andWhere(
         "(h.inicio <= :fimPeriodo AND (h.fim IS NULL OR h.fim >= :inicioPeriodo))",
         {
-          inicioPeriodo: inicioDoMes,
-          fimPeriodo: hoje,
+          inicioPeriodo: inicioPeriodoDate,
+          fimPeriodo: fimPeriodoDate,
         }
       )
       .getMany();
 
     console.log("Históricos encontrados no período:", historicosDoMes.length);
 
-    // BUSCAR AVALIAÇÕES ATIVAS DO DIA ATUAL (que ainda não viraram histórico)
-    const dataHoje = agora.toISOString().split("T")[0]; // formato YYYY-MM-DD
+    // BUSCAR AVALIAÇÕES ATIVAS DO ÚLTIMO DIA DO PERÍODO
+    const dataUltimoDia = fimPeriodo.toISODate(); // YYYY-MM-DD
     const avaliacoesHoje = await this.avaliacaoRepo.listarPorDia({
-      data: dataHoje,
+      data: dataUltimoDia!,
       unidadeId: unidadeId,
     });
 
@@ -222,23 +240,24 @@ export class DimensionamentoService {
       let totalSomaDiariaPacientes = 0;
       let diasComDados = 0;
 
-      // Itera por cada dia do mês até a data atual
+      // Itera por cada dia do período
       for (let i = 0; i < diasNoPeriodo; i++) {
-        const diaCorrente = new Date(inicioDoMes);
-        diaCorrente.setDate(inicioDoMes.getDate() + i);
-        const inicioDia = new Date(diaCorrente).setHours(0, 0, 0, 0);
-        const fimDia = new Date(diaCorrente).setHours(23, 59, 59, 999);
-        const isHoje = i === diasNoPeriodo - 1; // último dia do período é hoje
+        const diaAtual = inicioPeriodo.plus({ days: i });
+        const inicioDia = diaAtual.startOf("day").toJSDate();
+        const fimDia = diaAtual.endOf("day").toJSDate();
+        const isUltimoDia = i === diasNoPeriodo - 1;
 
         let pacientesNesteDia = 0;
 
-        // Para cada dia, conta quantos registros de histórico estavam ativos
+        // Conta quantos registros de histórico estavam ativos neste dia
         for (const hist of historicosDoMes) {
           const inicioHist = new Date(hist.inicio).getTime();
           const fimHist = hist.fim ? new Date(hist.fim).getTime() : Infinity;
 
-          if (inicioHist <= fimDia && fimHist >= inicioDia) {
-            // Este paciente estava presente neste dia
+          if (
+            inicioHist <= fimDia.getTime() &&
+            fimHist >= inicioDia.getTime()
+          ) {
             pacientesNesteDia += 1;
             totalSomaDiariaPacientes += 1;
             if (hist.classificacao) {
@@ -248,10 +267,9 @@ export class DimensionamentoService {
           }
         }
 
-        // Se for hoje, adicionar as avaliações ativas (que ainda não viraram histórico)
-        if (isHoje && avaliacoesHoje.length > 0) {
+        // Se for o último dia, adicionar as avaliações ativas
+        if (isUltimoDia && avaliacoesHoje.length > 0) {
           for (const aval of avaliacoesHoje) {
-            // Pular avaliações para leitos que já possuem um histórico ativo no período
             const leitoIdAval = aval.leito?.id ?? null;
             if (leitoIdAval && leitosComHistorico.has(leitoIdAval)) {
               console.log(
@@ -277,7 +295,7 @@ export class DimensionamentoService {
           `Dia ${
             i + 1
           }/${diasNoPeriodo}: ${pacientesNesteDia} pacientes ativos ${
-            isHoje ? "(incluindo avaliações de hoje)" : ""
+            isUltimoDia ? "(incluindo avaliações)" : ""
           }`
         );
       }
@@ -296,21 +314,21 @@ export class DimensionamentoService {
       }
 
       const numeroLeitos = unidade.leitos.length;
-      taxaOcupacaoMensal =
+      taxaOcupacaoPeriodo =
         numeroLeitos > 0 ? totalPacientesMedio / numeroLeitos : 0;
 
       console.log("Média de pacientes/dia:", totalPacientesMedio);
       console.log("Número de leitos:", numeroLeitos);
       console.log(
-        "Taxa de ocupação mensal (fração):",
-        taxaOcupacaoMensal.toFixed(4)
+        "Taxa de ocupação do período (fração):",
+        taxaOcupacaoPeriodo.toFixed(4)
       );
       console.log(
-        "Taxa de ocupação mensal (%):",
-        `${(taxaOcupacaoMensal * 100).toFixed(2)}%`
+        "Taxa de ocupação do período (%):",
+        `${(taxaOcupacaoPeriodo * 100).toFixed(2)}%`
       );
       console.log(
-        "Distribuição TOTAL por classificação (soma mensal):",
+        "Distribuição TOTAL por classificação (soma do período):",
         somaTotalClassificacao
       );
       console.log(
@@ -321,6 +339,202 @@ export class DimensionamentoService {
     } else {
       console.error("❌ Erro: diasNoPeriodo inválido:", diasNoPeriodo);
     }
+
+    // === MÉTRICA: % LEITOS AVALIADOS (OCUPADOS) NO PERÍODO ===
+    console.log("\n=== 📊 CALCULANDO MÉTRICA DE LEITOS PARA O PERÍODO ===");
+
+    const totalLeitos = unidade.leitos.length;
+    let leitosOcupados = 0;
+    let leitosVagos = 0;
+    let leitosPendentes = 0;
+    let leitosInativos = 0;
+
+    // Verificar se estamos analisando APENAS o dia de hoje
+    const isApenasHoje =
+      diasNoPeriodo === 1 && fimPeriodo.hasSame(dataAtual, "day");
+
+    console.log(
+      `📅 Período: ${inicioPeriodo.toISODate()} até ${fimPeriodo.toISODate()}`
+    );
+    console.log(
+      `🕐 É apenas hoje (período de 1 dia)? ${isApenasHoje ? "SIM" : "NÃO"}`
+    );
+
+    if (isApenasHoje) {
+      // Período de 1 dia apenas (hoje) - usar dados da tabela leitos_status
+      console.log("✅ Usando dados de leitos_status (apenas dia de hoje)");
+      const leitosStatusRepo = this.ds.getRepository(LeitosStatus);
+      const leitosStatus = await leitosStatusRepo.findOne({
+        where: { unidade: { id: unidadeId } },
+      });
+
+      if (leitosStatus) {
+        console.log("  • Registro encontrado:");
+        console.log(`    - Total de leitos: ${leitosStatus.bedCount}`);
+        console.log(
+          `    - Leitos avaliados/ocupados: ${leitosStatus.evaluated}`
+        );
+        console.log(`    - Leitos vagos: ${leitosStatus.vacant}`);
+        console.log(`    - Leitos inativos: ${leitosStatus.inactive}`);
+
+        leitosOcupados = leitosStatus.evaluated;
+        leitosInativos = leitosStatus.inactive;
+        leitosVagos = leitosStatus.vacant;
+      } else {
+        console.log("  ⚠️ Registro não encontrado, calculando diretamente");
+        leitosOcupados = 0;
+        leitosPendentes = 0;
+        leitosInativos = 0;
+
+        // Contar por status
+        for (const leito of unidade.leitos) {
+          if (leito.status === StatusLeito.INATIVO) {
+            leitosInativos++;
+          } else if (leito.status === StatusLeito.PENDENTE) {
+            leitosPendentes++;
+          }
+        }
+
+        // Contar ocupados do histórico atual
+        const leitosOcupadosSet = new Set<string>();
+        for (const hist of historicosDoMes) {
+          if (hist.leito?.id) leitosOcupadosSet.add(hist.leito.id);
+        }
+        for (const aval of avaliacoesHoje) {
+          if (aval.leito?.id) leitosOcupadosSet.add(aval.leito.id);
+        }
+        leitosOcupados = leitosOcupadosSet.size;
+
+        // Vagos = Total - Pendentes - Inativos - Ocupados
+        leitosVagos =
+          totalLeitos - leitosPendentes - leitosInativos - leitosOcupados;
+        console.log(
+          `    - Calculado: Vagos = ${totalLeitos} - ${leitosPendentes} (pendentes) - ${leitosInativos} (inativos) - ${leitosOcupados} (ocupados) = ${leitosVagos}`
+        );
+      }
+    } else {
+      // Período passado - buscar dados históricos salvos
+      console.log("📊 Buscando dados históricos salvos do período");
+      console.log(`   Unidade ID: ${unidadeId}`);
+      console.log(`   Início: ${inicioPeriodo.toISO()}`);
+      console.log(`   Fim: ${fimPeriodo.toISO()}`);
+
+      const historicoLeitosStatusRepo = this.ds.getRepository(
+        HistoricoLeitosStatus
+      );
+
+      // ✅ Query timezone-aware para buscar registros do período
+      const inicioStr = inicioPeriodo.toISODate()!;
+      const fimStr = fimPeriodo.toISODate()!;
+
+      const historicosStatus = await historicoLeitosStatusRepo
+        .createQueryBuilder("hls")
+        .leftJoinAndSelect("hls.unidade", "unidade")
+        .where("unidade.id = :unidadeId", { unidadeId })
+        .andWhere(
+          "(hls.data AT TIME ZONE 'America/Sao_Paulo')::DATE >= :inicio::DATE",
+          { inicio: inicioStr }
+        )
+        .andWhere(
+          "(hls.data AT TIME ZONE 'America/Sao_Paulo')::DATE <= :fim::DATE",
+          { fim: fimStr }
+        )
+        .orderBy("hls.data", "DESC")
+        .getMany();
+
+      console.log(
+        `  • Encontrados ${historicosStatus.length} registros históricos de status`
+      );
+
+      // Log detalhado dos registros encontrados
+      if (historicosStatus.length > 0) {
+        console.log(`  📋 Registros encontrados:`);
+        historicosStatus.forEach((h, index) => {
+          const dataSP = DateTime.fromJSDate(h.data, { zone: "UTC" })
+            .setZone("America/Sao_Paulo")
+            .toFormat("dd/MM/yyyy HH:mm:ss");
+          console.log(
+            `    ${index + 1}. Data: ${dataSP} | Evaluated: ${
+              h.evaluated
+            } | Vacant: ${h.vacant} | Inactive: ${h.inactive}`
+          );
+        });
+      }
+
+      if (historicosStatus.length > 0) {
+        console.log(
+          "  ✅ Calculando MÉDIA dos registros históricos do período"
+        );
+
+        // ✅ CORREÇÃO: Calcular MÉDIA ao invés de SOMA
+        let somaOcupados = 0;
+        let somaVagos = 0;
+        let somaInativos = 0;
+        const totalDias = historicosStatus.length;
+
+        historicosStatus.forEach((h) => {
+          somaOcupados += h.evaluated;
+          somaVagos += h.vacant;
+          somaInativos += h.inactive;
+        });
+
+        // Média por dia
+        leitosOcupados = Math.round(somaOcupados / totalDias);
+        leitosVagos = Math.round(somaVagos / totalDias);
+        leitosInativos = Math.round(somaInativos / totalDias);
+
+        console.log(
+          `    - Soma ocupados: ${somaOcupados} / ${totalDias} dias = ${leitosOcupados} (média)`
+        );
+        console.log(
+          `    - Soma vagos: ${somaVagos} / ${totalDias} dias = ${leitosVagos} (média)`
+        );
+        console.log(
+          `    - Soma inativos: ${somaInativos} / ${totalDias} dias = ${leitosInativos} (média)`
+        );
+      } else {
+        console.log("  ⚠️ Sem dados históricos salvos para este período");
+        console.log(
+          "  💡 Execute a atualização de status para gerar históricos"
+        );
+        leitosOcupados = 0;
+        leitosVagos = 0;
+        leitosInativos = 0;
+        leitosPendentes = 0;
+      }
+    }
+
+    const percentualLeitosAvaliados =
+      totalLeitos > 0
+        ? Number(
+            (
+              ((leitosVagos + leitosOcupados + leitosInativos) /
+                (totalLeitos * diasNoPeriodo)) *
+              100
+            ).toFixed(2)
+          )
+        : 0;
+
+    // taxaOcupacaoPeriodo já foi calculado antes como fração (0..1)
+    // Não precisa recalcular
+
+    console.log("\n=== 📊 MÉTRICA DE LEITOS (RESUMO FINAL) ===");
+    console.log(`Leitos ocupados no período: ${leitosOcupados}`);
+    console.log(`Leitos vagos no período: ${leitosVagos}`);
+    console.log(`Leitos inativos no período: ${leitosInativos}`);
+    console.log(`Total de leitos-dia: ${totalLeitos * diasNoPeriodo}`);
+    console.log(
+      `Percentual de leitos avaliados: ${percentualLeitosAvaliados}% (vagos + ocupados + inativos / total)`
+    );
+    console.log(
+      `Taxa de ocupação do período (fração): ${taxaOcupacaoPeriodo.toFixed(4)}`
+    );
+    console.log(
+      `Taxa de ocupação do período (%): ${(taxaOcupacaoPeriodo * 100).toFixed(
+        2
+      )}%`
+    );
+    console.log("=== FIM MÉTRICA ===\n");
 
     // --- ETAPA 3: CALCULAR TOTAL DE HORAS DE ENFERMAGEM (THE) ---
     // Mapeamento de classificações do banco para horas de enfermagem
@@ -334,7 +548,9 @@ export class DimensionamentoService {
 
     console.log("\n=== 📊 ETAPA 3: CÁLCULO DE HORAS DE ENFERMAGEM (THE) ===");
     console.log("Horas por classificação configuradas:", horasPorClassificacao);
-    console.log("⚠️ IMPORTANTE: Usando SOMA TOTAL MENSAL (não média diária)");
+    console.log(
+      "⚠️ IMPORTANTE: Usando SOMA TOTAL DO PERÍODO (não média diária)"
+    );
 
     const totalHorasEnfermagem = Object.keys(somaTotalClassificacao).reduce(
       (total, key) => {
@@ -351,9 +567,9 @@ export class DimensionamentoService {
       0
     );
     console.log(
-      "✅ Total de Horas de Enfermagem (THE) do mês:",
+      "✅ Total de Horas de Enfermagem (THE) do período:",
       totalHorasEnfermagem.toFixed(2),
-      "horas (total mensal)"
+      "horas (total do período)"
     );
     console.log("=== FIM ETAPA 3 ===\n");
 
@@ -383,7 +599,7 @@ export class DimensionamentoService {
     console.log(
       "⚠️ IMPORTANTE: Usando TOTAL DE HORAS por classificação para determinar predominância"
     );
-    console.log("Horas por classificação no mês (totais):");
+    console.log("Horas por classificação no período (totais):");
     console.log(`  MINIMOS (PCM): ${hMinimos.toFixed(2)}h`);
     console.log(`  INTERMEDIARIOS (PCI): ${hIntermediarios.toFixed(2)}h`);
     console.log(`  ALTA_DEPENDENCIA (PADC): ${hAltaDependencia.toFixed(2)}h`);
@@ -620,17 +836,29 @@ export class DimensionamentoService {
     // --- Montar a resposta da API ---
     const agregados = {
       periodo: {
-        inicio: inicioDoMes.toISOString(),
-        fim: hoje.toISOString(),
+        inicio: inicioPeriodo.toISO()!,
+        fim: fimPeriodo.toISO()!,
         dias: diasNoPeriodo,
+        origem: (inicio || fim ? "intervalo_customizado" : "mes_corrente") as
+          | "intervalo_customizado"
+          | "mes_corrente",
+        parametrosEntrada: { inicio: inicio || null, fim: fim || null },
       },
       totalLeitosDia: unidade.leitos.length * diasNoPeriodo,
       totalAvaliacoes: Math.round(totalPacientesMedio * diasNoPeriodo),
-      // Mantido: fração 0..1 para compatibilidade
-      taxaOcupacaoMensal,
-      // Novo: porcentagem 0..100 para consumo direto no frontend/logs
-      taxaOcupacaoMensalPercent: Number((taxaOcupacaoMensal * 100).toFixed(2)),
-      distribuicaoTotalClassificacao: somaTotalClassificacao, // Adicionado para o frontend
+      // Taxa de ocupação: leitos ocupados / total de leitos (fração 0..1)
+      taxaOcupacaoPeriodo,
+      // Taxa de ocupação em porcentagem 0..100
+      taxaOcupacaoPeriodoPercent: Number(
+        (taxaOcupacaoPeriodo * 100).toFixed(2)
+      ),
+      // Percentual de leitos avaliados: leitos ocupados / leitos vagos
+      percentualLeitosAvaliados,
+      leitosOcupados,
+      leitosVagos,
+      leitosInativos,
+      totalLeitos,
+      distribuicaoTotalClassificacao: somaTotalClassificacao,
     };
 
     const valorHorasExtras = parseFloat(

@@ -32,6 +32,9 @@ export const snapshotDimensionamentoRoutes = (ds: DataSource): Router => {
   // Buscar último snapshot do hospital
   router.get("/hospital/:hospitalId/ultimo", controller.buscarUltimoSnapshot);
 
+  // Buscar snapshot selecionado do hospital
+  router.get("/hospital/:hospitalId/selecionado", controller.buscarSelecionado);
+
   // Listar snapshots do hospital
   router.get("/hospital/:hospitalId", controller.listarSnapshotsHospital);
 
@@ -54,6 +57,11 @@ export const snapshotDimensionamentoRoutes = (ds: DataSource): Router => {
 
   // Comparar dois snapshots
   router.get("/comparar/:id1/:id2", controller.compararSnapshots);
+
+  // ===== ATUALIZAR SNAPSHOTS =====
+
+  // Alterar status de selecionado
+  router.patch("/:id/selecionado", controller.alterarSelecionado);
 
   // ===== LIMPAR SNAPSHOTS =====
 

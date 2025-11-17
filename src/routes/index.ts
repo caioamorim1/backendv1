@@ -37,6 +37,7 @@ import { snapshotDimensionamentoRoutes } from "./snapshotDimensionamentoRoutes";
 import { HospitalSectorsAggregateRoutes } from "./hospitalSectorsAggregateRoutes";
 import { QualitativeRoutes } from "./QualitativeRoutes";
 import { OccupationAnalysisRoutes } from "./occupationAnalysisRoutes";
+import { ControlePeriodoRoutes } from "./controlePeriodoRoutes";
 
 export const createIndexRouter = (dataSource: DataSource): Router => {
   const router = Router();
@@ -95,6 +96,8 @@ export const createIndexRouter = (dataSource: DataSource): Router => {
 
   router.use("/coletas", ColetaRoutes(dataSource));
   router.use("/dimensionamento", DimensionamentoRoutes(dataSource));
+  // Controle de período por unidade (travamento / intervalo)
+  router.use("/controle-periodo", ControlePeriodoRoutes(dataSource));
 
   // Hospital Sectors (Internation + Assistance)
   router.use("/hospital-sectors", HospitalSectorsRoutes(dataSource));

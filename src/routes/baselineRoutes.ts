@@ -11,6 +11,7 @@ export const BaselineRoutes = (ds: DataSource) => {
   router.post("/", controller.criar);
   router.put("/:id", controller.atualizar);
   router.get("/", controller.listar);
+  router.get("/hospital/:hospitalId", controller.buscarPorHospitalId);
   router.get("/:id", controller.buscarPorId);
   router.delete("/:id", controller.deletar);
   router.patch("/:id/setores/:setorNome/status", controller.alterarStatusSetor);

@@ -6,7 +6,8 @@ export interface SectorOccupationDTO {
   sectorName: string;
   sectorType: "internacao" | "nao_internacao";
   taxaOcupacao: number; // % (0-100+) - Taxa atual baseada em leitos (momento atual)
-  taxaOcupacaoDia: number; // % (0-100+) - Taxa média de ocupação do dia inteiro
+  taxaOcupacaoDia: number; // % (0-100+) - Taxa média de ocupação do período (mês até hoje)
+  taxaOcupacaoHoje: number; // % (0-100+) - Taxa de ocupação específica de hoje
   ocupacaoMaximaAtendivel: number; // % - Ocupação máxima que o quadro atual de profissionais pode atender
   ociosidade: number; // % (calculado: max(0, ocupacaoMaximaAtendivel - taxaOcupacao))
   superlotacao: number; // % (calculado: max(0, taxaOcupacao - ocupacaoMaximaAtendivel))
@@ -19,6 +20,8 @@ export interface SectorOccupationDTO {
   // Dados do quadro de profissionais (para cálculo de ocupação máxima)
   quadroAtualEnfermeiros?: number;
   quadroAtualTecnicos?: number;
+  // Distribuição de classificação dos pacientes
+  distribuicaoClassificacao?: Record<string, number>;
 }
 
 /**
@@ -27,7 +30,8 @@ export interface SectorOccupationDTO {
 export interface OccupationSummaryDTO {
   sectorName: string; // "Global"
   taxaOcupacao: number; // Taxa atual (média ponderada do momento)
-  taxaOcupacaoDia: number; // Taxa média do dia inteiro
+  taxaOcupacaoDia: number; // Taxa média do período (mês até hoje)
+  taxaOcupacaoHoje: number; // Taxa de ocupação específica de hoje
   ocupacaoMaximaAtendivel: number; // Ocupação máxima baseada no quadro
   ociosidade: number;
   superlotacao: number;

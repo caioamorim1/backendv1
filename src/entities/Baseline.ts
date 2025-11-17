@@ -19,6 +19,9 @@ export class Baseline {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
+  @Column({ type: "uuid", nullable: true })
+  hospitalId!: string;
+
   // Owning side: store hospitalId FK on baseline table and expose relation
   @OneToOne(() => Hospital, (hospital) => hospital.baseline, {
     nullable: true,

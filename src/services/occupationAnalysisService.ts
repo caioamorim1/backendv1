@@ -8,6 +8,7 @@ import { calcularProjecao } from "../calculoTaxaOcupacao/calculation";
 import { ProjecaoParams } from "../calculoTaxaOcupacao/interfaces";
 import { DimensionamentoService } from "./dimensionamentoService";
 import { UnidadeInternacao } from "../entities/UnidadeInternacao";
+import { LeitosStatus } from "../entities/LeitosStatus";
 // Parâmetros adicionais serão derivados do Dimensionamento (agregados/tabela)
 
 /**
@@ -35,7 +36,8 @@ export class OccupationAnalysisService {
         dataReferencia ? dataReferencia.toISOString() : "agora"
       }`
     );
-    // Intervalo do mês atual (início do mês até agora)
+
+    // Calcular período (início do mês até data de referência)
     const agora = dataReferencia ? new Date(dataReferencia) : new Date();
     const inicioMes = new Date(
       agora.getFullYear(),
@@ -55,62 +57,60 @@ export class OccupationAnalysisService {
       59,
       999
     );
-    const dataInicioStr = inicioMes.toISOString();
-    const dataFimStr = fimPeriodo.toISOString();
 
-    // Buscar unidade e leitos_status
+    // Formatar datas para passar ao dimensionamento (YYYY-MM-DD)
+    const dataInicioStr = inicioMes.toISOString().split("T")[0];
+    const dataFimStr = fimPeriodo.toISOString().split("T")[0];
+
+    // Buscar unidade
     const unidade = await this.ds.getRepository(UnidadeInternacao).findOne({
       where: { id: unidadeId },
       relations: ["hospital"],
     });
     if (!unidade) throw new Error("Unidade não encontrada");
 
-    const lsRow = await this.ds.query(
-      `SELECT bed_count, evaluated, vacant, inactive FROM public.leitos_status WHERE unidade_id = $1`,
-      [unidadeId]
-    );
-    const bedCount = parseInt(lsRow?.[0]?.bed_count ?? 0) || 0;
-    const avaliados = parseInt(lsRow?.[0]?.evaluated ?? 0) || 0;
-    const vagos = parseInt(lsRow?.[0]?.vacant ?? 0) || 0;
-    const inativos = parseInt(lsRow?.[0]?.inactive ?? 0) || 0;
-    const ocupados = Math.max(0, avaliados - vagos);
-
-    // Média de ocupados no MÊS por hora para esta unidade (usar generate_series para sobreposição correta)
-    const ocupacaoDiaQueryUnit = `
-      WITH horas AS (
-        SELECT generate_series($2::timestamp, $3::timestamp, interval '1 hour') AS hora
-      ),
-      ocupacao_por_hora AS (
-        SELECT 
-          h.hora,
-          COUNT(DISTINCT ho."leitoId") as leitos_ocupados
-        FROM horas h
-        JOIN public.leitos l ON l."unidadeId" = $1
-        LEFT JOIN public.historicos_ocupacao ho
-          ON ho."leitoId" = l.id
-         AND ho.inicio <= h.hora
-         AND (ho.fim IS NULL OR ho.fim > h.hora)
-        GROUP BY h.hora
-      )
-      SELECT AVG(leitos_ocupados) as media_ocupados FROM ocupacao_por_hora`;
-    const occRow = await this.ds.query(ocupacaoDiaQueryUnit, [
+    // ===== USAR DIMENSIONAMENTO COMO FONTE ÚNICA DE DADOS =====
+    const dimService = new DimensionamentoService(this.ds);
+    const dim = await dimService.calcularParaInternacao(
       unidadeId,
       dataInicioStr,
-      dataFimStr,
-    ]);
-    const mediaOcupadosDia =
-      parseFloat(occRow?.[0]?.media_ocupados ?? 0) || ocupados;
-    const taxaOcupacao = bedCount > 0 ? (ocupados / bedCount) * 100 : 0;
-    // Taxa média mensal (mapeada para taxaOcupacaoDia por compatibilidade do DTO)
-    const taxaOcupacaoDia =
-      bedCount > 0 ? (mediaOcupadosDia / bedCount) * 100 : 0;
+      dataFimStr
+    );
 
-    // Montar params para calcularProjecao a partir do Dimensionamento e dos parâmetros da unidade
-    const dimService = new DimensionamentoService(this.ds);
-    const dim = await dimService.calcularParaInternacao(unidadeId);
+    const agregados = (dim as any)?.agregados || {};
     const tabela = Array.isArray((dim as any).tabela)
       ? (dim as any).tabela
       : [];
+
+    // Extrair dados dos agregados do dimensionamento (PERÍODO)
+    const bedCount = Number(agregados?.totalLeitos ?? 0);
+    const vagos = Number(agregados?.leitosVagos ?? 0);
+    const inativos = Number(agregados?.leitosInativos ?? 0);
+
+    // Taxa de ocupação do período (já calculada pelo dimensionamento)
+    const taxaOcupacaoPeriodo = Number(
+      agregados?.taxaOcupacaoPeriodoPercent ?? 0
+    );
+
+    // Buscar dados ATUAIS do dia de hoje na tabela leitos_status
+    const leitosStatusRepo = this.ds.getRepository(LeitosStatus);
+    const leitosStatusHoje = await leitosStatusRepo.findOne({
+      where: { unidade: { id: unidadeId } },
+    });
+
+    // Dados do DIA ATUAL (não do período)
+    const ocupadosHoje = leitosStatusHoje?.evaluated ?? 0;
+    const vagosHoje = leitosStatusHoje?.vacant ?? 0;
+    const inativosHoje = leitosStatusHoje?.inactive ?? 0;
+    const avaliadosHoje = ocupadosHoje + vagosHoje + inativosHoje;
+
+    // Taxa de ocupação atual (instantânea do dia de hoje)
+    const taxaOcupacao = bedCount > 0 ? (ocupadosHoje / bedCount) * 100 : 0;
+
+    // Taxa de ocupação de hoje (específica do dia atual)
+    const taxaOcupacaoHoje = taxaOcupacao;
+
+    // Extrair quadro de profissionais da tabela
     const enfRow = tabela.find((t: any) =>
       (t.cargoNome || "").toLowerCase().includes("enfermeiro")
     );
@@ -129,13 +129,12 @@ export class OccupationAnalysisService {
     const quadroEnf = parseInt(enfRow?.quantidadeAtual ?? 0) || 0;
     const quadroTec = parseInt(tecRow?.quantidadeAtual ?? 0) || 0;
 
-    // Derivar parâmetros do cálculo a partir do resultado do Dimensionamento
-    const agregados = (dim as any)?.agregados || {};
-    const ocupacaoBase = Number(agregados?.taxaOcupacaoMensal ?? 0.6);
+    // Extrair dados para calcular THE e projeção
+    const ocupacaoBase = Number(agregados?.taxaOcupacaoPeriodo ?? 0.6);
     const distribuicao: Record<string, number> =
       agregados?.distribuicaoTotalClassificacao || {};
 
-    // Mesma tabela de horas por classificação usada no DimensionamentoService
+    // Calcular THE (Total de Horas de Enfermagem)
     const horasPorClassificacao: Record<string, number> = {
       MINIMOS: 4,
       INTERMEDIARIOS: 6,
@@ -151,11 +150,12 @@ export class OccupationAnalysisService {
       0
     );
 
-    // Necessários @BASE aproximados pelos valores projetados calculados no dimensionamento
+    // Necessários @BASE (projetados calculados no dimensionamento)
     const enfBase = Number(enfRow?.quantidadeProjetada ?? 0);
     const tecBase = Number(tecRow?.quantidadeProjetada ?? 0);
 
-    let ocupacaoMaximaAtendivel = 100;
+    // Calcular capacidade máxima atendível com o quadro atual
+    let ocupacaoMaximaAtendivel = 0; // Se não houver equipe de enfermagem, capacidade é 0
     try {
       if (enfBase > 0 && tecBase > 0 && theBase > 0) {
         const parametros: ProjecaoParams = {
@@ -179,45 +179,27 @@ export class OccupationAnalysisService {
             ? parametros.quadroAtualTecnicos / resultado.tec100pctFTE
             : 0;
         ocupacaoMaximaAtendivel = resultado.ocupacaoMaximaAtendivel * 100;
+
         console.log("[OCC-ANALYSE] Unidade:", unidade.nome);
         console.log(
-          "  - ocupacaoBase (mês):",
+          "  - Taxa ocupação período (mês):",
+          taxaOcupacaoPeriodo.toFixed(2),
+          "%"
+        );
+        console.log("  - Taxa ocupação atual:", taxaOcupacao.toFixed(2), "%");
+        console.log(
+          "  - Ocupação base (dimensionamento):",
           (ocupacaoBase * 100).toFixed(2),
           "%"
         );
-        console.log("  - THE base (mês):", theBase.toFixed(2));
+        console.log("  - THE base:", theBase.toFixed(2));
+        console.log("  - ENF: atual=", quadroEnf, " necessário@BASE=", enfBase);
+        console.log("  - TEC: atual=", quadroTec, " necessário@BASE=", tecBase);
         console.log(
-          "  - ENF: atual=",
-          quadroEnf,
-          " @BASE=",
-          enfBase,
-          " FTE@100%=",
-          resultado.enf100pctFTE.toFixed(2),
-          " ratio=",
-          (ratioEnf * 100).toFixed(2),
-          "%"
-        );
-        console.log(
-          "  - TEC: atual=",
-          quadroTec,
-          " @BASE=",
-          tecBase,
-          " FTE@100%=",
-          resultado.tec100pctFTE.toFixed(2),
-          " ratio=",
-          (ratioTec * 100).toFixed(2),
-          "%"
-        );
-        console.log(
-          "  - ocupacaoMaximaAtendivel:",
+          "  - Capacidade máxima atendível:",
           ocupacaoMaximaAtendivel.toFixed(2),
           "%"
         );
-        if (Math.abs(ocupacaoMaximaAtendivel - ocupacaoBase * 100) < 0.5) {
-          console.log(
-            "  → Observação: ocupacaoMaximaAtendivel ~= ocupacaoBase pois o quadro atual está próximo do necessário @BASE."
-          );
-        }
       }
     } catch (error) {
       console.warn(
@@ -226,6 +208,7 @@ export class OccupationAnalysisService {
       );
     }
 
+    // Calcular indicadores
     const ociosidade = Math.max(0, ocupacaoMaximaAtendivel - taxaOcupacao);
     const superlotacao = Math.max(0, taxaOcupacao - ocupacaoMaximaAtendivel);
 
@@ -234,18 +217,20 @@ export class OccupationAnalysisService {
       sectorName: unidade.nome,
       sectorType: "internacao",
       taxaOcupacao: parseFloat(taxaOcupacao.toFixed(2)),
-      taxaOcupacaoDia: parseFloat(taxaOcupacaoDia.toFixed(2)),
+      taxaOcupacaoDia: parseFloat(taxaOcupacaoPeriodo.toFixed(2)), // Taxa do período (mês)
+      taxaOcupacaoHoje: parseFloat(taxaOcupacaoHoje.toFixed(2)), // Taxa de hoje
       ocupacaoMaximaAtendivel: parseFloat(ocupacaoMaximaAtendivel.toFixed(2)),
       ociosidade: parseFloat(ociosidade.toFixed(2)),
       superlotacao: parseFloat(superlotacao.toFixed(2)),
       capacidadeProdutiva: parseFloat(ocupacaoMaximaAtendivel.toFixed(2)),
       totalLeitos: bedCount,
-      leitosOcupados: ocupados,
-      leitosVagos: vagos,
-      leitosInativos: inativos,
-      leitosAvaliados: avaliados,
+      leitosOcupados: ocupadosHoje,
+      leitosVagos: vagosHoje,
+      leitosInativos: inativosHoje,
+      leitosAvaliados: avaliadosHoje,
       quadroAtualEnfermeiros: quadroEnf,
       quadroAtualTecnicos: quadroTec,
+      distribuicaoClassificacao: distribuicao,
     };
     const t1 = Date.now();
     console.log(
@@ -345,6 +330,15 @@ export class OccupationAnalysisService {
       }, 0);
     }
 
+    // Taxa de ocupação de hoje (média ponderada)
+    let taxaOcupacaoHoje = 0;
+    if (totalLeitos > 0) {
+      taxaOcupacaoHoje = sectors.reduce((sum, s) => {
+        const peso = s.totalLeitos / totalLeitos;
+        return sum + s.taxaOcupacaoHoje * peso;
+      }, 0);
+    }
+
     // Ocupação máxima atendível ponderada pela capacidade de cada setor
     let ocupacaoMaximaAtendivel = 0;
     if (totalLeitos > 0) {
@@ -362,6 +356,7 @@ export class OccupationAnalysisService {
       sectorName: "Global",
       taxaOcupacao: parseFloat(taxaOcupacao.toFixed(2)),
       taxaOcupacaoDia: parseFloat(taxaOcupacaoDia.toFixed(2)),
+      taxaOcupacaoHoje: parseFloat(taxaOcupacaoHoje.toFixed(2)),
       ocupacaoMaximaAtendivel: parseFloat(ocupacaoMaximaAtendivel.toFixed(2)),
       ociosidade: parseFloat(ociosidade.toFixed(2)),
       superlotacao: parseFloat(superlotacao.toFixed(2)),

@@ -54,6 +54,13 @@ export class HistoricoOcupacao {
   @Column({ type: "varchar", length: 180, nullable: true })
   autorNome?: string | null;
 
+  // Snapshot de quantidade de leitos vagos e inativos no momento da avaliação
+  @Column({ type: "int", nullable: true })
+  leitosVagos?: number | null;
+
+  @Column({ type: "int", nullable: true })
+  leitosInativos?: number | null;
+
   @Column({ type: "timestamptz" })
   inicio!: Date;
 
