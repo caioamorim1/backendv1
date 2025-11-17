@@ -4,6 +4,7 @@ import {
   CreateQuestionarioDTO,
   UpdateQuestionarioDTO,
 } from "../dto/questionario.dto";
+import crypto from "crypto";
 
 export class QuestionarioRepository {
   private repository: Repository<Questionario>;
