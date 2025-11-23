@@ -234,4 +234,51 @@ export class QualitativeRepository {
       hospital_id || null,
     ]);
   }
+
+  async listarQuestionariosCompletosComCategorias(
+    hospitalId: string
+  ): Promise<any[]> {
+    const query = `
+      SELECT 
+        qe.id AS evaluation_id,
+        qe.title,
+        qe.evaluator,
+        qe.date,
+        qe.status,
+        qe.sector_id,
+        qe.calculate_rate AS total_score,
+        qq.id AS questionnaire_id,
+        qq.name AS questionnaire_name,
+        (
+          SELECT jsonb_agg(
+            jsonb_build_object(
+              'category_id', qc.id,
+              'category_name', qc.name,
+              'category_meta', qc.meta,
+              'category_score', (
+                SELECT COALESCE(SUM((ans->>'score')::numeric), 0)
+                FROM jsonb_array_elements(qe.answers) AS ans
+                WHERE (ans->>'categoryId')::int = qc.id
+              )
+            ) ORDER BY qc.id
+          )
+          FROM (
+            SELECT DISTINCT (q->>'categoryId')::int AS cat_id
+            FROM jsonb_array_elements(qq.questions) AS q
+            WHERE q->>'categoryId' IS NOT NULL
+          ) AS unique_cats
+          JOIN qualitative_category qc ON qc.id = unique_cats.cat_id AND qc.deleted_at IS NULL
+        ) AS categories
+      FROM qualitative_evaluation qe
+      JOIN qualitative_questionnaire qq ON qe.questionnaire_id = qq.id
+      LEFT JOIN qualitative_projection qp ON qp.unidade_id = qe.sector_id
+      WHERE qe.status = 'completed'
+        AND qe.deleted_at IS NULL
+        AND qp.hospital_id = $1
+      ORDER BY qe.date DESC
+    `;
+
+    const result = await this.ds.query(query, [hospitalId]);
+    return result;
+  }
 }
