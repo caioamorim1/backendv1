@@ -28,5 +28,8 @@ export const QualitativeRoutes = (ds: DataSource): Router => {
   router.delete("/evaluations/:id", ctrl.excluirAvaliacao);
   router.delete("/evaluations/:sectorid", ctrl.excluirAvaliacao);
 
+  // Questionários completos (100%) com categorias por hospital
+  router.get("/completed-with-categories", ctrl.listarQuestionariosCompletosComCategorias);
+
   return router;
 };

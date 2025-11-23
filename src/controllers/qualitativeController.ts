@@ -330,4 +330,28 @@ export class QualitativeController {
       return res.status(500).json({ error: "Erro ao excluir avaliação." });
     }
   };
+  
+  listarQuestionariosCompletosComCategorias = async (
+    req: Request,
+    res: Response
+  ) => {
+    const hospitalId = req.query.hospitalId as string;
+
+    if (!hospitalId) {
+      return res
+        .status(400)
+        .json({ error: "ID do hospital é obrigatório." });
+    }
+
+    try {
+      const result =
+        await this.repo.listarQuestionariosCompletosComCategorias(hospitalId);
+      return res.json(result);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({
+        error: "Erro ao listar questionários completos com categorias.",
+      });
+    }
+  };
 }
