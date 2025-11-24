@@ -399,4 +399,45 @@ export class SnapshotDimensionamentoController {
         .json({ error: "Erro ao agregar snapshots (all)", details: message });
     }
   };
+
+  /**
+   * GET /snapshot/selected-by-group?tipo=rede&id=uuid
+   * GET /snapshot/selected-by-group?tipo=grupo&id=uuid
+   * GET /snapshot/selected-by-group?tipo=regiao&id=uuid
+   * Buscar snapshots selecionados de todos os hospitais de uma rede, grupo ou região
+   */
+  buscarSnapshotsSelecionadosPorGrupo = async (
+    req: Request,
+    res: Response
+  ) => {
+    try {
+      const { tipo, id } = req.query;
+
+      if (!tipo || !id) {
+        return res.status(400).json({
+          error: "Parâmetros 'tipo' e 'id' são obrigatórios",
+        });
+      }
+
+      if (!["rede", "grupo", "regiao"].includes(tipo as string)) {
+        return res.status(400).json({
+          error: "Tipo deve ser 'rede', 'grupo' ou 'regiao'",
+        });
+      }
+
+      const snapshots = await this.service.buscarSnapshotsSelecionadosPorGrupo(
+        tipo as "rede" | "grupo" | "regiao",
+        id as string
+      );
+
+      res.json(snapshots);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro desconhecido";
+      res.status(500).json({
+        error: "Erro ao buscar snapshots selecionados por grupo",
+        details: message,
+      });
+    }
+  };
 }

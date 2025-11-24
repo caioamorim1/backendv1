@@ -28,13 +28,16 @@ export class ColaboradorRepository {
       id: data.hospitalId,
     });
 
-    // CPF único
-    const existing = await this.repo.findOne({ where: { cpf: data.cpf } });
-    if (existing) {
-      throw new Error("CPF já cadastrado");
+    // CPF único (se fornecido)
+    if (data.cpf) {
+      const existing = await this.repo.findOne({ where: { cpf: data.cpf } });
+      if (existing) {
+        throw new Error("CPF já cadastrado");
+      }
     }
 
-    const initialPlain = data.cpf;
+    // Senha padrão: CPF se fornecido, senão o email
+    const initialPlain = data.cpf || data.email;
     const senhaHash = await bcrypt.hash(initialPlain, 10);
 
     const novo = this.repo.create({
