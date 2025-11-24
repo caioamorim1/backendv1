@@ -491,6 +491,64 @@ export class SitioFuncionalRepository {
           // create new association (SEM validação de disponibilidade)
           console.log(`➕ Criando nova associação CargoSitio`);
 
+          // Primeiro, tentar encontrar CargoUnidade pelo ID
+          let cargoUnidadeExiste = await cargoUnidadeRepo.findOne({
+            where: { id: cargoUnidadeId },
+          });
+
+          if (!cargoUnidadeExiste) {
+            console.log(
+              `⚠️ CargoUnidade ${cargoUnidadeId} não existe. Interpretando como cargoId...`
+            );
+
+            // O frontend está enviando o cargoId como "cargoUnidadeId"
+            const cargoIdParaCriar = cargoUnidadeId;
+            
+            console.log(`✅ Criando CargoUnidade automaticamente com cargo ${cargoIdParaCriar}`);
+
+            // Buscar o hospital através da unidade
+            const unidadeComHospital = await manager
+              .getRepository(UnidadeNaoInternacao)
+              .findOne({
+                where: { id: existente.unidade?.id },
+                relations: ["hospital"],
+              });
+
+            if (!unidadeComHospital?.hospital) {
+              throw new Error("Hospital da unidade não encontrado");
+            }
+
+            // Valida se o cargo existe no hospital
+            const cargoRepo = manager.getRepository("Cargo");
+            const cargoExiste = await cargoRepo.findOne({
+              where: {
+                id: cargoIdParaCriar,
+                hospitalId: unidadeComHospital.hospital.id,
+              },
+            });
+
+            if (!cargoExiste) {
+              throw new Error(
+                `Cargo ${cargoIdParaCriar} não encontrado no hospital. Certifique-se de que o cargo está cadastrado.`
+              );
+            }
+
+            // Cria CargoUnidade automaticamente
+            const novoCU = new CargoUnidade();
+            novoCU.cargoId = cargoIdParaCriar;
+            novoCU.unidadeNaoInternacaoId = existente.unidade?.id;
+            novoCU.quantidade_funcionarios = 0;
+
+            cargoUnidadeExiste = await cargoUnidadeRepo.save(novoCU);
+            cargoUnidadeId = cargoUnidadeExiste.id;
+
+            console.log(
+              `✅ CargoUnidade criado com sucesso: ${cargoUnidadeId}`
+            );
+          } else {
+            console.log(`✅ CargoUnidade ${cargoUnidadeId} validado com sucesso`);
+          }
+
           // Calcular total se vier por turnos
           let quantidadeTotal = c.quantidade_funcionarios ?? 0;
           const temTurnos =

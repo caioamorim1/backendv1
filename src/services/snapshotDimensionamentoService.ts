@@ -928,4 +928,58 @@ export class SnapshotDimensionamentoService {
 
     return diferencas;
   }
+
+  /**
+   * Buscar snapshots selecionados de todos os hospitais de uma rede, grupo ou região
+   */
+  async buscarSnapshotsSelecionadosPorGrupo(
+    tipo: "rede" | "grupo" | "regiao",
+    id: string
+  ): Promise<any[]> {
+    console.log(
+      `\n🔍 Buscando snapshots selecionados por ${tipo}: ${id}\n`
+    );
+
+    // Buscar hospitais do grupo
+    const hospitalRepo = this.ds.getRepository("Hospital");
+    
+    let hospitais: any[];
+    
+    if (tipo === "rede") {
+      hospitais = await hospitalRepo.find({
+        where: { rede: { id } },
+        relations: ["rede"],
+      });
+    } else if (tipo === "grupo") {
+      hospitais = await hospitalRepo.find({
+        where: { grupo: { id } },
+        relations: ["grupo"],
+      });
+    } else {
+      hospitais = await hospitalRepo.find({
+        where: { regiao: { id } },
+        relations: ["regiao"],
+      });
+    }
+
+    console.log(`📋 Encontrados ${hospitais.length} hospitais no ${tipo}`);
+
+    if (hospitais.length === 0) {
+      return [];
+    }
+
+    // Buscar snapshot selecionado para cada hospital
+    const hospitalIds = hospitais.map((h: any) => h.id);
+
+    const snapshots = await this.snapshotRepo.buscarSelecionadosPorHospitais(
+      hospitalIds
+    );
+
+    console.log(`✅ Encontrados ${snapshots.length} snapshots selecionados\n`);
+
+    return snapshots.map((snapshot: SnapshotDimensionamento) => ({
+      ...snapshot,
+      hospital: hospitais.find((h: any) => h.id === snapshot.hospitalId),
+    }));
+  }
 }

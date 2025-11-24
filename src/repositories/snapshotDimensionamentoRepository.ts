@@ -1,4 +1,4 @@
-import { DataSource, Repository } from "typeorm";
+import { DataSource, Repository, In } from "typeorm";
 import { SnapshotDimensionamento } from "../entities/SnapshotDimensionamento";
 
 export class SnapshotDimensionamentoRepository {
@@ -346,6 +346,26 @@ export class SnapshotDimensionamentoRepository {
     return await this.repo.findOne({
       where: {
         hospitalId,
+        escopo: "HOSPITAL",
+        selecionado: true,
+      },
+      order: { dataHora: "DESC" },
+    });
+  }
+
+  /**
+   * Buscar snapshots selecionados de múltiplos hospitais
+   */
+  async buscarSelecionadosPorHospitais(
+    hospitalIds: string[]
+  ): Promise<SnapshotDimensionamento[]> {
+    if (hospitalIds.length === 0) {
+      return [];
+    }
+
+    return await this.repo.find({
+      where: {
+        hospitalId: In(hospitalIds),
         escopo: "HOSPITAL",
         selecionado: true,
       },
