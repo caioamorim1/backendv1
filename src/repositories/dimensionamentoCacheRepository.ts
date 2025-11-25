@@ -195,22 +195,6 @@ export class DimensionamentoCacheRepository {
   }
 
   /**
-   * Limpar caches expirados (manutenção)
-   */
-  async limparCachesExpirados(validadeMinutos: number = 30): Promise<number> {
-    const dataLimite = new Date();
-    dataLimite.setMinutes(dataLimite.getMinutes() - validadeMinutos);
-
-    const result = await this.repo.delete({
-      updatedAt: LessThan(dataLimite),
-    });
-
-    const count = result.affected ?? 0;
-    console.log(`🧹 [CACHE CLEANUP] ${count} caches expirados removidos`);
-    return count;
-  }
-
-  /**
    * Obter estatísticas do cache
    */
   async obterEstatisticas(): Promise<{
@@ -247,5 +231,60 @@ export class DimensionamentoCacheRepository {
         : 0,
       cachesMaisAntigos: cacheMaisAntigo?.updatedAt || null,
     };
+  }
+
+  /**
+   * Limpar cache de uma unidade específica
+   */
+  async limparCachePorUnidade(unidadeId: string): Promise<number> {
+    const result = await this.repo.delete({ unidadeId });
+    console.log(
+      `🗑️ [CACHE CLEAR] Unidade ${unidadeId} - ${
+        result.affected || 0
+      } caches removidos`
+    );
+    return result.affected || 0;
+  }
+
+  /**
+   * Limpar cache de um hospital específico
+   */
+  async limparCachePorHospital(hospitalId: string): Promise<number> {
+    const result = await this.repo.delete({ hospitalId });
+    console.log(
+      `🗑️ [CACHE CLEAR] Hospital ${hospitalId} - ${
+        result.affected || 0
+      } caches removidos`
+    );
+    return result.affected || 0;
+  }
+
+  /**
+   * Limpar todo o cache
+   */
+  async limparTodoCache(): Promise<number> {
+    const result = await this.repo.delete({});
+    console.log(
+      `🗑️ [CACHE CLEAR ALL] ${result.affected || 0} caches removidos`
+    );
+    return result.affected || 0;
+  }
+
+  /**
+   * Limpar caches expirados
+   */
+  async limparCachesExpirados(validadeMinutos: number = 30): Promise<number> {
+    const dataLimite = new Date();
+    dataLimite.setMinutes(dataLimite.getMinutes() - validadeMinutos);
+
+    const result = await this.repo.delete({
+      updatedAt: LessThan(dataLimite),
+    });
+    console.log(
+      `🗑️ [CACHE CLEAR EXPIRED] ${
+        result.affected || 0
+      } caches expirados removidos`
+    );
+    return result.affected || 0;
   }
 }

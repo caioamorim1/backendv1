@@ -11,8 +11,13 @@ export class HospitalSectorsNetworkRepository {
   async getAggregatedSectorsByRede(
     redeId: string
   ): Promise<HospitalSectorsDTO> {
+    console.log(`🌐 [NETWORK] Buscando setores agregados para rede: ${redeId}`);
     const internation = await this.getAggregatedInternationByRede(redeId);
     const assistance = await this.getAggregatedAssistanceByRede(redeId);
+
+    console.log(
+      `✅ [NETWORK] Rede ${redeId}: ${internation.length} internação, ${assistance.length} assistência`
+    );
 
     return {
       id: `hospital-sectors-rede-${redeId}`,
@@ -50,6 +55,10 @@ export class HospitalSectorsNetworkRepository {
   private async getAggregatedInternationByRede(
     redeId: string
   ): Promise<InternationSectorDTO[]> {
+    console.log(
+      `📊 [INTERNACAO REDE] Buscando unidades de internação para rede ${redeId}...`
+    );
+
     const query = `
       SELECT 
         uni.nome AS "name",
@@ -62,7 +71,7 @@ export class HospitalSectorsNetworkRepository {
             * COALESCE(cuni.quantidade_funcionarios, 0)
           )
         ) AS "costAmount",
-        SUM(COALESCE(ls.bed_count, 0)) AS "bedCount",
+        SUM(COALESCE(ls.bed_count, (SELECT COUNT(*) FROM public.leitos l WHERE l."unidadeId" = uni.id), 0)) AS "bedCount",
         JSON_BUILD_OBJECT(
           'minimumCare',      SUM(COALESCE(ls.minimum_care, 0)),
           'intermediateCare', SUM(COALESCE(ls.intermediate_care, 0)),
@@ -73,7 +82,12 @@ export class HospitalSectorsNetworkRepository {
         JSON_BUILD_OBJECT(
           'evaluated', SUM(COALESCE(ls.evaluated, 0)),
           'vacant',    SUM(COALESCE(ls.vacant, 0)),
-          'inactive',  SUM(COALESCE(ls.inactive, 0))
+          'inactive',  SUM(COALESCE(ls.inactive, 0)),
+          'pending',   SUM(COALESCE(ls.bed_count, (SELECT COUNT(*) FROM public.leitos l WHERE l."unidadeId" = uni.id), 0)) - (
+            SUM(COALESCE(ls.evaluated, 0)) + 
+            SUM(COALESCE(ls.vacant, 0)) + 
+            SUM(COALESCE(ls.inactive, 0))
+          )
         ) AS "bedStatus",
         COALESCE(
           (
@@ -107,13 +121,27 @@ export class HospitalSectorsNetworkRepository {
       INNER JOIN public.hospitais h ON h.id = uni."hospitalId"
       LEFT JOIN public.cargos_unidade cuni ON cuni.unidade_id = uni.id
       LEFT JOIN public.cargo c ON c.id = cuni.cargo_id
-      LEFT JOIN public.leitos_status ls ON ls.unidade_id = uni.id
+      LEFT JOIN public.historicos_leitos_status ls ON ls.unidade_id = uni.id 
+        AND DATE(ls.data) = CURRENT_DATE
       WHERE h."redeId" = $1
       GROUP BY uni.nome, uni.descricao, uni.horas_extra_reais
       ORDER BY uni.nome
     `;
 
-    return await this.ds.query(query, [redeId]);
+    const result = await this.ds.query(query, [redeId]);
+    console.log(
+      `📋 [INTERNACAO REDE] Encontradas ${result.length} unidades de internação`
+    );
+    if (result.length > 0) {
+      console.log(`   Primeira unidade:`, {
+        name: result[0].name,
+        bedCount: result[0].bedCount,
+        careLevel: result[0].careLevel,
+        bedStatus: result[0].bedStatus,
+      });
+    }
+
+    return result;
   }
 
   private async getAggregatedInternationByGrupo(
@@ -131,7 +159,7 @@ export class HospitalSectorsNetworkRepository {
             * COALESCE(cuni.quantidade_funcionarios, 0)
           )
         ) AS "costAmount",
-        SUM(COALESCE(ls.bed_count, 0)) AS "bedCount",
+        SUM(COALESCE(ls.bed_count, (SELECT COUNT(*) FROM public.leitos l WHERE l."unidadeId" = uni.id), 0)) AS "bedCount",
         JSON_BUILD_OBJECT(
           'minimumCare',      SUM(COALESCE(ls.minimum_care, 0)),
           'intermediateCare', SUM(COALESCE(ls.intermediate_care, 0)),
@@ -142,7 +170,12 @@ export class HospitalSectorsNetworkRepository {
         JSON_BUILD_OBJECT(
           'evaluated', SUM(COALESCE(ls.evaluated, 0)),
           'vacant',    SUM(COALESCE(ls.vacant, 0)),
-          'inactive',  SUM(COALESCE(ls.inactive, 0))
+          'inactive',  SUM(COALESCE(ls.inactive, 0)),
+          'pending',   SUM(COALESCE(ls.bed_count, (SELECT COUNT(*) FROM public.leitos l WHERE l."unidadeId" = uni.id), 0)) - (
+            SUM(COALESCE(ls.evaluated, 0)) + 
+            SUM(COALESCE(ls.vacant, 0)) + 
+            SUM(COALESCE(ls.inactive, 0))
+          )
         ) AS "bedStatus",
         COALESCE(
           (
@@ -176,7 +209,8 @@ export class HospitalSectorsNetworkRepository {
       INNER JOIN public.hospitais h ON h.id = uni."hospitalId"
       LEFT JOIN public.cargos_unidade cuni ON cuni.unidade_id = uni.id
       LEFT JOIN public.cargo c ON c.id = cuni.cargo_id
-      LEFT JOIN public.leitos_status ls ON ls.unidade_id = uni.id
+      LEFT JOIN public.historicos_leitos_status ls ON ls.unidade_id = uni.id 
+        AND DATE(ls.data) = CURRENT_DATE
       WHERE h."grupoId" = $1
       GROUP BY uni.nome, uni.descricao, uni.horas_extra_reais
       ORDER BY uni.nome
@@ -200,7 +234,7 @@ export class HospitalSectorsNetworkRepository {
             * COALESCE(cuni.quantidade_funcionarios, 0)
           )
         ) AS "costAmount",
-        SUM(COALESCE(ls.bed_count, 0)) AS "bedCount",
+        SUM(COALESCE(ls.bed_count, (SELECT COUNT(*) FROM public.leitos l WHERE l."unidadeId" = uni.id), 0)) AS "bedCount",
         JSON_BUILD_OBJECT(
           'minimumCare',      SUM(COALESCE(ls.minimum_care, 0)),
           'intermediateCare', SUM(COALESCE(ls.intermediate_care, 0)),
@@ -211,7 +245,12 @@ export class HospitalSectorsNetworkRepository {
         JSON_BUILD_OBJECT(
           'evaluated', SUM(COALESCE(ls.evaluated, 0)),
           'vacant',    SUM(COALESCE(ls.vacant, 0)),
-          'inactive',  SUM(COALESCE(ls.inactive, 0))
+          'inactive',  SUM(COALESCE(ls.inactive, 0)),
+          'pending',   SUM(COALESCE(ls.bed_count, (SELECT COUNT(*) FROM public.leitos l WHERE l."unidadeId" = uni.id), 0)) - (
+            SUM(COALESCE(ls.evaluated, 0)) + 
+            SUM(COALESCE(ls.vacant, 0)) + 
+            SUM(COALESCE(ls.inactive, 0))
+          )
         ) AS "bedStatus",
         COALESCE(
           (
@@ -245,7 +284,8 @@ export class HospitalSectorsNetworkRepository {
       INNER JOIN public.hospitais h ON h.id = uni."hospitalId"
       LEFT JOIN public.cargos_unidade cuni ON cuni.unidade_id = uni.id
       LEFT JOIN public.cargo c ON c.id = cuni.cargo_id
-      LEFT JOIN public.leitos_status ls ON ls.unidade_id = uni.id
+      LEFT JOIN public.historicos_leitos_status ls ON ls.unidade_id = uni.id 
+        AND DATE(ls.data) = CURRENT_DATE
       WHERE h."regiaoId" = $1
       GROUP BY uni.nome, uni.descricao, uni.horas_extra_reais
       ORDER BY uni.nome
@@ -257,11 +297,19 @@ export class HospitalSectorsNetworkRepository {
   private async getAggregatedAssistanceByRede(
     redeId: string
   ): Promise<AssistanceSectorDTO[]> {
+    console.log(
+      `🏥 [ASSISTENCIA REDE] Buscando unidades de assistência para rede ${redeId}...`
+    );
+
     // Buscar todos os hospitais da rede
     const hospitalsQuery = `
       SELECT id FROM public.hospitais WHERE "redeId" = $1
     `;
     const hospitals = await this.ds.query(hospitalsQuery, [redeId]);
+
+    console.log(
+      `🏢 [ASSISTENCIA REDE] Encontrados ${hospitals.length} hospitais na rede`
+    );
 
     if (hospitals.length === 0) {
       return [];
@@ -385,7 +433,19 @@ export class HospitalSectorsNetworkRepository {
       }
     }
 
-    return Array.from(aggregatedMap.values());
+    const result = Array.from(aggregatedMap.values());
+    console.log(
+      `✅ [ASSISTENCIA REDE] ${result.length} unidades após agregação`
+    );
+    if (result.length > 0) {
+      console.log(`   Primeira unidade:`, {
+        name: result[0].name,
+        costAmount: result[0].costAmount,
+        staffCount: result[0].staff?.length || 0,
+      });
+    }
+
+    return result;
   }
 
   private async getAggregatedAssistanceByGrupo(

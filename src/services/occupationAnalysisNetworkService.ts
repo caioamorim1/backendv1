@@ -329,8 +329,9 @@ export class OccupationAnalysisNetworkService {
       }, 0);
     }
 
-    const ociosidade = Math.max(0, ocupacaoMaximaAtendivel - taxaOcupacao);
-    const superlotacao = Math.max(0, taxaOcupacao - ocupacaoMaximaAtendivel);
+    // Ociosidade e superlotação baseadas em taxaOcupacaoHoje (histórico do dia)
+    const ociosidade = Math.max(0, ocupacaoMaximaAtendivel - taxaOcupacaoHoje);
+    const superlotacao = Math.max(0, taxaOcupacaoHoje - ocupacaoMaximaAtendivel);
 
     return {
       sectorName: "Global",

@@ -9,6 +9,7 @@ import { ProjecaoParams } from "../calculoTaxaOcupacao/interfaces";
 import { DimensionamentoService } from "./dimensionamentoService";
 import { UnidadeInternacao } from "../entities/UnidadeInternacao";
 import { LeitosStatus } from "../entities/LeitosStatus";
+import { HistoricoLeitosStatus } from "../entities/HistoricoLeitosStatus";
 // Parâmetros adicionais serão derivados do Dimensionamento (agregados/tabela)
 
 /**
@@ -92,7 +93,7 @@ export class OccupationAnalysisService {
       agregados?.taxaOcupacaoPeriodoPercent ?? 0
     );
 
-    // Buscar dados ATUAIS do dia de hoje na tabela leitos_status
+    // Buscar dados ATUAIS do dia de hoje na tabela leitos_status (para taxaOcupacao)
     const leitosStatusRepo = this.ds.getRepository(LeitosStatus);
     const leitosStatusHoje = await leitosStatusRepo.findOne({
       where: { unidade: { id: unidadeId } },
@@ -107,8 +108,25 @@ export class OccupationAnalysisService {
     // Taxa de ocupação atual (instantânea do dia de hoje)
     const taxaOcupacao = bedCount > 0 ? (ocupadosHoje / bedCount) * 100 : 0;
 
-    // Taxa de ocupação de hoje (específica do dia atual)
-    const taxaOcupacaoHoje = taxaOcupacao;
+    // Buscar taxaOcupacaoHoje do histórico (dados de hoje na tabela historicos_leitos_status)
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const amanha = new Date(hoje);
+    amanha.setDate(amanha.getDate() + 1);
+
+    const historicoHojeRepo = this.ds.getRepository(HistoricoLeitosStatus);
+    const historicoHoje = await historicoHojeRepo
+      .createQueryBuilder("h")
+      .where("h.unidade_id = :unidadeId", { unidadeId })
+      .andWhere("DATE(h.data) = CURRENT_DATE")
+      .getOne();
+
+    // Taxa de ocupação de hoje do histórico
+    let taxaOcupacaoHoje = 0;
+    if (historicoHoje && historicoHoje.bedCount > 0) {
+      taxaOcupacaoHoje = (historicoHoje.evaluated / historicoHoje.bedCount) * 100;
+    }
+    // Se não houver registro no histórico para hoje, taxaOcupacaoHoje = 0
 
     // Extrair quadro de profissionais da tabela
     const enfRow = tabela.find((t: any) =>
@@ -208,9 +226,9 @@ export class OccupationAnalysisService {
       );
     }
 
-    // Calcular indicadores
-    const ociosidade = Math.max(0, ocupacaoMaximaAtendivel - taxaOcupacao);
-    const superlotacao = Math.max(0, taxaOcupacao - ocupacaoMaximaAtendivel);
+    // Calcular indicadores usando taxaOcupacaoHoje (histórico do dia)
+    const ociosidade = Math.max(0, ocupacaoMaximaAtendivel - taxaOcupacaoHoje);
+    const superlotacao = Math.max(0, taxaOcupacaoHoje - ocupacaoMaximaAtendivel);
 
     const out: SectorOccupationDTO = {
       sectorId: unidade.id,
@@ -348,9 +366,9 @@ export class OccupationAnalysisService {
       }, 0);
     }
 
-    // Ociosidade e superlotação baseadas na ocupação máxima atendível
-    const ociosidade = Math.max(0, ocupacaoMaximaAtendivel - taxaOcupacao);
-    const superlotacao = Math.max(0, taxaOcupacao - ocupacaoMaximaAtendivel);
+    // Ociosidade e superlotação baseadas em taxaOcupacaoHoje (histórico do dia)
+    const ociosidade = Math.max(0, ocupacaoMaximaAtendivel - taxaOcupacaoHoje);
+    const superlotacao = Math.max(0, taxaOcupacaoHoje - ocupacaoMaximaAtendivel);
 
     return {
       sectorName: "Global",

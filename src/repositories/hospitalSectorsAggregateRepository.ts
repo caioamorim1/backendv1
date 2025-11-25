@@ -1793,6 +1793,25 @@ export class HospitalSectorsAggregateRepository {
       projNaoRepo.find({ where: { hospitalId } }),
     ]);
 
+    console.log(
+      `📋 [PROJETADO FINAL] Internação: ${projIntRows.length} registros encontrados`
+    );
+    console.log(
+      `📋 [PROJETADO FINAL] Não-Internação: ${projNaoRows.length} registros encontrados`
+    );
+
+    if (projNaoRows.length > 0) {
+      console.log(
+        `🔍 [PROJETADO FINAL NAO INTERNACAO] Detalhes:`,
+        projNaoRows.map((r) => ({
+          unidadeId: r.unidadeId,
+          sitioId: r.sitioId,
+          cargoId: r.cargoId,
+          projetadoFinal: r.projetadoFinal,
+        }))
+      );
+    }
+
     // Buscar nomes de cargos para mapear cargoId -> role (nome)
     const cargoIds = Array.from(
       new Set([
@@ -1809,6 +1828,30 @@ export class HospitalSectorsAggregateRepository {
         .select(["c.id", "c.nome"])
         .getMany();
       for (const c of cargos) cargoNomeMap.set(c.id, c.nome);
+      console.log(`🏷️  Carregados ${cargos.length} nomes de cargos no cache`);
+    }
+
+    // Buscar custos dos cargos (salário + adicionais_tributos)
+    const cargoCustoMap = new Map<string, number>();
+    if (cargoIds.length > 0) {
+      const cargosComCusto = await this.ds
+        .getRepository(Cargo)
+        .createQueryBuilder("c")
+        .where("c.id IN (:...ids)", { ids: cargoIds })
+        .select([
+          "c.id as id",
+          `COALESCE(
+            NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0
+          ) + COALESCE(
+            NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0
+          ) as custoTotal`,
+        ])
+        .getRawMany();
+
+      for (const cargo of cargosComCusto) {
+        cargoCustoMap.set(cargo.id, parseFloat(cargo.custototal) || 0);
+      }
+      console.log(`💰 Carregados custos de ${cargoCustoMap.size} cargos`);
     }
 
     // Internação: unidadeId -> (roleLower -> qty)
@@ -1822,10 +1865,10 @@ export class HospitalSectorsAggregateRepository {
       overrideIntByUnitRole.get(r.unidadeId)!.set(role, r.projetadoFinal);
     }
 
-    // Não-Internação: unidadeId -> sitioId -> (roleLower -> qty)
+    // Não-Internação: unidadeId -> sitioId -> (roleLower -> {qty, cargoId})
     const overrideNaoByUnitSitioRole = new Map<
       string,
-      Map<string, Map<string, number>>
+      Map<string, Map<string, { qty: number; cargoId: string }>>
     >();
     for (const r of projNaoRows) {
       const role = (cargoNomeMap.get(r.cargoId) || "").toLowerCase();
@@ -1835,101 +1878,12 @@ export class HospitalSectorsAggregateRepository {
       }
       const bySitio = overrideNaoByUnitSitioRole.get(r.unidadeId)!;
       if (!bySitio.has(r.sitioId)) bySitio.set(r.sitioId, new Map());
-      bySitio.get(r.sitioId)!.set(role, r.projetadoFinal);
+      bySitio
+        .get(r.sitioId)!
+        .set(role, { qty: r.projetadoFinal, cargoId: r.cargoId });
     }
 
-    // --- NOVO: Pré-buscar caches válidos em batch ---
-    const intlUnitIds = Array.from(
-      new Set(internationSectors.map((r: any) => r.unit_id).filter(Boolean))
-    ) as string[];
-    const assistUnitIds = Array.from(
-      new Set(assistanceSectors.map((r: any) => r.unit_id).filter(Boolean))
-    ) as string[];
-
-    // Buscar caches válidos para todas as unidades de uma vez
-    const [cachesInternacao, cachesAssistencia] = await Promise.all([
-      this.cacheRepo.buscarCachesValidosBatch(
-        intlUnitIds.map((id) => ({
-          unidadeId: id,
-          tipoUnidade: "INTERNACAO" as const,
-        })),
-        this.CACHE_VALIDITY_MINUTES
-      ),
-      this.cacheRepo.buscarCachesValidosBatch(
-        assistUnitIds.map((id) => ({
-          unidadeId: id,
-          tipoUnidade: "NAO_INTERNACAO" as const,
-        })),
-        this.CACHE_VALIDITY_MINUTES
-      ),
-    ]);
-
-    // Identificar quais unidades precisam calcular (não estão no cache)
-    const intlUnitsToCalculate = intlUnitIds.filter(
-      (id) => !cachesInternacao.has(id)
-    );
-    const assistUnitsToCalculate = assistUnitIds.filter(
-      (id) => !cachesAssistencia.has(id)
-    );
-
-    console.log(
-      `📊 [CACHE STATS] Internação: ${cachesInternacao.size}/${intlUnitIds.length} cache hits | ` +
-        `Assistência: ${cachesAssistencia.size}/${assistUnitIds.length} cache hits`
-    );
-
-    // Calcular dimensionamentos faltantes em paralelo (batches de 6)
-    const batchCalculate = async (
-      ids: string[],
-      tipoUnidade: "INTERNACAO" | "NAO_INTERNACAO",
-      batchSize = 6
-    ) => {
-      const map = new Map<string, any>();
-      for (let i = 0; i < ids.length; i += batchSize) {
-        const batch = ids.slice(i, i + batchSize);
-        const promises = batch.map(async (id) => {
-          try {
-            const resultado = await this.calcularDimensionamentoComCache(
-              hospitalId,
-              id,
-              tipoUnidade,
-              dimService
-            );
-            return { id, res: resultado };
-          } catch (err) {
-            console.error(`❌ Erro ao calcular ${tipoUnidade} ${id}:`, err);
-            return { id, res: null, err };
-          }
-        });
-        const results = await Promise.all(promises);
-        for (const r of results) {
-          map.set(r.id, r.res ?? null);
-        }
-      }
-      return map;
-    };
-
-    const [dimCalculadasInternacao, dimCalculadasAssistencia] =
-      await Promise.all([
-        batchCalculate(intlUnitsToCalculate, "INTERNACAO"),
-        batchCalculate(assistUnitsToCalculate, "NAO_INTERNACAO"),
-      ]);
-
-    // Combinar caches com cálculos novos
-    const internationDimMap = new Map<string, any>();
-    for (const [id, cache] of cachesInternacao) {
-      internationDimMap.set(id, cache.dados);
-    }
-    for (const [id, dim] of dimCalculadasInternacao) {
-      internationDimMap.set(id, dim);
-    }
-
-    const assistanceDimMap = new Map<string, any>();
-    for (const [id, cache] of cachesAssistencia) {
-      assistanceDimMap.set(id, cache.dados);
-    }
-    for (const [id, dim] of dimCalculadasAssistencia) {
-      assistanceDimMap.set(id, dim);
-    }
+    // Cache removido - dados vêm direto de projetado_final_* (queries rápidas)
 
     const hospital: any = {
       id: hospitalId,
@@ -1947,11 +1901,8 @@ export class HospitalSectorsAggregateRepository {
       let projectedCostAmountNum: number | null = null;
       try {
         if (row.unit_id) {
-          // tentar usar map pré-carregado para evitar chamadas redundantes
-          const dimFromMap = internationDimMap?.get?.(row.unit_id) ?? null;
-          const dim: any =
-            dimFromMap ??
-            (await dimService.calcularParaInternacao(row.unit_id));
+          // Buscar dimensionamento diretamente (sem cache)
+          const dim: any = await dimService.calcularParaInternacao(row.unit_id);
           // dim.tabela contém linhas por cargo (LinhaAnaliseFinanceira)
           const enfermeiro = (dim.tabela || []).find((t: any) =>
             (t.cargoNome || "").toLowerCase().includes("enfermeiro")
@@ -2162,11 +2113,10 @@ export class HospitalSectorsAggregateRepository {
       let projectedCostAmountAssistNum: number | null = null;
       try {
         if (row.unit_id) {
-          // tentar usar map pré-carregado para evitar chamadas redundantes
-          const dimFromMap = assistanceDimMap?.get?.(row.unit_id) ?? null;
-          const dim: any =
-            dimFromMap ??
-            (await dimService.calcularParaNaoInternacao(row.unit_id));
+          // Buscar dimensionamento diretamente (sem cache)
+          const dim: any = await dimService.calcularParaNaoInternacao(
+            row.unit_id
+          );
           // Preferir os totais já calculados pelo dimensionamento no nível da UNIDADE
           // (quando presentes em dim.dimensionamento.pessoalEnfermeiroArredondado / pessoalTecnicoArredondado)
           const resumo = dim.dimensionamento;
@@ -2174,25 +2124,104 @@ export class HospitalSectorsAggregateRepository {
           // Novo comportamento: projetado por SÍTIO
           // Se dim.tabela existir, usar a lista de sítios e seus cargos (cada sítio possui cargos com quantidadeProjetada)
           const tabela: any[] = dim.tabela || [];
+          console.log(
+            `📊 [DIMENSIONAMENTO] Unidade ${row.unit_id?.slice(
+              0,
+              8
+            )}: Recebeu ${tabela.length} sítios na tabela`
+          );
+          if (tabela.length > 0) {
+            tabela.forEach((s: any, idx: number) => {
+              console.log(
+                `   Sítio ${idx + 1}: ${s.nome}, ${
+                  (s.cargos || []).length
+                } cargos`
+              );
+            });
+          }
+
           if (Array.isArray(tabela) && tabela.length > 0) {
             // Construir projectedStaff como lista por sítio
             projectedStaff = tabela.map((sitio: any) => {
               const overridesRole =
                 overrideNaoByUnitSitioRole.get(row.unit_id)?.get(sitio.id) ||
                 null;
-              const cargos = (sitio.cargos || []).map((c: any) => {
+
+              console.log(
+                `🔧 [OVERRIDE CHECK] Sítio: ${sitio.nome} (${sitio.id?.slice(
+                  0,
+                  8
+                )}), Unidade: ${row.unit_id?.slice(0, 8)}`
+              );
+              if (overridesRole) {
+                console.log(
+                  `   📋 Overrides disponíveis: ${Array.from(
+                    overridesRole.keys()
+                  ).join(", ")}`
+                );
+              }
+
+              // Mapear cargos do dimensionamento
+              const cargosMap = new Map<string, any>();
+              (sitio.cargos || []).forEach((c: any) => {
                 const roleLower = (c.cargoNome || "").toLowerCase();
-                const overrideQty = overridesRole?.get(roleLower);
-                const qty =
-                  overrideQty !== undefined
-                    ? overrideQty
-                    : c.quantidadeProjetada ?? c.quantidadeAtual ?? 0;
-                return {
+                cargosMap.set(roleLower, c);
+              });
+
+              // Aplicar overrides ou usar valores do dimensionamento
+              const cargos: any[] = [];
+
+              // Se há overrides, processar todos os cargos com override
+              if (overridesRole && overridesRole.size > 0) {
+                for (const [
+                  roleLower,
+                  overrideData,
+                ] of overridesRole.entries()) {
+                  const cargoFromDim = cargosMap.get(roleLower);
+
+                  if (cargoFromDim) {
+                    // Cargo existe no dimensionamento, aplicar override
+                    console.log(
+                      `   ✓ Override aplicado: ${cargoFromDim.cargoNome} = ${overrideData.qty} (original: ${cargoFromDim.quantidadeProjetada})`
+                    );
+                    cargos.push({
+                      role: cargoFromDim.cargoNome,
+                      quantity: overrideData.qty,
+                      custoPorFuncionario: cargoFromDim.custoPorFuncionario,
+                    });
+                    cargosMap.delete(roleLower); // Remover para não processar de novo
+                  } else {
+                    // Override para cargo que não foi calculado pelo dimensionamento
+                    // Buscar custo do Map pré-carregado
+                    const custoCargo =
+                      cargoCustoMap.get(overrideData.cargoId) || 0;
+                    console.log(
+                      `   ➕ Override para cargo não calculado: ${roleLower} = ${overrideData.qty} (custo: ${custoCargo})`
+                    );
+                    cargos.push({
+                      role:
+                        roleLower.charAt(0).toUpperCase() + roleLower.slice(1),
+                      quantity: overrideData.qty,
+                      custoPorFuncionario: custoCargo,
+                    });
+                  }
+                }
+              }
+
+              // Adicionar cargos do dimensionamento que não tinham override
+              for (const [roleLower, c] of cargosMap.entries()) {
+                const qty = c.quantidadeProjetada ?? 0;
+                if (qty > 0) {
+                  console.log(`   → Usando projetado: ${c.cargoNome} = ${qty}`);
+                } else {
+                  console.log(`   ✗ Sem dados: ${c.cargoNome} = 0`);
+                }
+                cargos.push({
                   role: c.cargoNome,
                   quantity: qty,
                   custoPorFuncionario: c.custoPorFuncionario,
-                };
-              });
+                });
+              }
 
               return {
                 sitioId: sitio.id,
@@ -2201,33 +2230,24 @@ export class HospitalSectorsAggregateRepository {
               };
             });
 
-            // Calcular custo projetado para a unidade usando as quantidades por sítio quando possível
+            // Calcular custo projetado somando todos os cargos de todos os sítios
             try {
               let totalProjectedCost = 0;
-              for (const sitio of tabela) {
-                const overridesRole =
-                  overrideNaoByUnitSitioRole.get(row.unit_id)?.get(sitio.id) ||
-                  null;
-                for (const c of sitio.cargos || []) {
-                  const nome = (c.cargoNome || "").toLowerCase();
-                  const costPer =
-                    c.custoPorFuncionario ??
-                    (c.salario || 0) +
-                      (c.adicionais || 0) +
-                      (c.valorHorasExtras || 0);
-                  const overrideQty = overridesRole?.get(nome);
-                  const qty =
-                    overrideQty !== undefined
-                      ? overrideQty
-                      : c.quantidadeProjetada ?? c.quantidadeAtual ?? 0;
+              for (const sitio of projectedStaff) {
+                for (const cargo of sitio.cargos || []) {
+                  const qty = cargo.quantity || 0;
+                  const costPer = cargo.custoPorFuncionario || 0;
                   totalProjectedCost += Number(qty) * Number(costPer);
                 }
               }
               projectedCostAmountAssistNum = Number(
                 totalProjectedCost.toFixed(2)
               );
+              console.log(
+                `💵 Custo projetado total: ${projectedCostAmountAssistNum}`
+              );
             } catch (err) {
-              // noop
+              console.warn(`Erro ao calcular custo projetado: ${err}`);
             }
           } else {
             // Fallback antigo: quando não há tabela por sítio, tentar usar resumo totals ou agregar não-dimensionados

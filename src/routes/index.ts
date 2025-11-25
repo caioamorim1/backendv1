@@ -41,6 +41,7 @@ import { OccupationAnalysisRoutes } from "./occupationAnalysisRoutes";
 import { OccupationAnalysisNetworkRoutes } from "./occupationAnalysisNetworkRoutes";
 import { ControlePeriodoRoutes } from "./controlePeriodoRoutes";
 import passwordResetRoutes from "./passwordResetRoutes";
+import cacheRoutes from "./cacheRoutes";
 
 export const createIndexRouter = (dataSource: DataSource): Router => {
   const router = Router();
@@ -52,6 +53,9 @@ export const createIndexRouter = (dataSource: DataSource): Router => {
 
   // Password Reset Routes (Public)
   router.use("/password-reset", passwordResetRoutes);
+
+  // Cache Management Routes
+  router.use("/cache", cacheRoutes);
 
   // Quantitativo
 

@@ -48,7 +48,12 @@ export class HospitalSectorsRepository {
         JSON_BUILD_OBJECT(
           'evaluated', COALESCE(ls.evaluated, 0),
           'vacant',    COALESCE(ls.vacant, 0),
-          'inactive',  COALESCE(ls.inactive, 0)
+          'inactive',  COALESCE(ls.inactive, 0),
+          'pending',   COALESCE(ls.bed_count, 0) - (
+            COALESCE(ls.evaluated, 0) + 
+            COALESCE(ls.vacant, 0) + 
+            COALESCE(ls.inactive, 0)
+          )
         ) AS "bedStatus",
         JSON_AGG(
           JSON_BUILD_OBJECT(
@@ -72,7 +77,7 @@ export class HospitalSectorsRepository {
       FROM public.unidades_internacao uni
       LEFT JOIN public.cargos_unidade cuni ON cuni.unidade_id = uni.id
       LEFT JOIN public.cargo c ON c.id = cuni.cargo_id
-      LEFT JOIN public.leitos_status ls ON ls.unidade_id = uni.id
+      LEFT JOIN public.historicos_leitos_status ls ON ls.unidade_id = uni.id AND DATE(ls.data) = CURRENT_DATE
       WHERE uni."hospitalId" = $1
       GROUP BY 
         uni.id, uni.nome, uni.descricao,
@@ -82,7 +87,29 @@ export class HospitalSectorsRepository {
       ORDER BY uni.nome
     `;
 
-    return await this.ds.query(query, [hospitalId]);
+    const rawResults = await this.ds.query(query, [hospitalId]);
+    
+    // Para cada unidade, se bedCount = 0, buscar a quantidade real de leitos
+    const results = await Promise.all(
+      rawResults.map(async (unit: any) => {
+        if (unit.bedCount === 0) {
+          const leitosCount = await this.ds.query(
+            `SELECT COUNT(*) as count FROM public.leitos WHERE "unidadeId" = $1`,
+            [unit.id]
+          );
+          const realBedCount = parseInt(leitosCount[0]?.count || 0);
+          unit.bedCount = realBedCount;
+          unit.bedStatus.pending = realBedCount - (
+            unit.bedStatus.evaluated + 
+            unit.bedStatus.vacant + 
+            unit.bedStatus.inactive
+          );
+        }
+        return unit;
+      })
+    );
+
+    return results;
   }
 
   private async getAssistanceSectors(
