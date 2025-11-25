@@ -40,6 +40,7 @@ import { QualitativeRoutes } from "./QualitativeRoutes";
 import { OccupationAnalysisRoutes } from "./occupationAnalysisRoutes";
 import { OccupationAnalysisNetworkRoutes } from "./occupationAnalysisNetworkRoutes";
 import { ControlePeriodoRoutes } from "./controlePeriodoRoutes";
+import passwordResetRoutes from "./passwordResetRoutes";
 
 export const createIndexRouter = (dataSource: DataSource): Router => {
   const router = Router();
@@ -48,6 +49,9 @@ export const createIndexRouter = (dataSource: DataSource): Router => {
 
   // Unified login for both admin and colaboradores
   router.use("/login", AuthRoutes(dataSource));
+
+  // Password Reset Routes (Public)
+  router.use("/password-reset", passwordResetRoutes);
 
   // Quantitativo
 

@@ -2,11 +2,18 @@ import { Router } from "express";
 import { DataSource } from "typeorm";
 import { OccupationAnalysisService } from "../services/occupationAnalysisService";
 import { OccupationAnalysisController } from "../controllers/occupationAnalysisController";
+import { OccupationAnalysisNetworkService } from "../services/occupationAnalysisNetworkService";
+import { OccupationAnalysisNetworkController } from "../controllers/occupationAnalysisNetworkController";
 
 export const OccupationAnalysisRoutes = (ds: DataSource): Router => {
   const router = Router();
   const service = new OccupationAnalysisService(ds);
   const controller = new OccupationAnalysisController(service);
+
+  const networkService = new OccupationAnalysisNetworkService(ds);
+  const networkController = new OccupationAnalysisNetworkController(
+    networkService
+  );
 
   /**
    * GET /hospital-sectors/:hospitalId/occupation-analysis
@@ -53,6 +60,30 @@ export const OccupationAnalysisRoutes = (ds: DataSource): Router => {
 
   // Simulação (debug): calcula projeção diretamente a partir de inputs
   router.post("/occupation-analysis/simulate", controller.simulateProjection);
+
+  /**
+   * GET /hospital-sectors/rede/:redeId/occupation-analysis
+   * Análise de ocupação agregada por rede
+   */
+  router.get("/rede/:redeId/occupation-analysis", networkController.getByRede);
+
+  /**
+   * GET /hospital-sectors/grupo/:grupoId/occupation-analysis
+   * Análise de ocupação agregada por grupo
+   */
+  router.get(
+    "/grupo/:grupoId/occupation-analysis",
+    networkController.getByGrupo
+  );
+
+  /**
+   * GET /hospital-sectors/regiao/:regiaoId/occupation-analysis
+   * Análise de ocupação agregada por região
+   */
+  router.get(
+    "/regiao/:regiaoId/occupation-analysis",
+    networkController.getByRegiao
+  );
 
   return router;
 };
