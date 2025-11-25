@@ -278,7 +278,8 @@ export class HospitalSectorsNetworkRepository {
             (
               SELECT SUM(
                 (COALESCE(NULLIF(REPLACE(REPLACE(c_sitio.salario, '%', ''), ',', '.'), '')::numeric, 0) + 
-                 COALESCE(NULLIF(REPLACE(REPLACE(c_sitio.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0))
+                 COALESCE(NULLIF(REPLACE(REPLACE(c_sitio.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
+                 COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0))
                 * COALESCE(cs.quantidade_funcionarios, 0)
               )
               FROM public.sitios_funcionais sf
@@ -411,7 +412,8 @@ export class HospitalSectorsNetworkRepository {
             (
               SELECT SUM(
                 (COALESCE(NULLIF(REPLACE(REPLACE(c_sitio.salario, '%', ''), ',', '.'), '')::numeric, 0) + 
-                 COALESCE(NULLIF(REPLACE(REPLACE(c_sitio.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0))
+                 COALESCE(NULLIF(REPLACE(REPLACE(c_sitio.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
+                 COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0))
                 * COALESCE(cs.quantidade_funcionarios, 0)
               )
               FROM public.sitios_funcionais sf
@@ -544,7 +546,8 @@ export class HospitalSectorsNetworkRepository {
             (
               SELECT SUM(
                 (COALESCE(NULLIF(REPLACE(REPLACE(c_sitio.salario, '%', ''), ',', '.'), '')::numeric, 0) + 
-                 COALESCE(NULLIF(REPLACE(REPLACE(c_sitio.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0))
+                 COALESCE(NULLIF(REPLACE(REPLACE(c_sitio.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
+                 COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0))
                 * COALESCE(cs.quantidade_funcionarios, 0)
               )
               FROM public.sitios_funcionais sf

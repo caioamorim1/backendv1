@@ -18,7 +18,7 @@ export function createApp(dataSource: DataSource) {
   // ✅ CORREÇÃO APLICADA AQUI
   // 1. Servir a pasta 'uploads' como estática ANTES de qualquer middleware de autenticação.
   // A rota '/uploads' no navegador será mapeada para a pasta 'uploads' no seu backend.
-  app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+  app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
   // 2. Proteger as rotas da API *depois* de servir os arquivos estáticos.
   app.use((req, res, next) => {
@@ -28,16 +28,20 @@ export function createApp(dataSource: DataSource) {
       "/admin/criar",
       "/scp-metodos/seed/builtin",
     ];
-    // Se o caminho começar com /uploads, também permite (já foi tratado pelo express.static)
-    if (openPaths.includes(req.path) || req.path.startsWith('/uploads')) {
+    // Se o caminho começar com /uploads ou /password-reset, permite sem autenticação
+    if (
+      openPaths.includes(req.path) ||
+      req.path.startsWith("/uploads") ||
+      req.path.startsWith("/password-reset")
+    ) {
       return next();
     }
-    
+
     if (req.method === "PATCH" && req.path.endsWith("/senha")) {
       return next();
     }
     if (req.method === "OPTIONS") return next(); // CORS preflight
-    
+
     return (authMiddleware as any)(req, res, next);
   });
 
