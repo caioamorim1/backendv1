@@ -404,4 +404,202 @@ export class HospitalComparativeSnapshotService {
 
     return resultado;
   }
+
+  /**
+   * Busca comparativo agregado para uma rede
+   */
+  async getRedeComparative(redeId: string) {
+    console.log(`\n🔍 ===== COMPARATIVO SNAPSHOT REDE ${redeId} =====`);
+
+    // Buscar todos os hospitais da rede
+    const hospitalsQuery = `SELECT id FROM public.hospitais WHERE "redeId" = $1`;
+    const hospitals = await this.ds.query(hospitalsQuery, [redeId]);
+
+    if (hospitals.length === 0) {
+      throw new Error(`Nenhum hospital encontrado na rede ${redeId}`);
+    }
+
+    // Buscar comparativo de cada hospital e agregar
+    const allInternation: any[] = [];
+    const allAssistance: any[] = [];
+
+    for (const hospital of hospitals) {
+      try {
+        const hospitalData = await this.getHospitalComparative(hospital.id);
+        allInternation.push(...(hospitalData.sectors.internation || []));
+        allAssistance.push(...(hospitalData.sectors.assistance || []));
+      } catch (error) {
+        console.warn(`⚠️ Erro ao buscar hospital ${hospital.id}:`, error);
+        // Continua com os próximos hospitais
+      }
+    }
+
+    // Agregar por nome de setor
+    const internation = this.agregarSetores(allInternation);
+    const assistance = this.agregarSetores(allAssistance);
+
+    console.log(`✅ ===== FIM COMPARATIVO SNAPSHOT REDE =====\n`);
+
+    return {
+      redeId,
+      hospitalsCount: hospitals.length,
+      sectors: {
+        internation,
+        assistance,
+      },
+    };
+  }
+
+  /**
+   * Busca comparativo agregado para um grupo
+   */
+  async getGrupoComparative(grupoId: string) {
+    console.log(`\n🔍 ===== COMPARATIVO SNAPSHOT GRUPO ${grupoId} =====`);
+
+    const hospitalsQuery = `SELECT id FROM public.hospitais WHERE "grupoId" = $1`;
+    const hospitals = await this.ds.query(hospitalsQuery, [grupoId]);
+
+    if (hospitals.length === 0) {
+      throw new Error(`Nenhum hospital encontrado no grupo ${grupoId}`);
+    }
+
+    const allInternation: any[] = [];
+    const allAssistance: any[] = [];
+
+    for (const hospital of hospitals) {
+      try {
+        const hospitalData = await this.getHospitalComparative(hospital.id);
+        allInternation.push(...(hospitalData.sectors.internation || []));
+        allAssistance.push(...(hospitalData.sectors.assistance || []));
+      } catch (error) {
+        console.warn(`⚠️ Erro ao buscar hospital ${hospital.id}:`, error);
+      }
+    }
+
+    const internation = this.agregarSetores(allInternation);
+    const assistance = this.agregarSetores(allAssistance);
+
+    console.log(`✅ ===== FIM COMPARATIVO SNAPSHOT GRUPO =====\n`);
+
+    return {
+      grupoId,
+      hospitalsCount: hospitals.length,
+      sectors: {
+        internation,
+        assistance,
+      },
+    };
+  }
+
+  /**
+   * Busca comparativo agregado para uma região
+   */
+  async getRegiaoComparative(regiaoId: string) {
+    console.log(`\n🔍 ===== COMPARATIVO SNAPSHOT REGIÃO ${regiaoId} =====`);
+
+    const hospitalsQuery = `SELECT id FROM public.hospitais WHERE "regiaoId" = $1`;
+    const hospitals = await this.ds.query(hospitalsQuery, [regiaoId]);
+
+    if (hospitals.length === 0) {
+      throw new Error(`Nenhum hospital encontrado na região ${regiaoId}`);
+    }
+
+    const allInternation: any[] = [];
+    const allAssistance: any[] = [];
+
+    for (const hospital of hospitals) {
+      try {
+        const hospitalData = await this.getHospitalComparative(hospital.id);
+        allInternation.push(...(hospitalData.sectors.internation || []));
+        allAssistance.push(...(hospitalData.sectors.assistance || []));
+      } catch (error) {
+        console.warn(`⚠️ Erro ao buscar hospital ${hospital.id}:`, error);
+      }
+    }
+
+    const internation = this.agregarSetores(allInternation);
+    const assistance = this.agregarSetores(allAssistance);
+
+    console.log(`✅ ===== FIM COMPARATIVO SNAPSHOT REGIÃO =====\n`);
+
+    return {
+      regiaoId,
+      hospitalsCount: hospitals.length,
+      sectors: {
+        internation,
+        assistance,
+      },
+    };
+  }
+
+  /**
+   * Agrega setores por nome
+   */
+  private agregarSetores(setores: any[]): any[] {
+    const map = new Map<string, any>();
+
+    for (const setor of setores) {
+      const key = setor.name;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          name: setor.name,
+          // Dados de leitos (apenas para internação)
+          bedCount: 0,
+          minimumCare: 0,
+          intermediateCare: 0,
+          highDependency: 0,
+          semiIntensive: 0,
+          intensive: 0,
+          bedStatusEvaluated: 0,
+          bedStatusVacant: 0,
+          bedStatusInactive: 0,
+          // Custos atuais
+          actualRealCostAmount: 0,
+          actualSnapshotCostAmount: 0,
+          projectedSnapshotCostAmount: 0,
+          // Staff agregado
+          actualRealStaffByRole: {} as Record<string, number>,
+          actualSnapshotStaffByRole: {} as Record<string, number>,
+          projectedSnapshotStaffByRole: {} as Record<string, number>,
+          staffDiffByRole: {} as Record<string, number>,
+        });
+      }
+
+      const agg = map.get(key);
+
+      // Somar leitos
+      agg.bedCount += setor.bedCount || 0;
+      agg.minimumCare += setor.minimumCare || 0;
+      agg.intermediateCare += setor.intermediateCare || 0;
+      agg.highDependency += setor.highDependency || 0;
+      agg.semiIntensive += setor.semiIntensive || 0;
+      agg.intensive += setor.intensive || 0;
+      agg.bedStatusEvaluated += setor.bedStatusEvaluated || 0;
+      agg.bedStatusVacant += setor.bedStatusVacant || 0;
+      agg.bedStatusInactive += setor.bedStatusInactive || 0;
+
+      // Somar custos
+      agg.actualRealCostAmount += parseFloat(setor.actualRealCostAmount || 0);
+      agg.actualSnapshotCostAmount += parseFloat(setor.actualSnapshotCostAmount || 0);
+      agg.projectedSnapshotCostAmount += parseFloat(setor.projectedSnapshotCostAmount || 0);
+
+      // Agregar staff por cargo
+      this.agregarStaffPorCargo(agg.actualRealStaffByRole, setor.actualRealStaffByRole);
+      this.agregarStaffPorCargo(agg.actualSnapshotStaffByRole, setor.actualSnapshotStaffByRole);
+      this.agregarStaffPorCargo(agg.projectedSnapshotStaffByRole, setor.projectedSnapshotStaffByRole);
+      this.agregarStaffPorCargo(agg.staffDiffByRole, setor.staffDiffByRole);
+    }
+
+    return Array.from(map.values());
+  }
+
+  /**
+   * Agrega staff por cargo
+   */
+  private agregarStaffPorCargo(target: Record<string, number>, source: Record<string, number>) {
+    for (const [cargo, quantidade] of Object.entries(source || {})) {
+      target[cargo] = (target[cargo] || 0) + quantidade;
+    }
+  }
 }

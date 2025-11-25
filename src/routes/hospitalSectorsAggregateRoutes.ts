@@ -73,6 +73,11 @@ export const HospitalSectorsAggregateRoutes = (ds: DataSource): Router => {
     controller.getProjectedByHospital
   );
 
+  // Rotas para buscar PROJETADO agregado por rede/grupo/região
+  router.get("/rede/:redeId/projected", controller.getProjectedByRede);
+  router.get("/grupo/:grupoId/projected", controller.getProjectedByGrupo);
+  router.get("/regiao/:regiaoId/projected", controller.getProjectedByRegiao);
+
   // Rota para buscar COMPARATIVO (atual + projetado) para um único hospital
   // NOVA VERSÃO: Usa snapshot selecionado
   router.get("/hospitals/:hospitalId/comparative", async (req, res) => {
@@ -99,6 +104,88 @@ export const HospitalSectorsAggregateRoutes = (ds: DataSource): Router => {
       return res
         .status(500)
         .json({ error: "Erro ao buscar comparativo do hospital" });
+    }
+  });
+
+  // Rotas para buscar COMPARATIVO agregado por rede/grupo/região
+  router.get("/rede/:redeId/comparative", async (req, res) => {
+    try {
+      const { redeId } = req.params;
+      if (!redeId)
+        return res.status(400).json({ error: "redeId é obrigatório" });
+
+      const service = new HospitalComparativeSnapshotService(ds);
+      const payload = await service.getRedeComparative(redeId);
+      return res.json(payload);
+    } catch (error) {
+      console.error(
+        "[HospitalSectorsAggregateRoutes] erro comparativo rede:",
+        error
+      );
+      const msg = error instanceof Error ? error.message : String(error);
+      if (process.env.NODE_ENV !== "production") {
+        return res.status(500).json({
+          error: "Erro ao buscar comparativo da rede",
+          details: msg,
+        });
+      }
+      return res
+        .status(500)
+        .json({ error: "Erro ao buscar comparativo da rede" });
+    }
+  });
+
+  router.get("/grupo/:grupoId/comparative", async (req, res) => {
+    try {
+      const { grupoId } = req.params;
+      if (!grupoId)
+        return res.status(400).json({ error: "grupoId é obrigatório" });
+
+      const service = new HospitalComparativeSnapshotService(ds);
+      const payload = await service.getGrupoComparative(grupoId);
+      return res.json(payload);
+    } catch (error) {
+      console.error(
+        "[HospitalSectorsAggregateRoutes] erro comparativo grupo:",
+        error
+      );
+      const msg = error instanceof Error ? error.message : String(error);
+      if (process.env.NODE_ENV !== "production") {
+        return res.status(500).json({
+          error: "Erro ao buscar comparativo do grupo",
+          details: msg,
+        });
+      }
+      return res
+        .status(500)
+        .json({ error: "Erro ao buscar comparativo do grupo" });
+    }
+  });
+
+  router.get("/regiao/:regiaoId/comparative", async (req, res) => {
+    try {
+      const { regiaoId } = req.params;
+      if (!regiaoId)
+        return res.status(400).json({ error: "regiaoId é obrigatório" });
+
+      const service = new HospitalComparativeSnapshotService(ds);
+      const payload = await service.getRegiaoComparative(regiaoId);
+      return res.json(payload);
+    } catch (error) {
+      console.error(
+        "[HospitalSectorsAggregateRoutes] erro comparativo região:",
+        error
+      );
+      const msg = error instanceof Error ? error.message : String(error);
+      if (process.env.NODE_ENV !== "production") {
+        return res.status(500).json({
+          error: "Erro ao buscar comparativo da região",
+          details: msg,
+        });
+      }
+      return res
+        .status(500)
+        .json({ error: "Erro ao buscar comparativo da região" });
     }
   });
 

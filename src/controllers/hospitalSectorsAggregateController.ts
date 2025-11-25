@@ -421,4 +421,79 @@ export class HospitalSectorsAggregateController {
         .json({ error: "Erro ao buscar hospital projetado" });
     }
   };
+
+  getProjectedByRede = async (req: Request, res: Response) => {
+    try {
+      const { redeId } = req.params;
+      if (!redeId)
+        return res.status(400).json({ error: "redeId é obrigatório" });
+
+      console.log(`Buscando agregado PROJETADO para rede ${redeId}...`);
+      const result = await this.repo.getProjectedSectorsByRede(redeId);
+
+      return res.json(result);
+    } catch (error) {
+      console.error(
+        "[HospitalSectorsAggregateController] erro ao buscar rede projetada:",
+        error
+      );
+      const msg = error instanceof Error ? error.message : String(error);
+      if (process.env.NODE_ENV !== "production") {
+        return res
+          .status(500)
+          .json({ error: "Erro ao buscar rede projetada", details: msg });
+      }
+      return res.status(500).json({ error: "Erro ao buscar rede projetada" });
+    }
+  };
+
+  getProjectedByGrupo = async (req: Request, res: Response) => {
+    try {
+      const { grupoId } = req.params;
+      if (!grupoId)
+        return res.status(400).json({ error: "grupoId é obrigatório" });
+
+      console.log(`Buscando agregado PROJETADO para grupo ${grupoId}...`);
+      const result = await this.repo.getProjectedSectorsByGrupo(grupoId);
+
+      return res.json(result);
+    } catch (error) {
+      console.error(
+        "[HospitalSectorsAggregateController] erro ao buscar grupo projetado:",
+        error
+      );
+      const msg = error instanceof Error ? error.message : String(error);
+      if (process.env.NODE_ENV !== "production") {
+        return res
+          .status(500)
+          .json({ error: "Erro ao buscar grupo projetado", details: msg });
+      }
+      return res.status(500).json({ error: "Erro ao buscar grupo projetado" });
+    }
+  };
+
+  getProjectedByRegiao = async (req: Request, res: Response) => {
+    try {
+      const { regiaoId } = req.params;
+      if (!regiaoId)
+        return res.status(400).json({ error: "regiaoId é obrigatório" });
+
+      console.log(`Buscando agregado PROJETADO para região ${regiaoId}...`);
+      const result = await this.repo.getProjectedSectorsByRegiao(regiaoId);
+
+      return res.json(result);
+    } catch (error) {
+      console.error(
+        "[HospitalSectorsAggregateController] erro ao buscar região projetada:",
+        error
+      );
+      const msg = error instanceof Error ? error.message : String(error);
+      if (process.env.NODE_ENV !== "production") {
+        return res
+          .status(500)
+          .json({ error: "Erro ao buscar região projetada", details: msg });
+      }
+      return res.status(500).json({ error: "Erro ao buscar região projetada" });
+    }
+  };
 }
