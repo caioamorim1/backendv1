@@ -331,7 +331,10 @@ export class OccupationAnalysisNetworkService {
 
     // Ociosidade e superlotação baseadas em taxaOcupacaoHoje (histórico do dia)
     const ociosidade = Math.max(0, ocupacaoMaximaAtendivel - taxaOcupacaoHoje);
-    const superlotacao = Math.max(0, taxaOcupacaoHoje - ocupacaoMaximaAtendivel);
+    const superlotacao = Math.max(
+      0,
+      taxaOcupacaoHoje - ocupacaoMaximaAtendivel
+    );
 
     return {
       sectorName: "Global",

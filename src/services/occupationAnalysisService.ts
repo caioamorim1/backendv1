@@ -124,7 +124,8 @@ export class OccupationAnalysisService {
     // Taxa de ocupação de hoje do histórico
     let taxaOcupacaoHoje = 0;
     if (historicoHoje && historicoHoje.bedCount > 0) {
-      taxaOcupacaoHoje = (historicoHoje.evaluated / historicoHoje.bedCount) * 100;
+      taxaOcupacaoHoje =
+        (historicoHoje.evaluated / historicoHoje.bedCount) * 100;
     }
     // Se não houver registro no histórico para hoje, taxaOcupacaoHoje = 0
 
@@ -228,7 +229,10 @@ export class OccupationAnalysisService {
 
     // Calcular indicadores usando taxaOcupacaoHoje (histórico do dia)
     const ociosidade = Math.max(0, ocupacaoMaximaAtendivel - taxaOcupacaoHoje);
-    const superlotacao = Math.max(0, taxaOcupacaoHoje - ocupacaoMaximaAtendivel);
+    const superlotacao = Math.max(
+      0,
+      taxaOcupacaoHoje - ocupacaoMaximaAtendivel
+    );
 
     const out: SectorOccupationDTO = {
       sectorId: unidade.id,
@@ -368,7 +372,10 @@ export class OccupationAnalysisService {
 
     // Ociosidade e superlotação baseadas em taxaOcupacaoHoje (histórico do dia)
     const ociosidade = Math.max(0, ocupacaoMaximaAtendivel - taxaOcupacaoHoje);
-    const superlotacao = Math.max(0, taxaOcupacaoHoje - ocupacaoMaximaAtendivel);
+    const superlotacao = Math.max(
+      0,
+      taxaOcupacaoHoje - ocupacaoMaximaAtendivel
+    );
 
     return {
       sectorName: "Global",
