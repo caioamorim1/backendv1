@@ -581,13 +581,26 @@ export class HospitalComparativeSnapshotService {
 
       // Somar custos
       agg.actualRealCostAmount += parseFloat(setor.actualRealCostAmount || 0);
-      agg.actualSnapshotCostAmount += parseFloat(setor.actualSnapshotCostAmount || 0);
-      agg.projectedSnapshotCostAmount += parseFloat(setor.projectedSnapshotCostAmount || 0);
+      agg.actualSnapshotCostAmount += parseFloat(
+        setor.actualSnapshotCostAmount || 0
+      );
+      agg.projectedSnapshotCostAmount += parseFloat(
+        setor.projectedSnapshotCostAmount || 0
+      );
 
       // Agregar staff por cargo
-      this.agregarStaffPorCargo(agg.actualRealStaffByRole, setor.actualRealStaffByRole);
-      this.agregarStaffPorCargo(agg.actualSnapshotStaffByRole, setor.actualSnapshotStaffByRole);
-      this.agregarStaffPorCargo(agg.projectedSnapshotStaffByRole, setor.projectedSnapshotStaffByRole);
+      this.agregarStaffPorCargo(
+        agg.actualRealStaffByRole,
+        setor.actualRealStaffByRole
+      );
+      this.agregarStaffPorCargo(
+        agg.actualSnapshotStaffByRole,
+        setor.actualSnapshotStaffByRole
+      );
+      this.agregarStaffPorCargo(
+        agg.projectedSnapshotStaffByRole,
+        setor.projectedSnapshotStaffByRole
+      );
       this.agregarStaffPorCargo(agg.staffDiffByRole, setor.staffDiffByRole);
     }
 
@@ -597,7 +610,10 @@ export class HospitalComparativeSnapshotService {
   /**
    * Agrega staff por cargo
    */
-  private agregarStaffPorCargo(target: Record<string, number>, source: Record<string, number>) {
+  private agregarStaffPorCargo(
+    target: Record<string, number>,
+    source: Record<string, number>
+  ) {
     for (const [cargo, quantidade] of Object.entries(source || {})) {
       target[cargo] = (target[cargo] || 0) + quantidade;
     }
