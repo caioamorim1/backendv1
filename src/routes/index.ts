@@ -35,8 +35,10 @@ import { LeitosStatusRoutes } from "./leitosStatusRoutes";
 
 import { snapshotDimensionamentoRoutes } from "./snapshotDimensionamentoRoutes";
 import { HospitalSectorsAggregateRoutes } from "./hospitalSectorsAggregateRoutes";
+import { HospitalSectorsNetworkRoutes } from "./hospitalSectorsNetworkRoutes";
 import { QualitativeRoutes } from "./QualitativeRoutes";
 import { OccupationAnalysisRoutes } from "./occupationAnalysisRoutes";
+import { OccupationAnalysisNetworkRoutes } from "./occupationAnalysisNetworkRoutes";
 import { ControlePeriodoRoutes } from "./controlePeriodoRoutes";
 
 export const createIndexRouter = (dataSource: DataSource): Router => {
@@ -105,8 +107,18 @@ export const createIndexRouter = (dataSource: DataSource): Router => {
     "/hospital-sectors-aggregate",
     HospitalSectorsAggregateRoutes(dataSource)
   );
+  // Hospital Sectors Network (Aggregated by Rede/Grupo/Regiao)
+  router.use(
+    "/hospital-sectors-network",
+    HospitalSectorsNetworkRoutes(dataSource)
+  );
   // Occupation Analysis (Taxa de Ocupação)
   router.use("/hospital-sectors", OccupationAnalysisRoutes(dataSource));
+  // Occupation Analysis Network (Aggregated by Rede/Grupo/Regiao)
+  router.use(
+    "/occupation-analysis-network",
+    OccupationAnalysisNetworkRoutes(dataSource)
+  );
 
   // Snapshot
   router.use("/snapshot", snapshotDimensionamentoRoutes(dataSource));

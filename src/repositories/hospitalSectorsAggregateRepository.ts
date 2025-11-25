@@ -2332,4 +2332,423 @@ export class HospitalSectorsAggregateRepository {
 
     return hospital;
   }
+
+  // ===== MÉTODOS AGREGADOS PROJECTED POR REDE/GRUPO/REGIÃO =====
+
+  async getProjectedSectorsByRede(redeId: string): Promise<any> {
+    console.log(
+      `🔎 Buscando setores projetados agregados para rede ${redeId}...`
+    );
+
+    // Buscar todos os hospitais da rede
+    const hospitalsQuery = `SELECT id FROM public.hospitais WHERE "redeId" = $1`;
+    const hospitals = await this.ds.query(hospitalsQuery, [redeId]);
+
+    if (hospitals.length === 0) {
+      return { internation: [], assistance: [] };
+    }
+
+    // Buscar dados de cada hospital e agregar
+    const allInternation: any[] = [];
+    const allAssistance: any[] = [];
+
+    for (const hospital of hospitals) {
+      const hospitalData = await this.getProjectedSectorsByHospital(
+        hospital.id
+      );
+      allInternation.push(...(hospitalData.internation || []));
+      allAssistance.push(...(hospitalData.assistance || []));
+    }
+
+    // Agregar por nome de setor
+    const internationMap = new Map<string, any>();
+    const assistanceMap = new Map<string, any>();
+
+    // Agregar internação
+    for (const sector of allInternation) {
+      const key = sector.name;
+      if (!internationMap.has(key)) {
+        internationMap.set(key, {
+          name: sector.name,
+          bedCount: 0,
+          minimumCare: 0,
+          intermediateCare: 0,
+          highDependency: 0,
+          semiIntensive: 0,
+          intensive: 0,
+          bedStatusEvaluated: 0,
+          bedStatusVacant: 0,
+          bedStatusInactive: 0,
+          costAmount: 0,
+          projectedCostAmount: 0,
+          staff: [],
+          projectedStaff: [],
+        });
+      }
+
+      const agg = internationMap.get(key);
+      agg.bedCount += sector.bedCount || 0;
+      agg.minimumCare += sector.minimumCare || 0;
+      agg.intermediateCare += sector.intermediateCare || 0;
+      agg.highDependency += sector.highDependency || 0;
+      agg.semiIntensive += sector.semiIntensive || 0;
+      agg.intensive += sector.intensive || 0;
+      agg.bedStatusEvaluated += sector.bedStatusEvaluated || 0;
+      agg.bedStatusVacant += sector.bedStatusVacant || 0;
+      agg.bedStatusInactive += sector.bedStatusInactive || 0;
+      agg.costAmount += parseFloat(sector.costAmount || 0);
+      agg.projectedCostAmount += parseFloat(sector.projectedCostAmount || 0);
+
+      // Agregar staff
+      if (sector.staff && Array.isArray(sector.staff)) {
+        for (const staffMember of sector.staff) {
+          const existing = agg.staff.find(
+            (s: any) => s.role === staffMember.role
+          );
+          if (existing) {
+            existing.quantity += staffMember.quantity || 0;
+          } else {
+            agg.staff.push({ ...staffMember });
+          }
+        }
+      }
+
+      // Agregar projectedStaff
+      if (sector.projectedStaff && Array.isArray(sector.projectedStaff)) {
+        for (const staffMember of sector.projectedStaff) {
+          const existing = agg.projectedStaff.find(
+            (s: any) => s.role === staffMember.role
+          );
+          if (existing) {
+            existing.quantity += staffMember.quantity || 0;
+          } else {
+            agg.projectedStaff.push({ ...staffMember });
+          }
+        }
+      }
+    }
+
+    // Agregar assistência
+    for (const sector of allAssistance) {
+      const key = sector.name;
+      if (!assistanceMap.has(key)) {
+        assistanceMap.set(key, {
+          name: sector.name,
+          costAmount: 0,
+          projectedCostAmount: 0,
+          staff: [],
+          projectedStaff: [],
+        });
+      }
+
+      const agg = assistanceMap.get(key);
+      agg.costAmount += parseFloat(sector.costAmount || 0);
+      agg.projectedCostAmount += parseFloat(sector.projectedCostAmount || 0);
+
+      // Agregar staff
+      if (sector.staff && Array.isArray(sector.staff)) {
+        for (const staffMember of sector.staff) {
+          const existing = agg.staff.find(
+            (s: any) => s.role === staffMember.role
+          );
+          if (existing) {
+            existing.quantity += staffMember.quantity || 0;
+          } else {
+            agg.staff.push({ ...staffMember });
+          }
+        }
+      }
+
+      // Agregar projectedStaff
+      if (sector.projectedStaff && Array.isArray(sector.projectedStaff)) {
+        for (const staffMember of sector.projectedStaff) {
+          const existing = agg.projectedStaff.find(
+            (s: any) => s.role === staffMember.role
+          );
+          if (existing) {
+            existing.quantity += staffMember.quantity || 0;
+          } else {
+            agg.projectedStaff.push({ ...staffMember });
+          }
+        }
+      }
+    }
+
+    return {
+      internation: Array.from(internationMap.values()),
+      assistance: Array.from(assistanceMap.values()),
+    };
+  }
+
+  async getProjectedSectorsByGrupo(grupoId: string): Promise<any> {
+    console.log(
+      `🔎 Buscando setores projetados agregados para grupo ${grupoId}...`
+    );
+
+    const hospitalsQuery = `SELECT id FROM public.hospitais WHERE "grupoId" = $1`;
+    const hospitals = await this.ds.query(hospitalsQuery, [grupoId]);
+
+    if (hospitals.length === 0) {
+      return { internation: [], assistance: [] };
+    }
+
+    const allInternation: any[] = [];
+    const allAssistance: any[] = [];
+
+    for (const hospital of hospitals) {
+      const hospitalData = await this.getProjectedSectorsByHospital(
+        hospital.id
+      );
+      allInternation.push(...(hospitalData.internation || []));
+      allAssistance.push(...(hospitalData.assistance || []));
+    }
+
+    const internationMap = new Map<string, any>();
+    const assistanceMap = new Map<string, any>();
+
+    for (const sector of allInternation) {
+      const key = sector.name;
+      if (!internationMap.has(key)) {
+        internationMap.set(key, {
+          name: sector.name,
+          bedCount: 0,
+          minimumCare: 0,
+          intermediateCare: 0,
+          highDependency: 0,
+          semiIntensive: 0,
+          intensive: 0,
+          bedStatusEvaluated: 0,
+          bedStatusVacant: 0,
+          bedStatusInactive: 0,
+          costAmount: 0,
+          projectedCostAmount: 0,
+          staff: [],
+          projectedStaff: [],
+        });
+      }
+
+      const agg = internationMap.get(key);
+      agg.bedCount += sector.bedCount || 0;
+      agg.minimumCare += sector.minimumCare || 0;
+      agg.intermediateCare += sector.intermediateCare || 0;
+      agg.highDependency += sector.highDependency || 0;
+      agg.semiIntensive += sector.semiIntensive || 0;
+      agg.intensive += sector.intensive || 0;
+      agg.bedStatusEvaluated += sector.bedStatusEvaluated || 0;
+      agg.bedStatusVacant += sector.bedStatusVacant || 0;
+      agg.bedStatusInactive += sector.bedStatusInactive || 0;
+      agg.costAmount += parseFloat(sector.costAmount || 0);
+      agg.projectedCostAmount += parseFloat(sector.projectedCostAmount || 0);
+
+      if (sector.staff && Array.isArray(sector.staff)) {
+        for (const staffMember of sector.staff) {
+          const existing = agg.staff.find(
+            (s: any) => s.role === staffMember.role
+          );
+          if (existing) {
+            existing.quantity += staffMember.quantity || 0;
+          } else {
+            agg.staff.push({ ...staffMember });
+          }
+        }
+      }
+
+      if (sector.projectedStaff && Array.isArray(sector.projectedStaff)) {
+        for (const staffMember of sector.projectedStaff) {
+          const existing = agg.projectedStaff.find(
+            (s: any) => s.role === staffMember.role
+          );
+          if (existing) {
+            existing.quantity += staffMember.quantity || 0;
+          } else {
+            agg.projectedStaff.push({ ...staffMember });
+          }
+        }
+      }
+    }
+
+    for (const sector of allAssistance) {
+      const key = sector.name;
+      if (!assistanceMap.has(key)) {
+        assistanceMap.set(key, {
+          name: sector.name,
+          costAmount: 0,
+          projectedCostAmount: 0,
+          staff: [],
+          projectedStaff: [],
+        });
+      }
+
+      const agg = assistanceMap.get(key);
+      agg.costAmount += parseFloat(sector.costAmount || 0);
+      agg.projectedCostAmount += parseFloat(sector.projectedCostAmount || 0);
+
+      if (sector.staff && Array.isArray(sector.staff)) {
+        for (const staffMember of sector.staff) {
+          const existing = agg.staff.find(
+            (s: any) => s.role === staffMember.role
+          );
+          if (existing) {
+            existing.quantity += staffMember.quantity || 0;
+          } else {
+            agg.staff.push({ ...staffMember });
+          }
+        }
+      }
+
+      if (sector.projectedStaff && Array.isArray(sector.projectedStaff)) {
+        for (const staffMember of sector.projectedStaff) {
+          const existing = agg.projectedStaff.find(
+            (s: any) => s.role === staffMember.role
+          );
+          if (existing) {
+            existing.quantity += staffMember.quantity || 0;
+          } else {
+            agg.projectedStaff.push({ ...staffMember });
+          }
+        }
+      }
+    }
+
+    return {
+      internation: Array.from(internationMap.values()),
+      assistance: Array.from(assistanceMap.values()),
+    };
+  }
+
+  async getProjectedSectorsByRegiao(regiaoId: string): Promise<any> {
+    console.log(
+      `🔎 Buscando setores projetados agregados para região ${regiaoId}...`
+    );
+
+    const hospitalsQuery = `SELECT id FROM public.hospitais WHERE "regiaoId" = $1`;
+    const hospitals = await this.ds.query(hospitalsQuery, [regiaoId]);
+
+    if (hospitals.length === 0) {
+      return { internation: [], assistance: [] };
+    }
+
+    const allInternation: any[] = [];
+    const allAssistance: any[] = [];
+
+    for (const hospital of hospitals) {
+      const hospitalData = await this.getProjectedSectorsByHospital(
+        hospital.id
+      );
+      allInternation.push(...(hospitalData.internation || []));
+      allAssistance.push(...(hospitalData.assistance || []));
+    }
+
+    const internationMap = new Map<string, any>();
+    const assistanceMap = new Map<string, any>();
+
+    for (const sector of allInternation) {
+      const key = sector.name;
+      if (!internationMap.has(key)) {
+        internationMap.set(key, {
+          name: sector.name,
+          bedCount: 0,
+          minimumCare: 0,
+          intermediateCare: 0,
+          highDependency: 0,
+          semiIntensive: 0,
+          intensive: 0,
+          bedStatusEvaluated: 0,
+          bedStatusVacant: 0,
+          bedStatusInactive: 0,
+          costAmount: 0,
+          projectedCostAmount: 0,
+          staff: [],
+          projectedStaff: [],
+        });
+      }
+
+      const agg = internationMap.get(key);
+      agg.bedCount += sector.bedCount || 0;
+      agg.minimumCare += sector.minimumCare || 0;
+      agg.intermediateCare += sector.intermediateCare || 0;
+      agg.highDependency += sector.highDependency || 0;
+      agg.semiIntensive += sector.semiIntensive || 0;
+      agg.intensive += sector.intensive || 0;
+      agg.bedStatusEvaluated += sector.bedStatusEvaluated || 0;
+      agg.bedStatusVacant += sector.bedStatusVacant || 0;
+      agg.bedStatusInactive += sector.bedStatusInactive || 0;
+      agg.costAmount += parseFloat(sector.costAmount || 0);
+      agg.projectedCostAmount += parseFloat(sector.projectedCostAmount || 0);
+
+      if (sector.staff && Array.isArray(sector.staff)) {
+        for (const staffMember of sector.staff) {
+          const existing = agg.staff.find(
+            (s: any) => s.role === staffMember.role
+          );
+          if (existing) {
+            existing.quantity += staffMember.quantity || 0;
+          } else {
+            agg.staff.push({ ...staffMember });
+          }
+        }
+      }
+
+      if (sector.projectedStaff && Array.isArray(sector.projectedStaff)) {
+        for (const staffMember of sector.projectedStaff) {
+          const existing = agg.projectedStaff.find(
+            (s: any) => s.role === staffMember.role
+          );
+          if (existing) {
+            existing.quantity += staffMember.quantity || 0;
+          } else {
+            agg.projectedStaff.push({ ...staffMember });
+          }
+        }
+      }
+    }
+
+    for (const sector of allAssistance) {
+      const key = sector.name;
+      if (!assistanceMap.has(key)) {
+        assistanceMap.set(key, {
+          name: sector.name,
+          costAmount: 0,
+          projectedCostAmount: 0,
+          staff: [],
+          projectedStaff: [],
+        });
+      }
+
+      const agg = assistanceMap.get(key);
+      agg.costAmount += parseFloat(sector.costAmount || 0);
+      agg.projectedCostAmount += parseFloat(sector.projectedCostAmount || 0);
+
+      if (sector.staff && Array.isArray(sector.staff)) {
+        for (const staffMember of sector.staff) {
+          const existing = agg.staff.find(
+            (s: any) => s.role === staffMember.role
+          );
+          if (existing) {
+            existing.quantity += staffMember.quantity || 0;
+          } else {
+            agg.staff.push({ ...staffMember });
+          }
+        }
+      }
+
+      if (sector.projectedStaff && Array.isArray(sector.projectedStaff)) {
+        for (const staffMember of sector.projectedStaff) {
+          const existing = agg.projectedStaff.find(
+            (s: any) => s.role === staffMember.role
+          );
+          if (existing) {
+            existing.quantity += staffMember.quantity || 0;
+          } else {
+            agg.projectedStaff.push({ ...staffMember });
+          }
+        }
+      }
+    }
+
+    return {
+      internation: Array.from(internationMap.values()),
+      assistance: Array.from(assistanceMap.values()),
+    };
+  }
 }
