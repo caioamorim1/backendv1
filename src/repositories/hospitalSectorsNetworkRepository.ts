@@ -133,7 +133,7 @@ export class HospitalSectorsNetworkRepository {
     `;
 
     const rawResults = await this.ds.query(query, [redeId]);
-    
+
     // Para cada unidade, se bedCount = 0, buscar a quantidade real de leitos
     const results = await Promise.all(
       rawResults.map(async (unit: any) => {
@@ -144,11 +144,11 @@ export class HospitalSectorsNetworkRepository {
           );
           const realBedCount = parseInt(leitosCount[0]?.count || 0);
           unit.bedCount = realBedCount;
-          unit.bedStatus.pending = realBedCount - (
-            unit.bedStatus.evaluated + 
-            unit.bedStatus.vacant + 
-            unit.bedStatus.inactive
-          );
+          unit.bedStatus.pending =
+            realBedCount -
+            (unit.bedStatus.evaluated +
+              unit.bedStatus.vacant +
+              unit.bedStatus.inactive);
         }
         return unit;
       })
@@ -246,7 +246,7 @@ export class HospitalSectorsNetworkRepository {
     `;
 
     const rawResults = await this.ds.query(query, [grupoId]);
-    
+
     // Para cada unidade, se bedCount = 0, buscar a quantidade real de leitos
     const results = await Promise.all(
       rawResults.map(async (unit: any) => {
@@ -257,11 +257,11 @@ export class HospitalSectorsNetworkRepository {
           );
           const realBedCount = parseInt(leitosCount[0]?.count || 0);
           unit.bedCount = realBedCount;
-          unit.bedStatus.pending = realBedCount - (
-            unit.bedStatus.evaluated + 
-            unit.bedStatus.vacant + 
-            unit.bedStatus.inactive
-          );
+          unit.bedStatus.pending =
+            realBedCount -
+            (unit.bedStatus.evaluated +
+              unit.bedStatus.vacant +
+              unit.bedStatus.inactive);
         }
         return unit;
       })
@@ -347,7 +347,7 @@ export class HospitalSectorsNetworkRepository {
     `;
 
     const rawResults = await this.ds.query(query, [regiaoId]);
-    
+
     // Para cada unidade, se bedCount = 0, buscar a quantidade real de leitos
     const results = await Promise.all(
       rawResults.map(async (unit: any) => {
@@ -358,11 +358,11 @@ export class HospitalSectorsNetworkRepository {
           );
           const realBedCount = parseInt(leitosCount[0]?.count || 0);
           unit.bedCount = realBedCount;
-          unit.bedStatus.pending = realBedCount - (
-            unit.bedStatus.evaluated + 
-            unit.bedStatus.vacant + 
-            unit.bedStatus.inactive
-          );
+          unit.bedStatus.pending =
+            realBedCount -
+            (unit.bedStatus.evaluated +
+              unit.bedStatus.vacant +
+              unit.bedStatus.inactive);
         }
         return unit;
       })

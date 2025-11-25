@@ -13,7 +13,9 @@ export class PasswordResetController {
     try {
       const { email } = req.body;
 
-      console.log(`📧 [PASSWORD RESET] Solicitação de redefinição de senha para email: ${email}`);
+      console.log(
+        `📧 [PASSWORD RESET] Solicitação de redefinição de senha para email: ${email}`
+      );
 
       if (!email) {
         return res.status(400).json({
@@ -24,7 +26,9 @@ export class PasswordResetController {
 
       const result = await this.service.requestPasswordReset(email);
 
-      console.log(`✅ [PASSWORD RESET] Email enviado com sucesso para: ${email}`);
+      console.log(
+        `✅ [PASSWORD RESET] Email enviado com sucesso para: ${email}`
+      );
 
       return res.status(200).json(result);
     } catch (error) {
