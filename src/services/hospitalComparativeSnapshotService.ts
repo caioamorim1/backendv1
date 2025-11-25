@@ -426,6 +426,14 @@ export class HospitalComparativeSnapshotService {
     for (const hospital of hospitals) {
       try {
         const hospitalData = await this.getHospitalComparative(hospital.id);
+        console.log(`📊 Hospital ${hospital.id} - Internação: ${hospitalData.sectors.internation?.length || 0} setores`);
+        console.log(`📊 Hospital ${hospital.id} - Assistência: ${hospitalData.sectors.assistance?.length || 0} setores`);
+        
+        // Debug: mostrar dados do primeiro setor
+        if (hospitalData.sectors.internation?.[0]) {
+          console.log(`🔍 Primeiro setor internação:`, JSON.stringify(hospitalData.sectors.internation[0], null, 2));
+        }
+        
         allInternation.push(...(hospitalData.sectors.internation || []));
         allAssistance.push(...(hospitalData.sectors.assistance || []));
       } catch (error) {
@@ -433,6 +441,10 @@ export class HospitalComparativeSnapshotService {
         // Continua com os próximos hospitais
       }
     }
+
+    console.log(`\n📦 Total agregado antes de processar:`);
+    console.log(`   Internação: ${allInternation.length} setores`);
+    console.log(`   Assistência: ${allAssistance.length} setores`);
 
     // Agregar por nome de setor
     const internation = this.agregarSetores(allInternation);
@@ -558,50 +570,54 @@ export class HospitalComparativeSnapshotService {
           actualRealCostAmount: 0,
           actualSnapshotCostAmount: 0,
           projectedSnapshotCostAmount: 0,
-          // Staff agregado
-          actualRealStaffByRole: {} as Record<string, number>,
-          actualSnapshotStaffByRole: {} as Record<string, number>,
-          projectedSnapshotStaffByRole: {} as Record<string, number>,
-          staffDiffByRole: {} as Record<string, number>,
+          // Staff agregado - usando os nomes corretos dos dados
+          quadroAtualReal: {} as Record<string, number>,
+          custosAtualReal: {} as Record<string, number>,
+          quadroAtualSnapshot: {} as Record<string, number>,
+          custosAtualSnapshot: {} as Record<string, number>,
+          quadroProjetadoSnapshot: {} as Record<string, number>,
+          diferencas: {} as Record<string, number>,
         });
       }
 
       const agg = map.get(key);
 
-      // Somar leitos
-      agg.bedCount += setor.bedCount || 0;
-      agg.minimumCare += setor.minimumCare || 0;
-      agg.intermediateCare += setor.intermediateCare || 0;
-      agg.highDependency += setor.highDependency || 0;
-      agg.semiIntensive += setor.semiIntensive || 0;
-      agg.intensive += setor.intensive || 0;
-      agg.bedStatusEvaluated += setor.bedStatusEvaluated || 0;
-      agg.bedStatusVacant += setor.bedStatusVacant || 0;
-      agg.bedStatusInactive += setor.bedStatusInactive || 0;
+      // Somar dados de dimensionamento (leitos)
+      if (setor.dimensionamento) {
+        agg.bedCount += setor.dimensionamento.totalLeitos || 0;
+        agg.bedStatusEvaluated += setor.dimensionamento.leitosOcupados || 0;
+        agg.bedStatusVacant += setor.dimensionamento.leitosVagos || 0;
+        agg.bedStatusInactive += setor.dimensionamento.leitosInativos || 0;
+        
+        // Distribuição por classificação
+        if (setor.dimensionamento.distribuicaoClassificacao) {
+          const dist = setor.dimensionamento.distribuicaoClassificacao;
+          agg.minimumCare += dist.CUIDADOS_MINIMOS || 0;
+          agg.intermediateCare += dist.INTERMEDIARIOS || 0;
+          agg.highDependency += dist.ALTA_DEPENDENCIA || 0;
+          agg.semiIntensive += dist.SEMI_INTENSIVOS || 0;
+          agg.intensive += dist.INTENSIVOS || 0;
+        }
+      }
 
       // Somar custos
-      agg.actualRealCostAmount += parseFloat(setor.actualRealCostAmount || 0);
-      agg.actualSnapshotCostAmount += parseFloat(
-        setor.actualSnapshotCostAmount || 0
-      );
-      agg.projectedSnapshotCostAmount += parseFloat(
-        setor.projectedSnapshotCostAmount || 0
-      );
+      if (setor.custosAtualReal) {
+        const totalCustoReal = Object.values(setor.custosAtualReal).reduce((sum: number, val: any) => sum + (parseFloat(val) || 0), 0);
+        agg.actualRealCostAmount += totalCustoReal;
+      }
+      
+      if (setor.custosAtualSnapshot) {
+        const totalCustoSnapshot = Object.values(setor.custosAtualSnapshot).reduce((sum: number, val: any) => sum + (parseFloat(val) || 0), 0);
+        agg.actualSnapshotCostAmount += totalCustoSnapshot;
+      }
 
       // Agregar staff por cargo
-      this.agregarStaffPorCargo(
-        agg.actualRealStaffByRole,
-        setor.actualRealStaffByRole
-      );
-      this.agregarStaffPorCargo(
-        agg.actualSnapshotStaffByRole,
-        setor.actualSnapshotStaffByRole
-      );
-      this.agregarStaffPorCargo(
-        agg.projectedSnapshotStaffByRole,
-        setor.projectedSnapshotStaffByRole
-      );
-      this.agregarStaffPorCargo(agg.staffDiffByRole, setor.staffDiffByRole);
+      this.agregarStaffPorCargo(agg.quadroAtualReal, setor.quadroAtualReal);
+      this.agregarStaffPorCargo(agg.custosAtualReal, setor.custosAtualReal);
+      this.agregarStaffPorCargo(agg.quadroAtualSnapshot, setor.quadroAtualSnapshot);
+      this.agregarStaffPorCargo(agg.custosAtualSnapshot, setor.custosAtualSnapshot);
+      this.agregarStaffPorCargo(agg.quadroProjetadoSnapshot, setor.quadroProjetadoSnapshot);
+      this.agregarStaffPorCargo(agg.diferencas, setor.diferencas);
     }
 
     return Array.from(map.values());
