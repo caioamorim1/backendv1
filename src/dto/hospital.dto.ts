@@ -22,6 +22,7 @@ export interface CreateHospitalDTO {
   numeroTotalLeitos?: number;
   numeroLeitosUTI?: number;
   numeroSalasCirurgicas?: number;
+  foto?: string;
 }
 
 export interface AtualizarHospitalDTO {
@@ -39,6 +40,7 @@ export interface AtualizarHospitalDTO {
   numeroTotalLeitos?: number;
   numeroLeitosUTI?: number;
   numeroSalasCirurgicas?: number;
+  foto?: string;
 }
 
 export { TipoHospital, GestaoHospital, PerfilHospital, ComplexidadeHospital };

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { HospitalRepository } from "../repositories/hospitalRepository";
 import { HospitalController } from "../controllers/hospitalController";
 import { DataSource } from "typeorm";
+import { uploadHospitalFoto } from "../middlewares/multerHospital";
 
 export const HospitalRoutes = (ds: DataSource): Router => {
   const r = Router();
@@ -12,8 +13,8 @@ export const HospitalRoutes = (ds: DataSource): Router => {
       ds
     );
 
-  // Route: POST /hospitais
-  r.post("/", ctrl.criar);
+  // Route: POST /hospitais - com upload de foto
+  r.post("/", uploadHospitalFoto.single("foto"), ctrl.criar);
 
   // Route: GET /hospitais
   r.get("/", ctrl.listar);
@@ -24,8 +25,8 @@ export const HospitalRoutes = (ds: DataSource): Router => {
   // Route: GET /hospitais/:id/comparative - retorna payload atual + projetado para o dashboard
   r.get("/:id/comparative", dashboardCtrl.comparative);
 
-  // Route: PUT /hospitais/:id
-  r.put("/:id", ctrl.atualizar);
+  // Route: PUT /hospitais/:id - com upload de foto
+  r.put("/:id", uploadHospitalFoto.single("foto"), ctrl.atualizar);
 
   // Route: DELETE /hospitais/:id
   r.delete("/:id", ctrl.deletar);

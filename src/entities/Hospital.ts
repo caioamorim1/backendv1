@@ -101,6 +101,9 @@ export class Hospital {
   @Column({ type: "integer", nullable: true, name: "numero_salas_cirurgicas" })
   numeroSalasCirurgicas?: number;
 
+  @Column({ type: "varchar", length: 500, nullable: true })
+  foto?: string;
+
   @OneToMany(() => Colaborador, (c) => c.hospital)
   colaboradores!: Colaborador[];
 

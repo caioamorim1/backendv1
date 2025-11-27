@@ -194,4 +194,26 @@ export class SitioFuncionalController {
       return res.status(500).json({ message: "Erro interno do servidor" });
     }
   };
+
+  // Buscar distribuições (ENF/TEC) de um sítio específico
+  buscarDistribuicoes = async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const distribuicoes = await this.repo.buscarDistribuicoesPorSitio(id);
+
+      if (!distribuicoes) {
+        return res
+          .status(404)
+          .json({ message: "Sítio funcional não encontrado" });
+      }
+
+      return res.json(distribuicoes);
+    } catch (error) {
+      console.error("Erro ao buscar distribuições do sítio:", error);
+      return res.status(500).json({
+        message: "Erro interno do servidor",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
 }

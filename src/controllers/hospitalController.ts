@@ -8,6 +8,12 @@ export class HospitalController {
     try {
       console.log("Criando novo hospital com dados:", req.body);
 
+      // Se houver arquivo de foto no upload, adiciona ao body
+      if (req.file) {
+        req.body.foto = `/uploads/hospital/${req.file.filename}`;
+        console.log("Foto do hospital salva:", req.body.foto);
+      }
+
       const novo = await this.repo.criar(req.body);
       res.status(201).json(novo);
     } catch (error) {
@@ -66,6 +72,13 @@ export class HospitalController {
       Object.entries(req.body).forEach(([key, value]) => {
         console.log(`  - ${key}: ${typeof value} = ${JSON.stringify(value)}`);
       });
+
+      // Se houver arquivo de foto no upload, adiciona ao body
+      if (req.file) {
+        req.body.foto = `/uploads/hospital/${req.file.filename}`;
+        console.log("Nova foto do hospital salva:", req.body.foto);
+      }
+
       console.log("═══════════════════════════════════════════════════\n");
 
       const sucesso = await this.repo.atualizar(id, req.body);
