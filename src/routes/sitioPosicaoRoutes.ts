@@ -19,6 +19,8 @@ export const SitioPosicaoRoutes = (ds: DataSource): Router => {
   r.get("/sitios-funcionais/:id", sitioCtrl.obter);
   // Listar posicoes de um sitio
   r.get("/sitios-funcionais/:id/posicoes", sitioCtrl.posicoes);
+  // Buscar distribuições ENF/TEC de um sítio específico
+  r.get("/sitios-funcionais/:id/distribuicoes", sitioCtrl.buscarDistribuicoes);
   r.put("/sitios-funcionais/:id", sitioCtrl.atualizar);
   r.delete("/sitios-funcionais/:id", sitioCtrl.deletar);
 

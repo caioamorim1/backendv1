@@ -503,8 +503,10 @@ export class SitioFuncionalRepository {
 
             // O frontend está enviando o cargoId como "cargoUnidadeId"
             const cargoIdParaCriar = cargoUnidadeId;
-            
-            console.log(`✅ Criando CargoUnidade automaticamente com cargo ${cargoIdParaCriar}`);
+
+            console.log(
+              `✅ Criando CargoUnidade automaticamente com cargo ${cargoIdParaCriar}`
+            );
 
             // Buscar o hospital através da unidade
             const unidadeComHospital = await manager
@@ -546,7 +548,9 @@ export class SitioFuncionalRepository {
               `✅ CargoUnidade criado com sucesso: ${cargoUnidadeId}`
             );
           } else {
-            console.log(`✅ CargoUnidade ${cargoUnidadeId} validado com sucesso`);
+            console.log(
+              `✅ CargoUnidade ${cargoUnidadeId} validado com sucesso`
+            );
           }
 
           // Calcular total se vier por turnos
@@ -639,5 +643,65 @@ export class SitioFuncionalRepository {
   async deletar(id: string) {
     const res = await this.repo().delete(id);
     return res.affected && res.affected > 0;
+  }
+
+  /**
+   * Busca as distribuições (ENF/TEC) de um sítio específico
+   */
+  async buscarDistribuicoesPorSitio(sitioId: string) {
+    const sitio = await this.repo().findOne({
+      where: { id: sitioId },
+      relations: ["distribuicoes"],
+    });
+
+    if (!sitio) return null;
+
+    const buildResumo = (dist?: any) => {
+      if (!dist) return null;
+
+      const segSex = {
+        manha: dist.segSexManha ?? 0,
+        tarde: dist.segSexTarde ?? 0,
+        noite1: dist.segSexNoite1 ?? 0,
+        noite2: dist.segSexNoite2 ?? 0,
+      };
+      const sabDom = {
+        manha: dist.sabDomManha ?? 0,
+        tarde: dist.sabDomTarde ?? 0,
+        noite1: dist.sabDomNoite1 ?? 0,
+        noite2: dist.sabDomNoite2 ?? 0,
+      };
+      const totalSegSex =
+        segSex.manha + segSex.tarde + segSex.noite1 + segSex.noite2;
+      const totalSabDom =
+        sabDom.manha + sabDom.tarde + sabDom.noite1 + sabDom.noite2;
+      const totalGeral = totalSegSex + totalSabDom;
+
+      return {
+        id: dist.id,
+        categoria: dist.categoria,
+        segSex,
+        sabDom,
+        totalSegSex,
+        totalSabDom,
+        totalGeral,
+      };
+    };
+
+    const enf = (sitio as any).distribuicoes?.find(
+      (d: any) => d.categoria === "ENF"
+    );
+    const tec = (sitio as any).distribuicoes?.find(
+      (d: any) => d.categoria === "TEC"
+    );
+
+    return {
+      sitioId: sitio.id,
+      sitioNome: sitio.nome,
+      distribuicoes: {
+        ENF: buildResumo(enf),
+        TEC: buildResumo(tec),
+      },
+    };
   }
 }
