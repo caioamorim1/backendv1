@@ -463,14 +463,13 @@ export class DimensionamentoService {
 
       if (historicosStatus.length > 0) {
         console.log(
-          "  ✅ Calculando MÉDIA dos registros históricos do período"
+          "  ✅ Calculando TOTAL (SOMA) dos registros históricos do período"
         );
 
-        // ✅ CORREÇÃO: Calcular MÉDIA ao invés de SOMA
+        // ✅ CORREÇÃO: Usar TOTAL (soma) ao invés de média
         let somaOcupados = 0;
         let somaVagos = 0;
         let somaInativos = 0;
-        const totalDias = historicosStatus.length;
 
         historicosStatus.forEach((h) => {
           somaOcupados += h.evaluated;
@@ -478,19 +477,19 @@ export class DimensionamentoService {
           somaInativos += h.inactive;
         });
 
-        // Média por dia
-        leitosOcupados = Math.round(somaOcupados / totalDias);
-        leitosVagos = Math.round(somaVagos / totalDias);
-        leitosInativos = Math.round(somaInativos / totalDias);
+        // Usar o total (soma)
+        leitosOcupados = somaOcupados;
+        leitosVagos = somaVagos;
+        leitosInativos = somaInativos;
 
         console.log(
-          `    - Soma ocupados: ${somaOcupados} / ${totalDias} dias = ${leitosOcupados} (média)`
+          `    - Total ocupados: ${somaOcupados} (soma de ${historicosStatus.length} dias)`
         );
         console.log(
-          `    - Soma vagos: ${somaVagos} / ${totalDias} dias = ${leitosVagos} (média)`
+          `    - Total vagos: ${somaVagos} (soma de ${historicosStatus.length} dias)`
         );
         console.log(
-          `    - Soma inativos: ${somaInativos} / ${totalDias} dias = ${leitosInativos} (média)`
+          `    - Total inativos: ${somaInativos} (soma de ${historicosStatus.length} dias)`
         );
       } else {
         console.log("  ⚠️ Sem dados históricos salvos para este período");
@@ -504,12 +503,17 @@ export class DimensionamentoService {
       }
     }
 
+    // ✅ Calcular total de leitos-dia (total de leitos × dias no período)
+    const totalLeitosDia = totalLeitos * diasNoPeriodo;
+
+    // ✅ Calcular percentual de leitos avaliados do período
+    // Soma total de avaliações (vagos + ocupados + inativos) dividido pelo total de leitos-dia
     const percentualLeitosAvaliados =
-      totalLeitos > 0
+      totalLeitosDia > 0
         ? Number(
             (
               ((leitosVagos + leitosOcupados + leitosInativos) /
-                (totalLeitos * diasNoPeriodo)) *
+                totalLeitosDia) *
               100
             ).toFixed(2)
           )
@@ -522,9 +526,10 @@ export class DimensionamentoService {
     console.log(`Leitos ocupados no período: ${leitosOcupados}`);
     console.log(`Leitos vagos no período: ${leitosVagos}`);
     console.log(`Leitos inativos no período: ${leitosInativos}`);
-    console.log(`Total de leitos-dia: ${totalLeitos * diasNoPeriodo}`);
+    console.log(`Total de leitos da unidade: ${totalLeitos}`);
+    console.log(`Total de leitos-dia: ${totalLeitosDia}`);
     console.log(
-      `Percentual de leitos avaliados: ${percentualLeitosAvaliados}% (vagos + ocupados + inativos / total)`
+      `Percentual de leitos avaliados: ${percentualLeitosAvaliados}% ((vagos + ocupados + inativos) / totalLeitosDia)`
     );
     console.log(
       `Taxa de ocupação do período (fração): ${taxaOcupacaoPeriodo.toFixed(4)}`

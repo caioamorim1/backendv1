@@ -223,6 +223,9 @@ export function scheduleSessionExpiry(ds: DataSource) {
 /**
  * Ao iniciar o servidor, verifica se existem sessões ATIVAS em dias anteriores a hoje
  * e executa o processamento de expiração para cada uma dessas datas.
+ *
+ * IMPORTANTE: Também reseta TODOS os leitos para PENDENTE no início do dia,
+ * caso o servidor não tenha rodado à meia-noite.
  */
 export async function processPendingSessionExpiries(ds: DataSource) {
   const ZONE = "America/Sao_Paulo";
@@ -231,6 +234,8 @@ export async function processPendingSessionExpiries(ds: DataSource) {
 
   try {
     const repo = ds.getRepository(AvaliacaoSCP);
+    const leitoRepo = ds.getRepository(Leito);
+
     const rows = await repo
       .createQueryBuilder("a")
       .select("a.dataAplicacao", "date")
@@ -247,6 +252,7 @@ export async function processPendingSessionExpiries(ds: DataSource) {
       console.log(
         "[SessionExpiry] Nenhuma sessão ativa pendente de dias anteriores."
       );
+
       return;
     }
 
@@ -267,6 +273,18 @@ export async function processPendingSessionExpiries(ds: DataSource) {
         console.error(`[SessionExpiry] Erro ao processar data ${date}:`, e);
       }
     }
+
+    // ✅ APÓS PROCESSAR SESSÕES PENDENTES: Resetar todos os leitos para PENDENTE
+    // Isso garante que quando o servidor não rodou à meia-noite, os leitos sejam resetados
+    console.log(
+      "[SessionExpiry] Resetando TODOS os leitos para PENDENTE (servidor não rodou à meia-noite)..."
+    );
+    await leitoRepo
+      .createQueryBuilder()
+      .update(Leito)
+      .set({ status: StatusLeito.PENDENTE })
+      .execute();
+    console.log("✅ [SessionExpiry] Todos os leitos resetados para PENDENTE");
   } catch (e) {
     console.error(
       "[SessionExpiry] Falha ao verificar sessões pendentes no startup:",
