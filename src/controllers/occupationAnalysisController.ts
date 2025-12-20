@@ -182,4 +182,111 @@ export class OccupationAnalysisController {
       return res.status(500).json({ error: "Erro na simulação", details: msg });
     }
   };
+
+  /**
+   * GET /hospital-sectors/:hospitalId/occupation-dashboard
+   *
+   * Dashboard de ocupação: ocupação máxima atendível + histórico 4 meses
+   * Para exibir em gráficos de barras por setor ou resumo do hospital
+   *
+   * Query params:
+   * - dataReferencia (opcional): data no formato YYYY-MM-DD
+   *
+   * Response:
+   * {
+   *   hospitalId: "uuid",
+   *   hospitalName: "Hospital X",
+   *   sectors: [
+   *     {
+   *       sectorId: "uuid",
+   *       sectorName: "UTI",
+   *       ocupacaoMaximaAtendivel: 85.5,
+   *       historico4Meses: [
+   *         { month: "2025-08", monthLabel: "Agosto/2025", taxaOcupacao: 78.2 },
+   *         { month: "2025-09", monthLabel: "Setembro/2025", taxaOcupacao: 82.1 },
+   *         { month: "2025-10", monthLabel: "Outubro/2025", taxaOcupacao: 79.5 },
+   *         { month: "2025-11", monthLabel: "Novembro/2025", taxaOcupacao: 83.8 }
+   *       ]
+   *     }
+   *   ],
+   *   summary: {
+   *     ocupacaoMaximaAtendivel: 82.3,
+   *     historico4Meses: [...]
+   *   }
+   * }
+   */
+  getDashboardOccupation = async (req: Request, res: Response) => {
+    try {
+      const { hospitalId } = req.params;
+      const { dataReferencia } = req.query;
+
+      if (!hospitalId) {
+        return res.status(400).json({
+          error: "hospitalId é obrigatório",
+        });
+      }
+
+      // Validar e parsear data se fornecida
+      let dataCalculo: Date | undefined;
+      if (dataReferencia) {
+        const dateStr = String(dataReferencia);
+        dataCalculo = new Date(dateStr);
+
+        if (isNaN(dataCalculo.getTime())) {
+          return res.status(400).json({
+            error: "dataReferencia deve estar no formato YYYY-MM-DD",
+          });
+        }
+      }
+
+      console.log(
+        `📊 [OccupationDashboard] Request para hospital: ${hospitalId}${
+          dataCalculo
+            ? ` - Data: ${dataCalculo.toISOString().split("T")[0]}`
+            : ""
+        }`
+      );
+
+      const t0 = Date.now();
+      const result = await this.service.calcularDashboardOcupacao(
+        hospitalId,
+        dataCalculo
+      );
+      const t1 = Date.now();
+
+      console.log(
+        `✅ [OccupationDashboard] OK hospital=${hospitalId} setores=${
+          result.sectors.length
+        } tempo=${t1 - t0}ms`
+      );
+      console.log(
+        `   summary: max=${result.summary.ocupacaoMaximaAtendivel}% meses=${result.summary.historico4Meses.length}`
+      );
+
+      return res.json(result);
+    } catch (error) {
+      console.error("[OccupationAnalysisController:dashboard] Erro:", error);
+
+      const msg = error instanceof Error ? error.message : String(error);
+
+      // Se não encontrou o hospital
+      if (msg.includes("não encontrado")) {
+        return res.status(404).json({
+          error: msg,
+        });
+      }
+
+      // Erro genérico
+      if (process.env.NODE_ENV !== "production") {
+        return res.status(500).json({
+          error: "Erro ao calcular dashboard de ocupação",
+          details: msg,
+        });
+      }
+
+      return res.status(500).json({
+        error: "Erro ao calcular dashboard de ocupação",
+      });
+    }
+  };
 }

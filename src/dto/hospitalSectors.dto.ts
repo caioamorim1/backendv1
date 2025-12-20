@@ -56,8 +56,17 @@ export interface AssistanceSectorDTO {
   sitiosFuncionais?: SitioFuncionalDTO[]; // ✨ NOVO CAMPO
 }
 
+export interface NeutralSectorDTO {
+  id: string;
+  name: string;
+  descr: string | null;
+  costAmount: number;
+  status: string;
+}
+
 export interface HospitalSectorsDTO {
   id: string;
   internation: InternationSectorDTO[];
   assistance: AssistanceSectorDTO[];
+  neutral: NeutralSectorDTO[];
 }

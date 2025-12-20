@@ -34,6 +34,9 @@ export class Colaborador {
   @Column({ type: "varchar", length: 18, unique: true, nullable: true })
   cpf?: string;
 
+  @Column({ type: "varchar", length: 50, nullable: true })
+  coren?: string;
+
   // senha (hash)
   @Column({ type: "varchar", length: 255, nullable: true })
   senha!: string | null;

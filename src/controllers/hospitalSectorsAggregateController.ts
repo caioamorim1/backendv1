@@ -6,14 +6,9 @@ export class HospitalSectorsAggregateController {
 
   getAllSectors = async (req: Request, res: Response) => {
     try {
-      console.log("Buscando setores para TODOS os hospitais...");
       const result = await this.repo.getAllSectors();
       return res.json(result);
     } catch (error) {
-      console.error(
-        "[HospitalSectorsAggregateController] erro ao buscar todos os setores:",
-        error
-      );
       const msg = error instanceof Error ? error.message : String(error);
       if (process.env.NODE_ENV !== "production") {
         return res
@@ -31,7 +26,6 @@ export class HospitalSectorsAggregateController {
         return res.status(400).json({ error: "ID da rede é obrigatório" });
       }
 
-      console.log(`Buscando setores para rede ${networkId}...`);
       const result = await this.repo.getSectorsByNetwork(networkId);
       return res.json(result);
     } catch (error) {
@@ -56,7 +50,6 @@ export class HospitalSectorsAggregateController {
         return res.status(400).json({ error: "ID do grupo é obrigatório" });
       }
 
-      console.log(`Buscando setores para grupo ${groupId}...`);
       const result = await this.repo.getSectorsByGroup(groupId);
       return res.json(result);
     } catch (error) {
@@ -83,7 +76,6 @@ export class HospitalSectorsAggregateController {
         return res.status(400).json({ error: "ID da região é obrigatório" });
       }
 
-      console.log(`Buscando setores para região ${regionId}...`);
       const result = await this.repo.getSectorsByRegion(regionId);
       return res.json(result);
     } catch (error) {
@@ -107,15 +99,11 @@ export class HospitalSectorsAggregateController {
 
   getAllNetworksAggregated = async (req: Request, res: Response) => {
     try {
-      console.log("🚀 Buscando TODAS as redes agregadas em uma única query...");
       const startTime = Date.now();
 
       const result = await this.repo.getAllNetworksAggregated();
 
       const duration = Date.now() - startTime;
-      console.log(
-        `✅ Agregação concluída: ${result.items.length} redes em ${duration}ms`
-      );
 
       return res.json(result);
     } catch (error) {
@@ -138,17 +126,11 @@ export class HospitalSectorsAggregateController {
 
   getAllGroupsAggregated = async (req: Request, res: Response) => {
     try {
-      console.log(
-        "🚀 Buscando TODOS os grupos agregados em uma única query..."
-      );
       const startTime = Date.now();
 
       const result = await this.repo.getAllGroupsAggregated();
 
       const duration = Date.now() - startTime;
-      console.log(
-        `✅ Agregação concluída: ${result.items.length} grupos em ${duration}ms`
-      );
 
       return res.json(result);
     } catch (error) {
@@ -171,17 +153,11 @@ export class HospitalSectorsAggregateController {
 
   getAllRegionsAggregated = async (req: Request, res: Response) => {
     try {
-      console.log(
-        "🚀 Buscando TODAS as regiões agregadas em uma única query..."
-      );
       const startTime = Date.now();
 
       const result = await this.repo.getAllRegionsAggregated();
 
       const duration = Date.now() - startTime;
-      console.log(
-        `✅ Agregação concluída: ${result.items.length} regiões em ${duration}ms`
-      );
 
       return res.json(result);
     } catch (error) {
@@ -204,17 +180,11 @@ export class HospitalSectorsAggregateController {
 
   getAllHospitalsAggregated = async (req: Request, res: Response) => {
     try {
-      console.log(
-        "🚀 Buscando TODOS os hospitais agregados em uma única query..."
-      );
       const startTime = Date.now();
 
       const result = await this.repo.getAllHospitalsAggregated();
 
       const duration = Date.now() - startTime;
-      console.log(
-        `✅ Agregação concluída: ${result.items.length} hospitais em ${duration}ms`
-      );
 
       return res.json(result);
     } catch (error) {
@@ -239,9 +209,6 @@ export class HospitalSectorsAggregateController {
 
   getAllNetworksProjectedAggregated = async (req: Request, res: Response) => {
     try {
-      console.log(
-        "🚀 Buscando TODAS as redes com setores agregados PROJETADOS..."
-      );
       const startTime = Date.now();
 
       const result = await this.repo.getAllNetworksProjectedAggregated();
@@ -253,9 +220,6 @@ export class HospitalSectorsAggregateController {
             acc + network.internation.length + network.assistance.length,
           0
         ) || 0;
-      console.log(
-        `✅ Agregação PROJETADA concluída: ${result.items.length} redes com ${totalSectors} setores em ${duration}ms`
-      );
 
       return res.json(result);
     } catch (error) {
@@ -278,9 +242,6 @@ export class HospitalSectorsAggregateController {
 
   getAllGroupsProjectedAggregated = async (req: Request, res: Response) => {
     try {
-      console.log(
-        "🚀 Buscando TODOS os grupos com setores agregados PROJETADOS..."
-      );
       const startTime = Date.now();
 
       const result = await this.repo.getAllGroupsProjectedAggregated();
@@ -292,9 +253,6 @@ export class HospitalSectorsAggregateController {
             acc + group.internation.length + group.assistance.length,
           0
         ) || 0;
-      console.log(
-        `✅ Agregação PROJETADA concluída: ${result.items.length} grupos com ${totalSectors} setores em ${duration}ms`
-      );
 
       return res.json(result);
     } catch (error) {
@@ -317,9 +275,6 @@ export class HospitalSectorsAggregateController {
 
   getAllRegionsProjectedAggregated = async (req: Request, res: Response) => {
     try {
-      console.log(
-        "🚀 Buscando TODAS as regiões com setores agregados PROJETADOS..."
-      );
       const startTime = Date.now();
 
       const result = await this.repo.getAllRegionsProjectedAggregated();
@@ -331,16 +286,9 @@ export class HospitalSectorsAggregateController {
             acc + region.internation.length + region.assistance.length,
           0
         ) || 0;
-      console.log(
-        `✅ Agregação PROJETADA concluída: ${result.items.length} regiões com ${totalSectors} setores em ${duration}ms`
-      );
 
       return res.json(result);
     } catch (error) {
-      console.error(
-        "[HospitalSectorsAggregateController] erro ao buscar regiões com setores projetados:",
-        error
-      );
       const msg = error instanceof Error ? error.message : String(error);
       if (process.env.NODE_ENV !== "production") {
         return res.status(500).json({
@@ -356,9 +304,6 @@ export class HospitalSectorsAggregateController {
 
   getAllHospitalsProjectedAggregated = async (req: Request, res: Response) => {
     try {
-      console.log(
-        "🚀 Buscando TODOS os hospitais com setores agregados PROJETADOS..."
-      );
       const startTime = Date.now();
 
       const result = await this.repo.getAllHospitalsProjectedAggregated();
@@ -370,16 +315,9 @@ export class HospitalSectorsAggregateController {
             acc + hospital.internation.length + hospital.assistance.length,
           0
         ) || 0;
-      console.log(
-        `✅ Agregação PROJETADA concluída: ${result.items.length} hospitais com ${totalSectors} setores em ${duration}ms`
-      );
 
       return res.json(result);
     } catch (error) {
-      console.error(
-        "[HospitalSectorsAggregateController] erro ao buscar hospitais com setores projetados:",
-        error
-      );
       const msg = error instanceof Error ? error.message : String(error);
       if (process.env.NODE_ENV !== "production") {
         return res.status(500).json({
@@ -400,7 +338,6 @@ export class HospitalSectorsAggregateController {
       if (!hospitalId)
         return res.status(400).json({ error: "hospitalId é obrigatório" });
 
-      console.log(`Buscando agregado PROJETADO para hospital ${hospitalId}...`);
       const result = await this.repo.getProjectedSectorsByHospital(hospitalId);
 
       // Estrutura de retorno compatível com as rotas agregadas (items array com 1 item?)
@@ -428,7 +365,6 @@ export class HospitalSectorsAggregateController {
       if (!redeId)
         return res.status(400).json({ error: "redeId é obrigatório" });
 
-      console.log(`Buscando agregado PROJETADO para rede ${redeId}...`);
       const result = await this.repo.getProjectedSectorsByRede(redeId);
 
       return res.json(result);
@@ -453,7 +389,6 @@ export class HospitalSectorsAggregateController {
       if (!grupoId)
         return res.status(400).json({ error: "grupoId é obrigatório" });
 
-      console.log(`Buscando agregado PROJETADO para grupo ${grupoId}...`);
       const result = await this.repo.getProjectedSectorsByGrupo(grupoId);
 
       return res.json(result);
@@ -478,7 +413,6 @@ export class HospitalSectorsAggregateController {
       if (!regiaoId)
         return res.status(400).json({ error: "regiaoId é obrigatório" });
 
-      console.log(`Buscando agregado PROJETADO para região ${regiaoId}...`);
       const result = await this.repo.getProjectedSectorsByRegiao(regiaoId);
 
       return res.json(result);

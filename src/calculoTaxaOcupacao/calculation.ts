@@ -10,22 +10,6 @@ import { ProjecaoParams, ProjecaoResult, GapAnalysisRow } from "./interfaces";
 export function calcularProjecao(params: ProjecaoParams): ProjecaoResult {
   // === DEBUG: ENTRADAS ===
   try {
-    console.log("\n===== 📈 DEBUG PROJEÇÃO - INÍCIO =====");
-    console.log("▶️ Entradas:");
-    console.log({
-      quadroAtualEnfermeiros: params.quadroAtualEnfermeiros,
-      quadroAtualTecnicos: params.quadroAtualTecnicos,
-      leitos: params.leitos,
-      ocupacaoBaseFracao: params.ocupacaoBase,
-      ocupacaoBasePercent: Number((params.ocupacaoBase * 100).toFixed(2)),
-      theBase: params.theBase,
-      enfNecessariosBase: params.enfNecessariosBase,
-      tecNecessariosBase: params.tecNecessariosBase,
-      metaLivreOcupacaoFracao: params.metaLivreOcupacao,
-      metaLivreOcupacaoPercent: Number(
-        (params.metaLivreOcupacao * 100).toFixed(2)
-      ),
-    });
     if (params.ocupacaoBase <= 0) {
       console.warn(
         "⚠️ ocupacaoBase <= 0: as derivadas @100% ficarão infinitas/NaN."
@@ -39,22 +23,6 @@ export function calcularProjecao(params: ProjecaoParams): ProjecaoResult {
   const enf100pctFTE = params.enfNecessariosBase / params.ocupacaoBase;
   const tec100pctFTE = params.tecNecessariosBase / params.ocupacaoBase;
   try {
-    console.log("\n🔧 Derivados @100%:");
-    console.log(
-      `the100pct = theBase (${params.theBase}) / ocupacaoBase (${
-        params.ocupacaoBase
-      }) = ${the100pct.toFixed(4)}`
-    );
-    console.log(
-      `enf100pctFTE = enfNecessariosBase (${
-        params.enfNecessariosBase
-      }) / ocupacaoBase (${params.ocupacaoBase}) = ${enf100pctFTE.toFixed(4)}`
-    );
-    console.log(
-      `tec100pctFTE = tecNecessariosBase (${
-        params.tecNecessariosBase
-      }) / ocupacaoBase (${params.ocupacaoBase}) = ${tec100pctFTE.toFixed(4)}`
-    );
     if (
       !isFinite(the100pct) ||
       !isFinite(enf100pctFTE) ||
@@ -75,34 +43,6 @@ export function calcularProjecao(params: ProjecaoParams): ProjecaoResult {
     ocupacaoAtendivelPorTec
   );
   try {
-    console.log("\n🧮 Ocupação atendível por recurso:");
-    console.log(
-      `por ENF = quadroAtualEnfermeiros (${
-        params.quadroAtualEnfermeiros
-      }) / enf100pctFTE (${enf100pctFTE.toFixed(
-        4
-      )}) = ${ocupacaoAtendivelPorEnf.toFixed(4)} (${(
-        ocupacaoAtendivelPorEnf * 100
-      ).toFixed(2)}%)`
-    );
-    console.log(
-      `por TEC = quadroAtualTecnicos (${
-        params.quadroAtualTecnicos
-      }) / tec100pctFTE (${tec100pctFTE.toFixed(
-        4
-      )}) = ${ocupacaoAtendivelPorTec.toFixed(4)} (${(
-        ocupacaoAtendivelPorTec * 100
-      ).toFixed(2)}%)`
-    );
-    console.log(
-      `➡️ ocupacaoMaximaAtendivel = min(${ocupacaoAtendivelPorEnf.toFixed(
-        4
-      )}, ${ocupacaoAtendivelPorTec.toFixed(
-        4
-      )}) = ${ocupacaoMaximaAtendivel.toFixed(4)} (${(
-        ocupacaoMaximaAtendivel * 100
-      ).toFixed(2)}%)`
-    );
     if (!isFinite(ocupacaoMaximaAtendivel)) {
       console.warn(
         "⚠️ ocupacaoMaximaAtendivel não finita. Verifique entradas e derivados."
@@ -161,34 +101,6 @@ export function calcularProjecao(params: ProjecaoParams): ProjecaoResult {
     analiseMetaLivre,
   };
   try {
-    console.log("\n📋 Resumo projeção:");
-    console.log({
-      the100pct: Number(the100pct.toFixed(4)),
-      enf100pctFTE: Number(enf100pctFTE.toFixed(4)),
-      tec100pctFTE: Number(tec100pctFTE.toFixed(4)),
-      ocupacaoMaximaAtendivelFracao: Number(ocupacaoMaximaAtendivel.toFixed(4)),
-      ocupacaoMaximaAtendivelPercent: Number(
-        (ocupacaoMaximaAtendivel * 100).toFixed(2)
-      ),
-      metaLivreOcupacaoFracao: params.metaLivreOcupacao,
-      metaLivreOcupacaoPercent: Number(
-        (params.metaLivreOcupacao * 100).toFixed(2)
-      ),
-      analiseMetaLivre: {
-        metaOcupacao: Number(analiseMetaLivre.metaOcupacao.toFixed(2)),
-        enfNecessariosFTE: Number(
-          analiseMetaLivre.enfNecessariosFTE.toFixed(2)
-        ),
-        tecNecessariosFTE: Number(
-          analiseMetaLivre.tecNecessariosFTE.toFixed(2)
-        ),
-        enfNecessariosArredondado: analiseMetaLivre.enfNecessariosArredondado,
-        tecNecessariosArredondado: analiseMetaLivre.tecNecessariosArredondado,
-        gapEnf: analiseMetaLivre.gapEnf,
-        gapTec: analiseMetaLivre.gapTec,
-      },
-    });
-    console.log("===== 📈 DEBUG PROJEÇÃO - FIM =====\n");
   } catch {}
 
   return result;

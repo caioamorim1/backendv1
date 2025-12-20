@@ -2,6 +2,7 @@ import { DataSource } from "typeorm";
 import {
   InternationSectorDTO,
   AssistanceSectorDTO,
+  NeutralSectorDTO,
   HospitalSectorsDTO,
 } from "../dto/hospitalSectors.dto";
 
@@ -13,11 +14,13 @@ export class HospitalSectorsRepository {
   ): Promise<HospitalSectorsDTO> {
     const internation = await this.getInternationSectors(hospitalId);
     const assistance = await this.getAssistanceSectors(hospitalId);
+    const neutral = await this.getNeutralSectors(hospitalId);
 
     return {
       id: `hospital-sectors-${hospitalId}`,
       internation,
       assistance,
+      neutral,
     };
   }
 
@@ -245,6 +248,24 @@ export class HospitalSectorsRepository {
       WHERE uni."hospitalId" = $1
       GROUP BY uni.id, uni.nome, uni.descricao
       ORDER BY uni.nome
+    `;
+
+    return await this.ds.query(query, [hospitalId]);
+  }
+
+  private async getNeutralSectors(
+    hospitalId: string
+  ): Promise<NeutralSectorDTO[]> {
+    const query = `
+      SELECT 
+        un.id AS "id",
+        un.nome AS "name",
+        un.descricao AS "descr",
+        COALESCE(un."custoTotal", 0) AS "costAmount",
+        un.status AS "status"
+      FROM public.unidades_neutras un
+      WHERE un."hospitalId" = $1
+      ORDER BY un.nome
     `;
 
     return await this.ds.query(query, [hospitalId]);

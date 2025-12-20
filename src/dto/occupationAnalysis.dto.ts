@@ -52,3 +52,41 @@ export interface OccupationAnalysisResponse {
   sectors: SectorOccupationDTO[];
   summary: OccupationSummaryDTO;
 }
+
+/**
+ * Dados de ocupação de um mês específico
+ */
+export interface MonthlyOccupationData {
+  month: string; // "2025-08" (YYYY-MM)
+  monthLabel: string; // "Agosto/2025"
+  taxaOcupacao: number; // % média do mês
+}
+
+/**
+ * Dashboard de ocupação por setor (ocupação máxima + histórico 4 meses)
+ */
+export interface SectorOccupationDashboardDTO {
+  sectorId: string;
+  sectorName: string;
+  sectorType: "internacao" | "nao_internacao";
+  ocupacaoMaximaAtendivel: number; // % - Capacidade máxima com quadro atual
+  historico4Meses: MonthlyOccupationData[]; // Últimos 4 meses (mais antigo primeiro)
+}
+
+/**
+ * Resumo dashboard para todo o hospital
+ */
+export interface HospitalOccupationDashboardSummary {
+  ocupacaoMaximaAtendivel: number; // Média ponderada
+  historico4Meses: MonthlyOccupationData[]; // Últimos 4 meses (média ponderada)
+}
+
+/**
+ * Response completo do dashboard de ocupação
+ */
+export interface OccupationDashboardResponse {
+  hospitalId: string;
+  hospitalName: string;
+  sectors: SectorOccupationDashboardDTO[];
+  summary: HospitalOccupationDashboardSummary;
+}

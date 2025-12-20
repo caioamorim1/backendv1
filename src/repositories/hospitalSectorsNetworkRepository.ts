@@ -23,6 +23,7 @@ export class HospitalSectorsNetworkRepository {
       id: `hospital-sectors-rede-${redeId}`,
       internation,
       assistance,
+      neutral: [],
     };
   }
 
@@ -36,6 +37,7 @@ export class HospitalSectorsNetworkRepository {
       id: `hospital-sectors-grupo-${grupoId}`,
       internation,
       assistance,
+      neutral: [],
     };
   }
 
@@ -49,6 +51,7 @@ export class HospitalSectorsNetworkRepository {
       id: `hospital-sectors-regiao-${regiaoId}`,
       internation,
       assistance,
+      neutral: [],
     };
   }
 
