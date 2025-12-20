@@ -1,12 +1,15 @@
 import { Request, Response } from "express";
 import { DataSource } from "typeorm";
 import { SnapshotDimensionamentoService } from "../services/snapshotDimensionamentoService";
+import { SnapshotNetworkDashboardService } from "../services/snapshotNetworkDashboardService";
 
 export class SnapshotDimensionamentoController {
   private service: SnapshotDimensionamentoService;
+  private dashboardService: SnapshotNetworkDashboardService;
 
   constructor(private ds: DataSource) {
     this.service = new SnapshotDimensionamentoService(ds);
+    this.dashboardService = new SnapshotNetworkDashboardService(ds);
   }
 
   /**
@@ -439,6 +442,46 @@ export class SnapshotDimensionamentoController {
         error instanceof Error ? error.message : "Erro desconhecido";
       res.status(500).json({
         error: "Erro ao buscar snapshots selecionados por grupo",
+        details: message,
+      });
+    }
+  };
+
+  /**
+   * GET /snapshot/dashboard?tipo=rede&id=uuid
+   * GET /snapshot/dashboard?tipo=grupo&id=uuid
+   * GET /snapshot/dashboard?tipo=regiao&id=uuid
+   * Retorna dados hierárquicos para dashboard (rede -> grupos -> regiões -> hospitais)
+   * - baseline = atual no momento do snapshot (snapshot.dados)
+   * - atual = situação real agora
+   * - projetado = snapshot.dados.projetadoFinal
+   * - omite hospitais sem snapshot selecionado
+   */
+  dashboard = async (req: Request, res: Response) => {
+    try {
+      const { tipo, id } = req.query;
+
+      if (!tipo || !id) {
+        return res.status(400).json({
+          error: "Parâmetros 'tipo' e 'id' são obrigatórios",
+        });
+      }
+      if (!["rede", "grupo", "regiao"].includes(tipo as string)) {
+        return res.status(400).json({
+          error: "Tipo deve ser 'rede', 'grupo' ou 'regiao'",
+        });
+      }
+
+      const payload = await this.dashboardService.gerar(
+        tipo as any,
+        id as string
+      );
+      return res.json(payload);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro desconhecido";
+      return res.status(500).json({
+        error: "Erro ao gerar dashboard de snapshots",
         details: message,
       });
     }

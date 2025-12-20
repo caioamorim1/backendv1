@@ -50,8 +50,14 @@ export const snapshotDimensionamentoRoutes = (ds: DataSource): Router => {
   // Agregações prontas para frontend: retorna agregados por hospital, regiao, grupo e rede
   router.get("/aggregated/all", controller.buscarSnapshotAgregadoAll);
 
+  // Dashboard (rede/grupo/regiao) baseado em snapshot selecionado + situação atual
+  router.get("/dashboard", controller.dashboard);
+
   // Buscar snapshots selecionados por rede, grupo ou região
-  router.get("/selected-by-group", controller.buscarSnapshotsSelecionadosPorGrupo);
+  router.get(
+    "/selected-by-group",
+    controller.buscarSnapshotsSelecionadosPorGrupo
+  );
 
   // Buscar snapshot específico por ID
   router.get("/:id", controller.buscarSnapshotPorId);

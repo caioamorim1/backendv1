@@ -63,6 +63,15 @@ export const OccupationAnalysisRoutes = (ds: DataSource): Router => {
     controller.getDashboardOccupation
   );
 
+  /**
+   * GET /hospital-sectors/rede/:redeId/occupation-dashboard
+   * Dashboard de ocupação agregado por rede (por hospital + global)
+   */
+  router.get(
+    "/rede/:redeId/occupation-dashboard",
+    networkController.getDashboardByRede
+  );
+
   // Endpoint de teste/comprovação para frontend
   router.get(
     "/:hospitalId/occupation-analysis/test",
