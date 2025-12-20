@@ -90,3 +90,23 @@ export interface OccupationDashboardResponse {
   sectors: SectorOccupationDashboardDTO[];
   summary: HospitalOccupationDashboardSummary;
 }
+
+/**
+ * Item do dashboard de ocupação por hospital (para agregações de rede/grupo/região)
+ */
+export interface HospitalOccupationDashboardItem {
+  hospitalId: string;
+  hospitalName: string;
+  ocupacaoMaximaAtendivel: number;
+  historico4Meses: MonthlyOccupationData[];
+}
+
+/**
+ * Dashboard de ocupação agregado por rede (hospitais + global)
+ */
+export interface OccupationDashboardNetworkResponse {
+  redeId: string;
+  redeName: string;
+  hospitais: HospitalOccupationDashboardItem[];
+  global: HospitalOccupationDashboardSummary;
+}

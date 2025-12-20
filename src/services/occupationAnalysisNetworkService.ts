@@ -3,6 +3,9 @@ import {
   OccupationAnalysisResponse,
   SectorOccupationDTO,
   OccupationSummaryDTO,
+  OccupationDashboardNetworkResponse,
+  HospitalOccupationDashboardItem,
+  HospitalOccupationDashboardSummary,
 } from "../dto/occupationAnalysis.dto";
 import { OccupationAnalysisService } from "./occupationAnalysisService";
 import { Hospital } from "../entities/Hospital";
@@ -16,6 +19,85 @@ export class OccupationAnalysisNetworkService {
 
   constructor(private ds: DataSource) {
     this.occupationService = new OccupationAnalysisService(ds);
+  }
+
+  /**
+   * Dashboard de ocupação (ocupação máxima + histórico 4 meses) agregado por rede.
+   * Retorna por hospital (sem lista de setores) e um global para a rede toda.
+   */
+  async dashboardRede(
+    redeId: string,
+    dataReferencia?: Date
+  ): Promise<OccupationDashboardNetworkResponse> {
+    const t0 = Date.now();
+    console.log(
+      `📊 [OccDashboardNetwork] Início rede=${redeId} dataRef=${
+        dataReferencia ? dataReferencia.toISOString() : "agora"
+      }`
+    );
+
+    const hospitais = await this.ds.getRepository(Hospital).find({
+      where: { rede: { id: redeId } },
+      relations: ["rede"],
+      order: { nome: "ASC" },
+    });
+
+    if (hospitais.length === 0) {
+      throw new Error(`Rede ${redeId} não encontrada ou sem hospitais`);
+    }
+
+    const redeName = hospitais[0]?.rede?.nome ?? "Rede";
+
+    const dashboards = await Promise.all(
+      hospitais.map(async (h) => {
+        try {
+          const r = await this.occupationService.calcularDashboardOcupacao(
+            h.id,
+            dataReferencia
+          );
+          const item: HospitalOccupationDashboardItem = {
+            hospitalId: h.id,
+            hospitalName: h.nome,
+            ocupacaoMaximaAtendivel: r.summary.ocupacaoMaximaAtendivel,
+            historico4Meses: r.summary.historico4Meses,
+          };
+          return item;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          // Alguns hospitais podem não ter unidades de internação; não derrubar a rede toda.
+          console.warn(
+            `⚠️ [OccDashboardNetwork] Ignorando hospital=${h.id} (${h.nome}): ${msg}`
+          );
+          return null;
+        }
+      })
+    );
+
+    const hospitaisOk = dashboards.filter(
+      (x): x is HospitalOccupationDashboardItem => x !== null
+    );
+
+    if (hospitaisOk.length === 0) {
+      throw new Error(`Rede ${redeId} sem hospitais elegíveis para dashboard`);
+    }
+
+    const global = this.calcularGlobalDashboard(hospitaisOk);
+
+    const t1 = Date.now();
+    console.log(
+      `✅ [OccDashboardNetwork] Fim rede=${redeId} hospitais=${
+        hospitaisOk.length
+      }/${hospitais.length} max=${global.ocupacaoMaximaAtendivel}% meses=${
+        global.historico4Meses.length
+      } tempo=${t1 - t0}ms`
+    );
+
+    return {
+      redeId,
+      redeName,
+      hospitais: hospitaisOk,
+      global,
+    };
   }
 
   /**
@@ -350,6 +432,46 @@ export class OccupationAnalysisNetworkService {
       leitosVagos,
       leitosInativos,
       leitosAvaliados,
+    };
+  }
+
+  private calcularGlobalDashboard(
+    hospitais: HospitalOccupationDashboardItem[]
+  ): HospitalOccupationDashboardSummary {
+    if (!hospitais.length) {
+      return { ocupacaoMaximaAtendivel: 0, historico4Meses: [] };
+    }
+
+    const total = hospitais.length;
+    const ocupacaoMaximaAtendivel =
+      hospitais.reduce(
+        (s, h) => s + Number(h.ocupacaoMaximaAtendivel || 0),
+        0
+      ) / total;
+
+    const numMeses = hospitais[0]?.historico4Meses?.length || 0;
+    const historico4Meses =
+      [] as HospitalOccupationDashboardSummary["historico4Meses"];
+
+    for (let i = 0; i < numMeses; i++) {
+      const month = hospitais[0].historico4Meses[i]?.month;
+      const monthLabel = hospitais[0].historico4Meses[i]?.monthLabel;
+      const taxaOcupacao =
+        hospitais.reduce(
+          (s, h) => s + (h.historico4Meses[i]?.taxaOcupacao || 0),
+          0
+        ) / total;
+
+      historico4Meses.push({
+        month,
+        monthLabel,
+        taxaOcupacao: Number(taxaOcupacao.toFixed(2)),
+      });
+    }
+
+    return {
+      ocupacaoMaximaAtendivel: Number(ocupacaoMaximaAtendivel.toFixed(2)),
+      historico4Meses,
     };
   }
 }
