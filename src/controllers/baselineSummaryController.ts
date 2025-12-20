@@ -92,23 +92,27 @@ export class BaselineSummaryController {
 
       // 3) Temos snapshot: consolidar a partir de snapshot.dados
       const dados = snapshot.dados || {};
-      // Estruturas possíveis no snapshot de hospital: { internation: [...], assistance: [...] }
+      // Estruturas possíveis no snapshot de hospital: { internation: [...], assistance: [...], neutral: [...] }
       let internation: any[] =
         dados.internation || dados.unidades || dados.internacao || [];
       let assistance: any[] =
         dados.assistance || dados.unidadesNaoInternacao || [];
+      let neutral: any[] = dados.neutral || [];
 
       // Optional scope filter
       if (scope === "internacao") {
         assistance = [];
+        neutral = [];
       } else if (scope === "nao-internacao") {
         internation = [];
+        neutral = [];
       }
 
       // Optional unit filter
       if (unitId) {
         internation = internation.filter((u: any) => u.id === unitId);
         assistance = assistance.filter((u: any) => u.id === unitId);
+        neutral = neutral.filter((u: any) => u.id === unitId);
       }
 
       // activeOnly aplica-se se viermos a usar baseline clássico; em snapshot, não há flag ativo por padrão.
@@ -129,6 +133,14 @@ export class BaselineSummaryController {
           ativo: true,
           custo: normalizeCost(u.costAmount),
           quantidade: sumStaff(u.staff),
+        })),
+        ...neutral.map((u: any) => ({
+          unidadeId: u.id,
+          nome: u.name || u.nome,
+          tipo: "neutral" as const,
+          ativo: u.status === "ativo",
+          custo: normalizeCost(u.costAmount),
+          quantidade: 0, // Unidades neutras não têm staff
         })),
       ];
 

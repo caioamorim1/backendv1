@@ -3,6 +3,10 @@ import {
   SectorOccupationDTO,
   OccupationSummaryDTO,
   OccupationAnalysisResponse,
+  OccupationDashboardResponse,
+  SectorOccupationDashboardDTO,
+  HospitalOccupationDashboardSummary,
+  MonthlyOccupationData,
 } from "../dto/occupationAnalysis.dto";
 import { calcularProjecao } from "../calculoTaxaOcupacao/calculation";
 import { ProjecaoParams } from "../calculoTaxaOcupacao/interfaces";
@@ -32,11 +36,6 @@ export class OccupationAnalysisService {
     dataReferencia?: Date
   ): Promise<SectorOccupationDTO> {
     const t0 = Date.now();
-    console.log(
-      `📈 [OccAnalyse] Início unidade=${unidadeId} dataRef=${
-        dataReferencia ? dataReferencia.toISOString() : "agora"
-      }`
-    );
 
     // Calcular período (início do mês até data de referência)
     const agora = dataReferencia ? new Date(dataReferencia) : new Date();
@@ -141,8 +140,10 @@ export class OccupationAnalysisService {
         (t.cargoNome || "").toLowerCase().includes("tecnico em enfermagem") ||
         (t.cargoNome || "").toLowerCase().includes("técnico enfermagem") ||
         (t.cargoNome || "").toLowerCase().includes("tec enfermagem") ||
+        (t.cargoNome || "").toLowerCase().includes("téc enfermagem") ||
         (t.cargoNome || "").toLowerCase().includes("tec. enfermagem") ||
         (t.cargoNome || "").toLowerCase().includes("tec. em enfermagem") ||
+        (t.cargoNome || "").toLowerCase().includes("téc. em enfermagem") ||
         (t.cargoNome || "").toLowerCase().includes("técnico de enfermagem")
     );
     const quadroEnf = parseInt(enfRow?.quantidadeAtual ?? 0) || 0;
@@ -198,27 +199,6 @@ export class OccupationAnalysisService {
             ? parametros.quadroAtualTecnicos / resultado.tec100pctFTE
             : 0;
         ocupacaoMaximaAtendivel = resultado.ocupacaoMaximaAtendivel * 100;
-
-        console.log("[OCC-ANALYSE] Unidade:", unidade.nome);
-        console.log(
-          "  - Taxa ocupação período (mês):",
-          taxaOcupacaoPeriodo.toFixed(2),
-          "%"
-        );
-        console.log("  - Taxa ocupação atual:", taxaOcupacao.toFixed(2), "%");
-        console.log(
-          "  - Ocupação base (dimensionamento):",
-          (ocupacaoBase * 100).toFixed(2),
-          "%"
-        );
-        console.log("  - THE base:", theBase.toFixed(2));
-        console.log("  - ENF: atual=", quadroEnf, " necessário@BASE=", enfBase);
-        console.log("  - TEC: atual=", quadroTec, " necessário@BASE=", tecBase);
-        console.log(
-          "  - Capacidade máxima atendível:",
-          ocupacaoMaximaAtendivel.toFixed(2),
-          "%"
-        );
       }
     } catch (error) {
       console.warn(
@@ -255,11 +235,7 @@ export class OccupationAnalysisService {
       distribuicaoClassificacao: distribuicao,
     };
     const t1 = Date.now();
-    console.log(
-      `✅ [OccAnalyse] Fim unidade=${unidadeId} taxa=${out.taxaOcupacao}% max=${
-        out.ocupacaoMaximaAtendivel
-      }% tempo=${t1 - t0}ms`
-    );
+
     return out;
   }
 
@@ -271,11 +247,7 @@ export class OccupationAnalysisService {
     dataReferencia?: Date
   ): Promise<OccupationAnalysisResponse> {
     const t0 = Date.now();
-    console.log(
-      `📊 [OccAnalyse] Início hospital=${hospitalId} dataRef=${
-        dataReferencia ? dataReferencia.toISOString() : "agora"
-      }`
-    );
+
     const unidades = await this.ds.getRepository(UnidadeInternacao).find({
       where: { hospital: { id: hospitalId } },
       order: { nome: "ASC" },
@@ -297,13 +269,7 @@ export class OccupationAnalysisService {
 
     const summary = this.calcularResumoGlobal(sectors);
     const t1 = Date.now();
-    console.log(
-      `✅ [OccAnalyse] Fim hospital=${hospitalId} setores=${
-        sectors.length
-      } taxa=${summary.taxaOcupacao}% max=${
-        summary.ocupacaoMaximaAtendivel
-      }% tempo=${t1 - t0}ms`
-    );
+
     return { hospitalId, hospitalName, sectors, summary };
   }
 
@@ -391,6 +357,230 @@ export class OccupationAnalysisService {
       leitosVagos,
       leitosInativos,
       leitosAvaliados,
+    };
+  }
+
+  /**
+   * NOVO: Dashboard de ocupação - Ocupação máxima + histórico 4 meses
+   * Para cada setor e resumo do hospital
+   */
+  async calcularDashboardOcupacao(
+    hospitalId: string,
+    dataReferencia?: Date
+  ): Promise<OccupationDashboardResponse> {
+    const agora = dataReferencia ? new Date(dataReferencia) : new Date();
+
+    // Buscar unidades do hospital
+    const unidades = await this.ds.getRepository(UnidadeInternacao).find({
+      where: { hospital: { id: hospitalId } },
+      order: { nome: "ASC" },
+      relations: ["hospital"],
+    });
+    if (unidades.length === 0) {
+      throw new Error(
+        `Hospital ${hospitalId} não encontrado ou sem unidades de internação`
+      );
+    }
+
+    const hospitalName = (unidades[0] as any)?.hospital?.nome ?? "Hospital";
+
+    // Calcular últimos 4 meses (do mais antigo para o mais recente)
+    const meses = this.calcularUltimos4Meses(agora);
+
+    const sectors: SectorOccupationDashboardDTO[] = [];
+
+    for (const unidade of unidades) {
+      const sectorData = await this.calcularDashboardUnidade(
+        unidade,
+        meses,
+        agora
+      );
+      sectors.push(sectorData);
+    }
+
+    // Calcular resumo do hospital (médias ponderadas)
+    const summary = this.calcularDashboardSummary(sectors);
+
+    return {
+      hospitalId,
+      hospitalName,
+      sectors,
+      summary,
+    };
+  }
+
+  /**
+   * Calcula últimos 4 meses (do mais antigo ao mais recente)
+   */
+  private calcularUltimos4Meses(dataRef: Date): Date[] {
+    const meses: Date[] = [];
+    for (let i = 3; i >= 0; i--) {
+      const mes = new Date(dataRef.getFullYear(), dataRef.getMonth() - i, 1);
+      meses.push(mes);
+    }
+    return meses;
+  }
+
+  /**
+   * Calcula dashboard para uma unidade específica
+   */
+  private async calcularDashboardUnidade(
+    unidade: UnidadeInternacao,
+    meses: Date[],
+    dataAtual: Date
+  ): Promise<SectorOccupationDashboardDTO> {
+    // 1. Calcular ocupação máxima atendível (usa dados atuais)
+    const analiseAtual = await this.analisarUnidadeInternacao(
+      unidade.id,
+      dataAtual
+    );
+    const ocupacaoMaximaAtendivel = analiseAtual.ocupacaoMaximaAtendivel;
+
+    // 2. Calcular histórico de 4 meses
+    const historico4Meses: MonthlyOccupationData[] = [];
+
+    for (const mesInicio of meses) {
+      const mesFim = new Date(
+        mesInicio.getFullYear(),
+        mesInicio.getMonth() + 1,
+        0,
+        23,
+        59,
+        59,
+        999
+      );
+
+      // Buscar taxa de ocupação média do mês no histórico
+      const taxaOcupacaoMes = await this.calcularTaxaOcupacaoMes(
+        unidade.id,
+        mesInicio,
+        mesFim
+      );
+
+      const monthLabel = this.formatarMesLabel(mesInicio);
+      const month = `${mesInicio.getFullYear()}-${String(
+        mesInicio.getMonth() + 1
+      ).padStart(2, "0")}`;
+
+      historico4Meses.push({
+        month,
+        monthLabel,
+        taxaOcupacao: parseFloat(taxaOcupacaoMes.toFixed(2)),
+      });
+    }
+
+    return {
+      sectorId: unidade.id,
+      sectorName: unidade.nome,
+      sectorType: "internacao",
+      ocupacaoMaximaAtendivel,
+      historico4Meses,
+    };
+  }
+
+  /**
+   * Calcula taxa de ocupação média de um mês para uma unidade
+   */
+  private async calcularTaxaOcupacaoMes(
+    unidadeId: string,
+    inicio: Date,
+    fim: Date
+  ): Promise<number> {
+    const historicoRepo = this.ds.getRepository(HistoricoLeitosStatus);
+
+    const registros = await historicoRepo
+      .createQueryBuilder("h")
+      .where("h.unidade_id = :unidadeId", { unidadeId })
+      .andWhere("h.data >= :inicio", { inicio })
+      .andWhere("h.data <= :fim", { fim })
+      .getMany();
+
+    if (registros.length === 0) {
+      return 0;
+    }
+
+    // Calcular média ponderada (soma de ocupados / soma de leitos totais)
+    let somaOcupados = 0;
+    let somaLeitos = 0;
+
+    for (const reg of registros) {
+      somaOcupados += reg.evaluated || 0;
+      somaLeitos += reg.bedCount || 0;
+    }
+
+    if (somaLeitos === 0) {
+      return 0;
+    }
+
+    return (somaOcupados / somaLeitos) * 100;
+  }
+
+  /**
+   * Formata mês para exibição (ex: "Setembro/2025")
+   */
+  private formatarMesLabel(data: Date): string {
+    const meses = [
+      "Janeiro",
+      "Fevereiro",
+      "Março",
+      "Abril",
+      "Maio",
+      "Junho",
+      "Julho",
+      "Agosto",
+      "Setembro",
+      "Outubro",
+      "Novembro",
+      "Dezembro",
+    ];
+    return `${meses[data.getMonth()]}/${data.getFullYear()}`;
+  }
+
+  /**
+   * Calcula resumo dashboard do hospital (médias ponderadas)
+   */
+  private calcularDashboardSummary(
+    sectors: SectorOccupationDashboardDTO[]
+  ): HospitalOccupationDashboardSummary {
+    // Para calcular média ponderada, precisamos dos leitos de cada setor
+    // Vamos buscar essa info do sistema
+    const totalSetores = sectors.length;
+    if (totalSetores === 0) {
+      return {
+        ocupacaoMaximaAtendivel: 0,
+        historico4Meses: [],
+      };
+    }
+
+    // Ocupação máxima: média simples (pois não temos peso aqui)
+    const ocupacaoMaximaAtendivel =
+      sectors.reduce((sum, s) => sum + s.ocupacaoMaximaAtendivel, 0) /
+      totalSetores;
+
+    // Histórico: calcular média para cada mês
+    const numMeses = sectors[0]?.historico4Meses?.length || 0;
+    const historico4Meses: MonthlyOccupationData[] = [];
+
+    for (let i = 0; i < numMeses; i++) {
+      const month = sectors[0].historico4Meses[i].month;
+      const monthLabel = sectors[0].historico4Meses[i].monthLabel;
+
+      // Média simples das taxas de ocupação de todos os setores nesse mês
+      const taxaOcupacaoMedia =
+        sectors.reduce((sum, s) => {
+          return sum + (s.historico4Meses[i]?.taxaOcupacao || 0);
+        }, 0) / totalSetores;
+
+      historico4Meses.push({
+        month,
+        monthLabel,
+        taxaOcupacao: parseFloat(taxaOcupacaoMedia.toFixed(2)),
+      });
+    }
+
+    return {
+      ocupacaoMaximaAtendivel: parseFloat(ocupacaoMaximaAtendivel.toFixed(2)),
+      historico4Meses,
     };
   }
 }

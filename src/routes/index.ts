@@ -3,6 +3,7 @@ import { AvaliacaoRoutes } from "./avaliacaoRoutes";
 import { HospitalRoutes } from "./hospitalRoutes";
 import { UnidadeRoutes } from "./unidadeRoutes";
 import { UnidadeNaoInternacaoRoutes } from "./unidadeNaoInternacaoRoutes";
+import { UnidadeNeutraRoutes } from "./unidadeNeutraRoutes";
 import { SitioPosicaoRoutes } from "./sitioPosicaoRoutes";
 import { EstatisticasRoutes } from "./estatisticasRoutes";
 import { LeitoRoutes } from "./leitoRoutes";
@@ -67,6 +68,7 @@ export const createIndexRouter = (dataSource: DataSource): Router => {
     "/unidades-nao-internacao",
     UnidadeNaoInternacaoRoutes(dataSource)
   );
+  router.use("/unidades-neutras", UnidadeNeutraRoutes(dataSource));
   // Sitios e Posições
   router.use("/sitios", SitioPosicaoRoutes(dataSource));
 

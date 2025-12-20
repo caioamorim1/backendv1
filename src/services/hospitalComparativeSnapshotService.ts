@@ -70,17 +70,26 @@ export class HospitalComparativeSnapshotService {
       projetadoFinal.naoInternacao || []
     );
 
+    // 7. Processar unidades neutras
+    const neutral = await this.processarNeutras(
+      dadosAtuaisReal.neutral || [],
+      dadosSnapshot.neutral || []
+    );
+
     console.log(`✅ ===== FIM COMPARATIVO SNAPSHOT =====\n`);
 
-    return {
+    const resultado = {
       hospitalId,
       snapshotId: snapshotSelecionado.id,
       snapshotData: snapshotSelecionado.dataHora,
       sectors: {
         internation,
         assistance,
+        neutral,
       },
     };
+
+    return resultado;
   }
 
   /**
@@ -310,6 +319,52 @@ export class HospitalComparativeSnapshotService {
   }
 
   /**
+   * Processa unidades neutras (sem staff, apenas custo)
+   */
+  private async processarNeutras(atuaisReal: any[], atuaisSnapshot: any[]) {
+    const resultado: any[] = [];
+
+    // Criar mapa de unidades por ID
+    const mapAtualReal = new Map(atuaisReal.map((u) => [u.id, u]));
+    const mapAtualSnapshot = new Map(atuaisSnapshot.map((u) => [u.id, u]));
+
+    // Iterar por todas as unidades únicas
+    const allUnitIds = new Set([
+      ...atuaisReal.map((u) => u.id),
+      ...atuaisSnapshot.map((u) => u.id),
+    ]);
+
+    for (const unitId of allUnitIds) {
+      const atualReal = mapAtualReal.get(unitId);
+      const atualSnapshot = mapAtualSnapshot.get(unitId);
+
+      // Extrair informações básicas
+      const nome = atualReal?.name || atualSnapshot?.name || "Desconhecida";
+
+      const custoAtualReal = parseFloat(atualReal?.costAmount || 0);
+      const custoAtualSnapshot = parseFloat(atualSnapshot?.costAmount || 0);
+      const statusAtualReal = atualReal?.status || "inativo";
+      const statusAtualSnapshot = atualSnapshot?.status || "inativo";
+
+      // Calcular diferença de custo (atual real - snapshot)
+      const diferencaCusto = custoAtualReal - custoAtualSnapshot;
+
+      resultado.push({
+        id: unitId,
+        name: nome,
+        tipo: "NEUTRAL",
+        custoAtualReal,
+        custoAtualSnapshot,
+        diferencaCusto,
+        statusAtualReal,
+        statusAtualSnapshot,
+      });
+    }
+
+    return resultado;
+  }
+
+  /**
    * Extrai quadro de pessoal por cargo (formato: [{role, quantity}])
    */
   private extrairQuadroPorCargo(staff: any[]): Record<string, number> {
@@ -422,6 +477,7 @@ export class HospitalComparativeSnapshotService {
     // Buscar comparativo de cada hospital e agregar
     const allInternation: any[] = [];
     const allAssistance: any[] = [];
+    const allNeutral: any[] = [];
 
     for (const hospital of hospitals) {
       try {
@@ -447,6 +503,7 @@ export class HospitalComparativeSnapshotService {
 
         allInternation.push(...(hospitalData.sectors.internation || []));
         allAssistance.push(...(hospitalData.sectors.assistance || []));
+        allNeutral.push(...(hospitalData.sectors.neutral || []));
       } catch (error) {
         console.warn(`⚠️ Erro ao buscar hospital ${hospital.id}:`, error);
         // Continua com os próximos hospitais
@@ -456,10 +513,12 @@ export class HospitalComparativeSnapshotService {
     console.log(`\n📦 Total agregado antes de processar:`);
     console.log(`   Internação: ${allInternation.length} setores`);
     console.log(`   Assistência: ${allAssistance.length} setores`);
+    console.log(`   Neutras: ${allNeutral.length} unidades`);
 
     // Agregar por nome de setor
     const internation = this.agregarSetores(allInternation);
     const assistance = this.agregarSetores(allAssistance);
+    const neutral = this.agregarNeutras(allNeutral);
 
     console.log(`✅ ===== FIM COMPARATIVO SNAPSHOT REDE =====\n`);
 
@@ -469,6 +528,7 @@ export class HospitalComparativeSnapshotService {
       sectors: {
         internation,
         assistance,
+        neutral,
       },
     };
   }
@@ -488,12 +548,14 @@ export class HospitalComparativeSnapshotService {
 
     const allInternation: any[] = [];
     const allAssistance: any[] = [];
+    const allNeutral: any[] = [];
 
     for (const hospital of hospitals) {
       try {
         const hospitalData = await this.getHospitalComparative(hospital.id);
         allInternation.push(...(hospitalData.sectors.internation || []));
         allAssistance.push(...(hospitalData.sectors.assistance || []));
+        allNeutral.push(...(hospitalData.sectors.neutral || []));
       } catch (error) {
         console.warn(`⚠️ Erro ao buscar hospital ${hospital.id}:`, error);
       }
@@ -501,6 +563,7 @@ export class HospitalComparativeSnapshotService {
 
     const internation = this.agregarSetores(allInternation);
     const assistance = this.agregarSetores(allAssistance);
+    const neutral = this.agregarNeutras(allNeutral);
 
     console.log(`✅ ===== FIM COMPARATIVO SNAPSHOT GRUPO =====\n`);
 
@@ -510,6 +573,7 @@ export class HospitalComparativeSnapshotService {
       sectors: {
         internation,
         assistance,
+        neutral,
       },
     };
   }
@@ -529,12 +593,14 @@ export class HospitalComparativeSnapshotService {
 
     const allInternation: any[] = [];
     const allAssistance: any[] = [];
+    const allNeutral: any[] = [];
 
     for (const hospital of hospitals) {
       try {
         const hospitalData = await this.getHospitalComparative(hospital.id);
         allInternation.push(...(hospitalData.sectors.internation || []));
         allAssistance.push(...(hospitalData.sectors.assistance || []));
+        allNeutral.push(...(hospitalData.sectors.neutral || []));
       } catch (error) {
         console.warn(`⚠️ Erro ao buscar hospital ${hospital.id}:`, error);
       }
@@ -542,6 +608,7 @@ export class HospitalComparativeSnapshotService {
 
     const internation = this.agregarSetores(allInternation);
     const assistance = this.agregarSetores(allAssistance);
+    const neutral = this.agregarNeutras(allNeutral);
 
     console.log(`✅ ===== FIM COMPARATIVO SNAPSHOT REGIÃO =====\n`);
 
@@ -551,6 +618,7 @@ export class HospitalComparativeSnapshotService {
       sectors: {
         internation,
         assistance,
+        neutral,
       },
     };
   }
@@ -658,5 +726,37 @@ export class HospitalComparativeSnapshotService {
     for (const [cargo, quantidade] of Object.entries(source || {})) {
       target[cargo] = (target[cargo] || 0) + quantidade;
     }
+  }
+
+  /**
+   * Agrega unidades neutras por nome
+   */
+  private agregarNeutras(neutras: any[]): any[] {
+    const map = new Map<string, any>();
+
+    for (const neutra of neutras) {
+      const key = neutra.name;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          name: neutra.name,
+          tipo: "NEUTRAL",
+          custoAtualReal: 0,
+          custoAtualSnapshot: 0,
+          diferencaCusto: 0,
+          statusAtualReal: neutra.statusAtualReal || "inativo",
+          statusAtualSnapshot: neutra.statusAtualSnapshot || "inativo",
+        });
+      }
+
+      const agg = map.get(key);
+
+      // Somar custos
+      agg.custoAtualReal += parseFloat(neutra.custoAtualReal || 0);
+      agg.custoAtualSnapshot += parseFloat(neutra.custoAtualSnapshot || 0);
+      agg.diferencaCusto += parseFloat(neutra.diferencaCusto || 0);
+    }
+
+    return Array.from(map.values());
   }
 }

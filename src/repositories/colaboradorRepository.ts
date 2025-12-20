@@ -45,6 +45,7 @@ export class ColaboradorRepository {
       nome: data.nome,
       email: data.email,
       cpf: data.cpf,
+      coren: data.coren,
       senha: senhaHash,
       mustChangePassword: true,
       permissao: data.permissao,
@@ -139,6 +140,9 @@ export class ColaboradorRepository {
     const updateData: Partial<Colaborador> = { ...data } as any;
     if (data.permissao) {
       updateData.permissao = data.permissao;
+    }
+    if (data.coren !== undefined) {
+      updateData.coren = data.coren;
     }
 
     if ((data as any).hospitalId) {

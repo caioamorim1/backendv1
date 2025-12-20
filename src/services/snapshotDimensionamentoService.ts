@@ -6,7 +6,9 @@ import { ProjetadoFinalService } from "./projetadoFinalService";
 import { ControlePeriodoService } from "./controlePeriodoService";
 import { DimensionamentoService } from "./dimensionamentoService";
 import { ProjetadoFinalInternacao } from "../entities/ProjetadoFinalInternacao";
+import { ProjetadoFinalNaoInternacao } from "../entities/ProjetadoFinalNaoInternacao";
 import { UnidadeInternacao } from "../entities/UnidadeInternacao";
+import { UnidadeNaoInternacao } from "../entities/UnidadeNaoInternacao";
 import { createHash } from "crypto";
 
 export class SnapshotDimensionamentoService {
@@ -145,10 +147,131 @@ export class SnapshotDimensionamentoService {
       }
     }
 
+    // Buscar todas as unidades de não-internação (assistance) do hospital
+    const unidadesNaoInternacao = await this.ds
+      .getRepository(UnidadeNaoInternacao)
+      .find({
+        where: { hospital: { id: hospitalId } },
+        select: ["id", "nome"],
+      });
+
+    console.log(
+      `\n🏥 Encontradas ${unidadesNaoInternacao.length} unidades de NÃO-INTERNAÇÃO\n`
+    );
+
+    // Validar não-internação (status por unidade)
+    console.log("═══ VALIDANDO UNIDADES DE NÃO-INTERNAÇÃO ═══");
+    for (const unidade of unidadesNaoInternacao) {
+      console.log(`\n📍 Unidade: ${unidade.nome} (ID: ${unidade.id})`);
+
+      const projetados = await this.ds
+        .getRepository(ProjetadoFinalNaoInternacao)
+        .find({
+          where: { unidadeId: unidade.id },
+        });
+
+      console.log(
+        `   📊 Encontrados ${projetados.length} registros de projetado final`
+      );
+
+      // Se não tem nenhum projetado final, setor está pendente
+      if (projetados.length === 0) {
+        console.log(
+          `   ❌ PENDENTE: Nenhum registro de projetado final encontrado`
+        );
+        setoresPendentes.push(`${unidade.nome} (Não-Internação)`);
+        continue;
+      }
+
+      // Log de cada projetado (agrupado por sítio)
+      console.log(
+        `\n   📦 Listando todos os ${projetados.length} cargos da unidade:`
+      );
+      projetados.forEach((p, index) => {
+        const isValido = statusValidos.includes(p.status);
+        const emoji = isValido ? "✅" : "⚠️";
+        console.log(
+          `   ${emoji} Cargo ${index + 1}: cargoId=${p.cargoId.substring(
+            0,
+            8
+          )}... | sitioId=${p.sitioId?.substring(0, 8) || "N/A"}... | status="${
+            p.status
+          }" | projetadoFinal=${p.projetadoFinal}`
+        );
+      });
+
+      // Validação 1: Verificar se todos os projetados têm status válido
+      console.log(
+        `\n   🔍 [VALIDAÇÃO 1/2] Verificando se todos os status são válidos...`
+      );
+      const temStatusInvalido = projetados.some(
+        (p) => !statusValidos.includes(p.status)
+      );
+
+      if (temStatusInvalido) {
+        const statusInvalidos = projetados
+          .filter((p) => !statusValidos.includes(p.status))
+          .map((p) => p.status);
+        console.log(
+          `   ❌ PENDENTE: Encontrados status inválidos: ${[
+            ...new Set(statusInvalidos),
+          ].join(", ")}`
+        );
+        setoresPendentes.push(
+          `${unidade.nome} (Não-Internação) - Status inválidos`
+        );
+        continue;
+      } else {
+        console.log(
+          `   ✅ Todos os status são válidos (${statusValidos.join(", ")})`
+        );
+      }
+
+      // Validação 2: Verificar se todos os status são iguais (sem mistura)
+      console.log(
+        `\n   🔍 [VALIDAÇÃO 2/2] Verificando consistência dos status (todos iguais)...`
+      );
+      const statusUnicos = [...new Set(projetados.map((p) => p.status))];
+      console.log(
+        `   🔍 Status únicos encontrados: ${statusUnicos.join(", ")} (total: ${
+          statusUnicos.length
+        })`
+      );
+
+      if (statusUnicos.length > 1) {
+        // Calcular distribuição de status
+        const distribuicao = projetados.reduce((acc, p) => {
+          acc[p.status] = (acc[p.status] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+
+        const distribuicaoStr = Object.entries(distribuicao)
+          .map(([status, count]) => `${status}(${count})`)
+          .join(", ");
+
+        console.log(`   ❌ PENDENTE: Cargos com status misturados`);
+        console.log(`   📊 Distribuição: ${distribuicaoStr}`);
+        console.log(
+          `   🚫 BLOQUEANDO unidade "${unidade.nome}" - Status misturados detectado`
+        );
+        setoresPendentes.push(
+          `${unidade.nome} (Não-Internação) - Status misturados (${distribuicaoStr})`
+        );
+        continue;
+      }
+
+      console.log(
+        `   🎉 Unidade "${unidade.nome}" aprovada - Todos os ${projetados.length} cargos estão em "${statusUnicos[0]}"`
+      );
+    }
+
     console.log("\n═══════════════════════════════════════════");
     console.log(`📋 RESUMO DA VALIDAÇÃO:`);
     console.log(
       `   Total de unidades de internação verificadas: ${unidadesInternacao.length}`
+    );
+    console.log(
+      `   Total de unidades de não-internação verificadas: ${unidadesNaoInternacao.length}`
     );
     console.log(`   Setores pendentes: ${setoresPendentes.length}`);
 
@@ -189,31 +312,16 @@ export class SnapshotDimensionamentoService {
   ): Promise<
     SnapshotDimensionamento | { error: string; setoresPendentes: string[] }
   > {
-    console.log(
-      `\n🏥 [SNAPSHOT] Iniciando criação de snapshot para hospital ${hospitalId}`
-    );
-
     // Validar status do projetado final e período travado
     const validacao = await this.validarStatusProjetadoFinal(hospitalId);
 
-    console.log(
-      `\n🔍 [SNAPSHOT] Resultado da validação: valido=${validacao.valido}`
-    );
-
     if (!validacao.valido) {
-      console.log(
-        `\n🚫 [SNAPSHOT] BLOQUEANDO criação - ${validacao.setoresPendentes.length} setores pendentes`
-      );
       return {
         error:
           "Não é possível criar snapshot. Todos os setores de internação devem ter período travado e status válido:",
         setoresPendentes: validacao.setoresPendentes,
       };
     }
-
-    console.log(
-      `\n✅ [SNAPSHOT] Validação aprovada - prosseguindo com criação do snapshot`
-    );
 
     // Buscar dados completos do hospital
     const dadosHospital =
@@ -224,34 +332,17 @@ export class SnapshotDimensionamentoService {
       dadosHospital
     );
 
-    console.log(
-      "Dados Hospital (brutos)",
-      JSON.stringify(dadosHospital, null, 2)
-    );
-
-    console.log("🧹 [SERVICE] Iniciando sanitização...");
     // ✅ SANITIZAR dados antes de salvar
     const dadosSanitizados = this.sanitizarDados(dadosHospital, "root");
     // Adicionar projetado final aos dados
     dadosSanitizados.projetadoFinal = projetadoFinalData;
-    console.log("✅ [SERVICE] Sanitização completa!");
 
-    console.log(
-      "Dados Hospital (sanitizados)",
-      JSON.stringify(dadosSanitizados, null, 2)
-    );
-
-    console.log("📊 [SERVICE] Calculando resumo...");
     // Calcular resumo
     const resumo = this.calcularResumoHospital(dadosSanitizados);
-    console.log("Resumo", JSON.stringify(resumo, null, 2));
 
-    console.log("🔐 [SERVICE] Calculando hash...");
     // Calcular hash para evitar duplicatas
     const hashDados = this.calcularHash(dadosSanitizados);
-    console.log("Hash:", hashDados);
 
-    console.log("💾 [SERVICE] Chamando repository.criar()...");
     // Criar snapshot
     const snapshot = await this.snapshotRepo.criar({
       escopo: "HOSPITAL",
@@ -266,7 +357,6 @@ export class SnapshotDimensionamentoService {
         `Snapshot completo do hospital - ${new Date().toLocaleString("pt-BR")}`,
     });
 
-    console.log("Snapshot criado", JSON.stringify(snapshot, null, 2));
     return snapshot;
   }
 
@@ -471,6 +561,212 @@ export class SnapshotDimensionamentoService {
    */
   async buscarSelecionadoPorHospital(hospitalId: string) {
     return await this.snapshotRepo.buscarSelecionadoPorHospital(hospitalId);
+  }
+
+  /**
+   * Buscar situação atual do hospital (funcionários reais e custos)
+   */
+  async buscarSituacaoAtual(hospitalId: string) {
+    console.log(`🔍 Buscando situação atual do hospital ${hospitalId}...`);
+
+    // Buscar unidades de internação
+    const unidadesInternacao = await this.ds
+      .getRepository(UnidadeInternacao)
+      .find({
+        where: { hospital: { id: hospitalId } },
+        relations: ["cargosUnidade", "cargosUnidade.cargo"],
+      });
+
+    // Buscar unidades de não internação
+    const unidadesNaoInternacao = await this.ds
+      .getRepository(UnidadeNaoInternacao)
+      .find({
+        where: { hospital: { id: hospitalId } },
+        relations: [
+          "sitiosFuncionais",
+          "sitiosFuncionais.cargosSitio",
+          "sitiosFuncionais.cargosSitio.cargoUnidade",
+          "sitiosFuncionais.cargosSitio.cargoUnidade.cargo",
+        ],
+      });
+
+    // Buscar unidades neutras
+    const unidadesNeutras = await this.ds.getRepository("UnidadeNeutra").find({
+      where: { hospital: { id: hospitalId } },
+    });
+
+    const unidadesAtual: any[] = [];
+
+    // Processar unidades de internação
+    for (const unidade of unidadesInternacao) {
+      const cargos = (unidade.cargosUnidade || []).map((cu: any) => {
+        const salario = parseFloat((cu.cargo.salario || "0").replace(",", "."));
+        const adicionais = parseFloat(
+          (cu.cargo.adicionais_tributos || "0").replace(",", ".")
+        );
+        const horasExtra = parseFloat(
+          (unidade.horas_extra_reais || "0").replace(",", ".")
+        );
+        const custoUnitario = salario + adicionais + horasExtra;
+        const custoTotal = custoUnitario * cu.quantidade_funcionarios;
+
+        return {
+          cargoId: cu.cargo.id,
+          cargoNome: cu.cargo.nome,
+          quantidadeFuncionarios: cu.quantidade_funcionarios,
+          quantidadeAtualizadaEm: cu.quantidade_atualizada_em || null,
+          custoUnitario: custoUnitario,
+          custoTotal: custoTotal,
+        };
+      });
+
+      const custoTotalUnidade = cargos.reduce(
+        (sum, c) => sum + c.custoTotal,
+        0
+      );
+      const totalFuncionarios = cargos.reduce(
+        (sum, c) => sum + c.quantidadeFuncionarios,
+        0
+      );
+
+      unidadesAtual.push({
+        unidadeId: unidade.id,
+        unidadeNome: unidade.nome,
+        tipo: "INTERNACAO",
+        totalFuncionarios: totalFuncionarios,
+        custoTotal: custoTotalUnidade,
+        cargos: cargos,
+      });
+    }
+
+    // Processar unidades de não internação (buscar por sítios funcionais)
+    for (const unidade of unidadesNaoInternacao) {
+      // Agregrar funcionários por cargo a partir dos sítios
+      const cargosMap = new Map<
+        string,
+        {
+          cargoId: string;
+          cargoNome: string;
+          quantidade: number;
+          custo: number;
+          ultimaAtualizacao: Date | null;
+        }
+      >();
+
+      for (const sitio of unidade.sitiosFuncionais || []) {
+        for (const cargoSitio of sitio.cargosSitio || []) {
+          const cargo = cargoSitio.cargoUnidade?.cargo;
+          if (!cargo) continue;
+
+          const salario = parseFloat((cargo.salario || "0").replace(",", "."));
+          const adicionais = parseFloat(
+            (cargo.adicionais_tributos || "0").replace(",", ".")
+          );
+          const horasExtra = parseFloat(
+            (unidade.horas_extra_reais || "0").replace(",", ".")
+          );
+          const custoUnitario = salario + adicionais + horasExtra;
+
+          if (cargosMap.has(cargo.id)) {
+            const existing = cargosMap.get(cargo.id)!;
+            existing.quantidade += cargoSitio.quantidade_funcionarios;
+            existing.custo +=
+              custoUnitario * cargoSitio.quantidade_funcionarios;
+
+            // Pegar a data mais recente de atualização
+            if (cargoSitio.quantidade_atualizada_em) {
+              if (
+                !existing.ultimaAtualizacao ||
+                new Date(cargoSitio.quantidade_atualizada_em) >
+                  existing.ultimaAtualizacao
+              ) {
+                existing.ultimaAtualizacao = new Date(
+                  cargoSitio.quantidade_atualizada_em
+                );
+              }
+            }
+          } else {
+            cargosMap.set(cargo.id, {
+              cargoId: cargo.id,
+              cargoNome: cargo.nome,
+              quantidade: cargoSitio.quantidade_funcionarios,
+              custo: custoUnitario * cargoSitio.quantidade_funcionarios,
+              ultimaAtualizacao: cargoSitio.quantidade_atualizada_em
+                ? new Date(cargoSitio.quantidade_atualizada_em)
+                : null,
+            });
+          }
+        }
+      }
+
+      // Converter o Map para array
+      const cargos = Array.from(cargosMap.values()).map((c) => ({
+        cargoId: c.cargoId,
+        cargoNome: c.cargoNome,
+        quantidadeFuncionarios: c.quantidade,
+        quantidadeAtualizadaEm: c.ultimaAtualizacao,
+        custoUnitario: c.quantidade > 0 ? c.custo / c.quantidade : 0,
+        custoTotal: c.custo,
+      }));
+
+      const custoTotalUnidade = cargos.reduce(
+        (sum, c) => sum + c.custoTotal,
+        0
+      );
+      const totalFuncionarios = cargos.reduce(
+        (sum, c) => sum + c.quantidadeFuncionarios,
+        0
+      );
+
+      unidadesAtual.push({
+        unidadeId: unidade.id,
+        unidadeNome: unidade.nome,
+        tipo: "NAO_INTERNACAO",
+        totalFuncionarios: totalFuncionarios,
+        custoTotal: custoTotalUnidade,
+        cargos: cargos,
+      });
+    }
+
+    // Calcular totais gerais
+    const totalGeralFuncionarios = unidadesAtual.reduce(
+      (sum, u) => sum + u.totalFuncionarios,
+      0
+    );
+    const custoTotalGeral = unidadesAtual.reduce(
+      (sum, u) => sum + u.custoTotal,
+      0
+    );
+
+    // Somar custo das unidades neutras
+    const custoUnidadesNeutras = (unidadesNeutras as any[]).reduce(
+      (sum, u) => sum + parseFloat(u.custoTotal || 0),
+      0
+    );
+
+    const custoTotalFinal = custoTotalGeral + custoUnidadesNeutras;
+
+    console.log(
+      `✅ Situação atual: ${unidadesAtual.length} unidades, ${totalGeralFuncionarios} funcionários`
+    );
+    console.log(`   💰 Custo unidades: R$ ${custoTotalGeral.toFixed(2)}`);
+    console.log(`   💰 Custo neutras: R$ ${custoUnidadesNeutras.toFixed(2)}`);
+    console.log(`   💰 Custo total: R$ ${custoTotalFinal.toFixed(2)}`);
+
+    return {
+      unidades: unidadesAtual,
+      unidadesNeutras: (unidadesNeutras as any[]).map((u) => ({
+        unidadeId: u.id,
+        unidadeNome: u.nome,
+        custoTotal: parseFloat(u.custoTotal || 0),
+      })),
+      totais: {
+        totalFuncionarios: totalGeralFuncionarios,
+        custoUnidades: custoTotalGeral,
+        custoUnidadesNeutras: custoUnidadesNeutras,
+        custoTotal: custoTotalFinal,
+      },
+    };
   }
 
   /**
@@ -706,9 +1002,6 @@ export class SnapshotDimensionamentoService {
             valor.replace("%", "").replace(",", ".").trim()
           );
           const resultado = isNaN(numero) ? 0 : numero;
-          console.log(
-            `🔧 [SANITIZAR] ${caminhoCompleto}: "${valor}" → ${resultado}`
-          );
           sanitizado[chave] = resultado;
         }
         // Se for string numérica com vírgula (ex: "1.500,00"), converter
@@ -718,9 +1011,6 @@ export class SnapshotDimensionamentoService {
           );
           const resultado = isNaN(numero) ? valor : numero;
           if (typeof resultado === "number") {
-            console.log(
-              `🔧 [SANITIZAR] ${caminhoCompleto}: "${valor}" → ${resultado}`
-            );
           }
           // Normalizar campos monetários para centavos (inteiro)
           if (
@@ -846,8 +1136,49 @@ export class SnapshotDimensionamentoService {
         }
 
         if (projetado) {
+          // Buscar dados da unidade para pegar horas_extra_reais
+          const unidadeEntity = await this.ds
+            .getRepository(UnidadeInternacao)
+            .findOne({ where: { id: unidade.id } });
+
+          const horasExtraUnidade = parseFloat(
+            (unidadeEntity?.horas_extra_reais || "0").replace(",", ".")
+          );
+
+          // Adicionar custos aos cargos de internação
+          let custoTotalUnidade = 0;
+          const cargosComCusto = await Promise.all(
+            (projetado.cargos || []).map(async (cargo: any) => {
+              const cargoEntity = await this.ds
+                .getRepository("Cargo")
+                .findOne({ where: { id: cargo.cargoId } });
+
+              let custoUnitario = 0;
+              if (cargoEntity) {
+                const salario = parseFloat(
+                  (cargoEntity.salario || "0").replace(",", ".")
+                );
+                const adicionais = parseFloat(
+                  (cargoEntity.adicionais_tributos || "0").replace(",", ".")
+                );
+                custoUnitario = salario + adicionais + horasExtraUnidade;
+              }
+
+              const custoTotal = custoUnitario * (cargo.projetadoFinal || 0);
+              custoTotalUnidade += custoTotal;
+
+              return {
+                ...cargo,
+                custoUnitario,
+                custoTotal,
+              };
+            })
+          );
+
           resultado.internacao.push({
             ...projetado,
+            cargos: cargosComCusto,
+            custoTotalUnidade,
             unidadeNome: unidade.name,
             periodoTravado: periodoTravado
               ? {
@@ -869,8 +1200,75 @@ export class SnapshotDimensionamentoService {
           unidade.id
         );
         if (projetado) {
+          // Buscar dados da unidade para pegar horas_extra_reais
+          const unidadeEntity = await this.ds
+            .getRepository(UnidadeNaoInternacao)
+            .findOne({ where: { id: unidade.id } });
+
+          const horasExtraUnidade = parseFloat(
+            (unidadeEntity?.horas_extra_reais || "0").replace(",", ".")
+          );
+
+          console.log(
+            `📊 Unidade Não-Internação ${unidade.name}: horas_extra_reais = "${unidadeEntity?.horas_extra_reais}" => ${horasExtraUnidade}`
+          );
+
+          // Adicionar custos aos cargos de não-internação (agregados por sítio)
+          let custoTotalUnidade = 0;
+          let totalFuncionariosUnidade = 0;
+          const sitiosComCusto = await Promise.all(
+            (projetado.sitios || []).map(async (sitio: any) => {
+              let custoTotalSitio = 0;
+              const cargosComCusto = await Promise.all(
+                (sitio.cargos || []).map(async (cargo: any) => {
+                  const cargoEntity = await this.ds
+                    .getRepository("Cargo")
+                    .findOne({ where: { id: cargo.cargoId } });
+
+                  let custoUnitario = 0;
+                  if (cargoEntity) {
+                    const salario = parseFloat(
+                      (cargoEntity.salario || "0").replace(",", ".")
+                    );
+                    const adicionais = parseFloat(
+                      (cargoEntity.adicionais_tributos || "0").replace(",", ".")
+                    );
+                    custoUnitario = salario + adicionais + horasExtraUnidade;
+
+                    console.log(
+                      `  💰 Cargo ${cargoEntity.nome}: salário=${salario} + adicionais=${adicionais} + horasExtra=${horasExtraUnidade} = ${custoUnitario}`
+                    );
+                  }
+
+                  const projetadoQtd = cargo.projetadoFinal || 0;
+                  totalFuncionariosUnidade += projetadoQtd;
+                  const custoTotal = custoUnitario * projetadoQtd;
+                  custoTotalSitio += custoTotal;
+
+                  return {
+                    ...cargo,
+                    custoUnitario,
+                    custoTotal,
+                  };
+                })
+              );
+
+              custoTotalUnidade += custoTotalSitio;
+
+              return {
+                ...sitio,
+                cargos: cargosComCusto,
+                custoTotalSitio,
+              };
+            })
+          );
+
           resultado.naoInternacao.push({
             ...projetado,
+            sitios: sitiosComCusto,
+            custoTotalUnidade,
+            custoHorasExtrasUnidade:
+              horasExtraUnidade * totalFuncionariosUnidade,
             unidadeNome: unidade.name,
           });
         }
@@ -936,15 +1334,11 @@ export class SnapshotDimensionamentoService {
     tipo: "rede" | "grupo" | "regiao",
     id: string
   ): Promise<any[]> {
-    console.log(
-      `\n🔍 Buscando snapshots selecionados por ${tipo}: ${id}\n`
-    );
-
     // Buscar hospitais do grupo
     const hospitalRepo = this.ds.getRepository("Hospital");
-    
+
     let hospitais: any[];
-    
+
     if (tipo === "rede") {
       hospitais = await hospitalRepo.find({
         where: { rede: { id } },
@@ -962,8 +1356,6 @@ export class SnapshotDimensionamentoService {
       });
     }
 
-    console.log(`📋 Encontrados ${hospitais.length} hospitais no ${tipo}`);
-
     if (hospitais.length === 0) {
       return [];
     }
@@ -974,8 +1366,6 @@ export class SnapshotDimensionamentoService {
     const snapshots = await this.snapshotRepo.buscarSelecionadosPorHospitais(
       hospitalIds
     );
-
-    console.log(`✅ Encontrados ${snapshots.length} snapshots selecionados\n`);
 
     return snapshots.map((snapshot: SnapshotDimensionamento) => ({
       ...snapshot,

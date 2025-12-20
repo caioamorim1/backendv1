@@ -1,4 +1,4 @@
-import { DataSource, Repository, Between, IsNull } from "typeorm";
+import { DataSource, Repository, Between, IsNull, Not } from "typeorm";
 import { DateTime } from "luxon";
 import {
   AvaliacaoSCP,
@@ -31,6 +31,93 @@ export class AvaliacaoRepository {
     this.scpMetodoRepo = ds.getRepository(ScpMetodo);
     this.colaboradorRepo = ds.getRepository(Colaborador);
     this.leitosStatusService = new LeitosStatusService(ds);
+  }
+
+  /**
+   * Busca o último prontuário usado em avaliações de um leito específico
+   * Retorna o prontuário mais recente ou null se não houver histórico
+   */
+  async buscarUltimoProntuarioPorLeito(leitoId: string): Promise<{
+    prontuario: string | null;
+    dataAplicacao: string | null;
+    avaliacaoId: string | null;
+  }> {
+    console.log("\n💾 [REPOSITORY] Buscando último prontuário");
+    console.log("   Leito ID:", leitoId);
+
+    console.log(
+      "\n🔎 1ª Tentativa: Buscar com prontuário preenchido (NOT NULL)..."
+    );
+    const ultimaAvaliacao = await this.repo.findOne({
+      where: {
+        leito: { id: leitoId },
+        prontuario: Not(IsNull()), // Busca onde prontuário NÃO é null
+      },
+      order: {
+        dataAplicacao: "DESC",
+        created_at: "DESC",
+      },
+      select: ["id", "prontuario", "dataAplicacao", "created_at"], // Incluir created_at no select
+    });
+
+    if (ultimaAvaliacao) {
+      console.log("   ✅ Encontrou avaliação com prontuário:");
+      console.log("      - ID:", ultimaAvaliacao.id);
+      console.log("      - Prontuário:", ultimaAvaliacao.prontuario);
+      console.log("      - Data:", ultimaAvaliacao.dataAplicacao);
+      console.log("      - Created At:", ultimaAvaliacao.created_at);
+    } else {
+      console.log("   ⚠️ Não encontrou avaliação com prontuário preenchido");
+    }
+
+    // Se não encontrou com prontuário preenchido, buscar qualquer uma
+    if (!ultimaAvaliacao || !ultimaAvaliacao.prontuario) {
+      console.log("\n🔎 2ª Tentativa: Buscar qualquer avaliação do leito...");
+
+      const qualquerAvaliacao = await this.repo.findOne({
+        where: {
+          leito: { id: leitoId },
+        },
+        order: {
+          dataAplicacao: "DESC",
+          created_at: "DESC",
+        },
+        select: ["id", "prontuario", "dataAplicacao", "created_at"], // Incluir created_at no select
+      });
+
+      if (qualquerAvaliacao) {
+        console.log("   ✅ Encontrou avaliação:");
+        console.log("      - ID:", qualquerAvaliacao.id);
+        console.log(
+          "      - Prontuário:",
+          qualquerAvaliacao.prontuario || "(null)"
+        );
+        console.log("      - Data:", qualquerAvaliacao.dataAplicacao);
+        console.log("      - Created At:", qualquerAvaliacao.created_at);
+      } else {
+        console.log("   ℹ️ Nenhuma avaliação encontrada para este leito");
+      }
+
+      console.log("\n📤 Retornando resultado (fallback):");
+      const resultado = {
+        prontuario: qualquerAvaliacao?.prontuario || null,
+        dataAplicacao: qualquerAvaliacao?.dataAplicacao || null,
+        avaliacaoId: qualquerAvaliacao?.id || null,
+      };
+      console.log(JSON.stringify(resultado, null, 2));
+
+      return resultado;
+    }
+
+    console.log("\n📤 Retornando resultado (com prontuário):");
+    const resultado = {
+      prontuario: ultimaAvaliacao.prontuario,
+      dataAplicacao: ultimaAvaliacao.dataAplicacao,
+      avaliacaoId: ultimaAvaliacao.id,
+    };
+    console.log(JSON.stringify(resultado, null, 2));
+
+    return resultado;
   }
 
   /**

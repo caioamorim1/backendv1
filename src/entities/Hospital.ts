@@ -10,6 +10,7 @@ import {
 } from "typeorm";
 import { UnidadeInternacao } from "./UnidadeInternacao";
 import { UnidadeNaoInternacao } from "./UnidadeNaoInternacao";
+import { UnidadeNeutra } from "./UnidadeNeutra";
 import { Colaborador } from "./Colaborador";
 import { Cargo } from "./Cargo";
 import { Regiao } from "./Regiao";
@@ -121,6 +122,9 @@ export class Hospital {
 
   @OneToMany(() => UnidadeNaoInternacao, (uni) => uni.hospital)
   unidadesNaoInternacao!: UnidadeNaoInternacao[];
+
+  @OneToMany(() => UnidadeNeutra, (un) => un.hospital)
+  unidadesNeutras!: UnidadeNeutra[];
 
   @ManyToOne(() => Regiao, (r) => r.hospitais, { nullable: true })
   regiao?: Regiao;

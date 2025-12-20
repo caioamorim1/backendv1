@@ -52,6 +52,17 @@ export const OccupationAnalysisRoutes = (ds: DataSource): Router => {
     controller.getOccupationAnalysis
   );
 
+  /**
+   * GET /hospital-sectors/:hospitalId/occupation-dashboard
+   *
+   * Dashboard de ocupação: ocupação máxima atendível + histórico 4 meses
+   * Para exibir gráficos de barras por setor ou resumo do hospital
+   */
+  router.get(
+    "/:hospitalId/occupation-dashboard",
+    controller.getDashboardOccupation
+  );
+
   // Endpoint de teste/comprovação para frontend
   router.get(
     "/:hospitalId/occupation-analysis/test",

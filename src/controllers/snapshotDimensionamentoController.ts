@@ -320,7 +320,7 @@ export class SnapshotDimensionamentoController {
 
   /**
    * GET /snapshots/hospital/:hospitalId/selecionado
-   * Buscar snapshot selecionado de um hospital
+   * Buscar snapshot selecionado de um hospital + situação atual
    */
   buscarSelecionado = async (req: Request, res: Response) => {
     try {
@@ -336,7 +336,13 @@ export class SnapshotDimensionamentoController {
         });
       }
 
-      res.json({ snapshot });
+      // Buscar situação atual (funcionários reais)
+      const situacaoAtual = await this.service.buscarSituacaoAtual(hospitalId);
+
+      res.json({
+        snapshot,
+        situacaoAtual,
+      });
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Erro desconhecido";
@@ -406,10 +412,7 @@ export class SnapshotDimensionamentoController {
    * GET /snapshot/selected-by-group?tipo=regiao&id=uuid
    * Buscar snapshots selecionados de todos os hospitais de uma rede, grupo ou região
    */
-  buscarSnapshotsSelecionadosPorGrupo = async (
-    req: Request,
-    res: Response
-  ) => {
+  buscarSnapshotsSelecionadosPorGrupo = async (req: Request, res: Response) => {
     try {
       const { tipo, id } = req.query;
 

@@ -461,6 +461,7 @@ export class HospitalSectorsAggregateRepository {
           hospitalName,
           internation: [],
           assistance: [],
+          neutral: [],
         });
       }
       hospitalMap.get(hospitalName)!.internation.push(sectorData);
@@ -475,6 +476,7 @@ export class HospitalSectorsAggregateRepository {
           hospitalName,
           internation: [],
           assistance: [],
+          neutral: [],
         });
       }
       hospitalMap.get(hospitalName)!.assistance.push(sectorData);
@@ -1781,6 +1783,25 @@ export class HospitalSectorsAggregateRepository {
       this.ds.query(assistanceQuery, [hospitalId]),
     ]);
 
+    // Query para Unidades Neutras
+    const neutralQuery = `
+      SELECT 
+        h.id as entity_id,
+        h.nome as entity_name,
+        un.id as unit_id,
+        'hospital-' || h.id || '|' || un.nome as sector_id,
+        un.nome as sector_name,
+        COALESCE(un."custoTotal", 0)::text as cost_amount,
+        COALESCE(un."custoTotal", 0)::text as projected_cost_amount,
+        un.status as status
+      FROM public.hospitais h
+      LEFT JOIN public.unidades_neutras un ON un."hospitalId" = h.id
+      WHERE h.id = $1 AND un.id IS NOT NULL
+      ORDER BY un.nome
+    `;
+
+    const neutralSectors = await this.ds.query(neutralQuery, [hospitalId]);
+
     // Instanciar serviço de dimensionamento para obter projetados por unidade
     const dimService = new DimensionamentoService(this.ds);
 
@@ -1890,9 +1911,11 @@ export class HospitalSectorsAggregateRepository {
       name:
         internationSectors[0]?.entity_name ||
         assistanceSectors[0]?.entity_name ||
+        neutralSectors[0]?.entity_name ||
         null,
       internation: [],
       assistance: [],
+      neutral: [],
     };
 
     for (const row of internationSectors) {
@@ -2332,6 +2355,20 @@ export class HospitalSectorsAggregateRepository {
     console.log(`   Internação: ${hospital.internation.length} unidades`);
     console.log(`   Assistência: ${hospital.assistance.length} unidades`);
 
+    // Processar Unidades Neutras
+    for (const row of neutralSectors) {
+      hospital.neutral.push({
+        id: row.sector_id,
+        name: row.sector_name,
+        entityName: row.entity_name,
+        costAmount: row.cost_amount,
+        projectedCostAmount: row.projected_cost_amount,
+        status: row.status,
+      });
+    }
+
+    console.log(`   Neutras: ${hospital.neutral.length} unidades`);
+
     // Log detalhado das primeiras unidades de assistência
     for (let i = 0; i < Math.min(2, hospital.assistance.length); i++) {
       const unit = hospital.assistance[i];
@@ -2365,12 +2402,13 @@ export class HospitalSectorsAggregateRepository {
     const hospitals = await this.ds.query(hospitalsQuery, [redeId]);
 
     if (hospitals.length === 0) {
-      return { internation: [], assistance: [] };
+      return { internation: [], assistance: [], neutral: [] };
     }
 
     // Buscar dados de cada hospital e agregar
     const allInternation: any[] = [];
     const allAssistance: any[] = [];
+    const allNeutral: any[] = [];
 
     for (const hospital of hospitals) {
       const hospitalData = await this.getProjectedSectorsByHospital(
@@ -2378,11 +2416,13 @@ export class HospitalSectorsAggregateRepository {
       );
       allInternation.push(...(hospitalData.internation || []));
       allAssistance.push(...(hospitalData.assistance || []));
+      allNeutral.push(...(hospitalData.neutral || []));
     }
 
     // Agregar por nome de setor
     const internationMap = new Map<string, any>();
     const assistanceMap = new Map<string, any>();
+    const neutralMap = new Map<string, any>();
 
     // Agregar internação
     for (const sector of allInternation) {
@@ -2494,9 +2534,26 @@ export class HospitalSectorsAggregateRepository {
       }
     }
 
+    // Agregar neutral por nome
+    for (const sector of allNeutral) {
+      const key = sector.name;
+      if (!neutralMap.has(key)) {
+        neutralMap.set(key, {
+          name: sector.name,
+          costAmount: 0,
+          projectedCostAmount: 0,
+          status: sector.status,
+        });
+      }
+      const agg = neutralMap.get(key);
+      agg.costAmount += parseFloat(sector.costAmount) || 0;
+      agg.projectedCostAmount += parseFloat(sector.projectedCostAmount) || 0;
+    }
+
     return {
       internation: Array.from(internationMap.values()),
       assistance: Array.from(assistanceMap.values()),
+      neutral: Array.from(neutralMap.values()),
     };
   }
 
@@ -2509,11 +2566,12 @@ export class HospitalSectorsAggregateRepository {
     const hospitals = await this.ds.query(hospitalsQuery, [grupoId]);
 
     if (hospitals.length === 0) {
-      return { internation: [], assistance: [] };
+      return { internation: [], assistance: [], neutral: [] };
     }
 
     const allInternation: any[] = [];
     const allAssistance: any[] = [];
+    const allNeutral: any[] = [];
 
     for (const hospital of hospitals) {
       const hospitalData = await this.getProjectedSectorsByHospital(
@@ -2521,10 +2579,12 @@ export class HospitalSectorsAggregateRepository {
       );
       allInternation.push(...(hospitalData.internation || []));
       allAssistance.push(...(hospitalData.assistance || []));
+      allNeutral.push(...(hospitalData.neutral || []));
     }
 
     const internationMap = new Map<string, any>();
     const assistanceMap = new Map<string, any>();
+    const neutralMap = new Map<string, any>();
 
     for (const sector of allInternation) {
       const key = sector.name;
@@ -2630,9 +2690,26 @@ export class HospitalSectorsAggregateRepository {
       }
     }
 
+    // Agregar neutral por nome
+    for (const sector of allNeutral) {
+      const key = sector.name;
+      if (!neutralMap.has(key)) {
+        neutralMap.set(key, {
+          name: sector.name,
+          costAmount: 0,
+          projectedCostAmount: 0,
+          status: sector.status,
+        });
+      }
+      const agg = neutralMap.get(key);
+      agg.costAmount += parseFloat(sector.costAmount) || 0;
+      agg.projectedCostAmount += parseFloat(sector.projectedCostAmount) || 0;
+    }
+
     return {
       internation: Array.from(internationMap.values()),
       assistance: Array.from(assistanceMap.values()),
+      neutral: Array.from(neutralMap.values()),
     };
   }
 
@@ -2645,11 +2722,12 @@ export class HospitalSectorsAggregateRepository {
     const hospitals = await this.ds.query(hospitalsQuery, [regiaoId]);
 
     if (hospitals.length === 0) {
-      return { internation: [], assistance: [] };
+      return { internation: [], assistance: [], neutral: [] };
     }
 
     const allInternation: any[] = [];
     const allAssistance: any[] = [];
+    const allNeutral: any[] = [];
 
     for (const hospital of hospitals) {
       const hospitalData = await this.getProjectedSectorsByHospital(
@@ -2657,10 +2735,12 @@ export class HospitalSectorsAggregateRepository {
       );
       allInternation.push(...(hospitalData.internation || []));
       allAssistance.push(...(hospitalData.assistance || []));
+      allNeutral.push(...(hospitalData.neutral || []));
     }
 
     const internationMap = new Map<string, any>();
     const assistanceMap = new Map<string, any>();
+    const neutralMap = new Map<string, any>();
 
     for (const sector of allInternation) {
       const key = sector.name;
@@ -2766,9 +2846,26 @@ export class HospitalSectorsAggregateRepository {
       }
     }
 
+    // Agregar neutral por nome
+    for (const sector of allNeutral) {
+      const key = sector.name;
+      if (!neutralMap.has(key)) {
+        neutralMap.set(key, {
+          name: sector.name,
+          costAmount: 0,
+          projectedCostAmount: 0,
+          status: sector.status,
+        });
+      }
+      const agg = neutralMap.get(key);
+      agg.costAmount += parseFloat(sector.costAmount) || 0;
+      agg.projectedCostAmount += parseFloat(sector.projectedCostAmount) || 0;
+    }
+
     return {
       internation: Array.from(internationMap.values()),
       assistance: Array.from(assistanceMap.values()),
+      neutral: Array.from(neutralMap.values()),
     };
   }
 }

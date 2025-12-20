@@ -18,6 +18,10 @@ export const AvaliacaoRoutes = (ds: DataSource): Router => {
   r.put("/sessao/:id", ctrl.atualizarSessao);
   r.get("/sessoes-ativas", ctrl.listarSessoesAtivas); // ?unidadeId=...
   r.get("/leitos-disponiveis", ctrl.leitosDisponiveis); // ?unidadeId=...
+  r.get(
+    "/leito/:leitoId/ultimo-prontuario",
+    ctrl.buscarUltimoProntuarioPorLeito
+  ); // retorna último prontuário do leito
   r.get("/taxa-ocupacao-dia", ctrl.taxaOcupacaoDia); // ?unidadeId=... OU ?hospitalId=... (sem params retorna tudo)
   r.get("/", ctrl.listarPorDia); // ?data=YYYY-MM-DD&unidadeId=...
   r.get("/todas", ctrl.listarTodas); // lista todas avaliações
