@@ -125,7 +125,10 @@ export class SnapshotDimensionamentoService {
         );
       });
 
-      // Verificar se todos os projetados têm status válido
+      // Validação 1: Verificar se todos os projetados têm status válido
+      console.log(
+        `\n   🔍 [VALIDAÇÃO 1/2] Verificando se todos os status são válidos...`
+      );
       const temStatusInvalido = projetados.some(
         (p) => !statusValidos.includes(p.status)
       );
@@ -139,12 +142,52 @@ export class SnapshotDimensionamentoService {
             ...new Set(statusInvalidos),
           ].join(", ")}`
         );
-        setoresPendentes.push(`${unidade.nome} (Internação)`);
+        setoresPendentes.push(
+          `${unidade.nome} (Internação) - Status inválidos`
+        );
+        continue;
       } else {
         console.log(
-          `   ✅ OK: Todos os ${projetados.length} registros estão com status válido`
+          `   ✅ Todos os status são válidos (${statusValidos.join(", ")})`
         );
       }
+
+      // Validação 2: Verificar se todos os status são iguais (sem mistura)
+      console.log(
+        `\n   🔍 [VALIDAÇÃO 2/2] Verificando consistência dos status (todos iguais)...`
+      );
+      const statusUnicos = [...new Set(projetados.map((p) => p.status))];
+      console.log(
+        `   🔍 Status únicos encontrados: ${statusUnicos.join(", ")} (total: ${
+          statusUnicos.length
+        })`
+      );
+
+      if (statusUnicos.length > 1) {
+        // Calcular distribuição de status
+        const distribuicao = projetados.reduce((acc, p) => {
+          acc[p.status] = (acc[p.status] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+
+        const distribuicaoStr = Object.entries(distribuicao)
+          .map(([status, count]) => `${status}(${count})`)
+          .join(", ");
+
+        console.log(`   ❌ PENDENTE: Cargos com status misturados`);
+        console.log(`   📊 Distribuição: ${distribuicaoStr}`);
+        console.log(
+          `   🚫 BLOQUEANDO unidade "${unidade.nome}" - Status misturados detectado`
+        );
+        setoresPendentes.push(
+          `${unidade.nome} (Internação) - Status misturados (${distribuicaoStr})`
+        );
+        continue;
+      }
+
+      console.log(
+        `   🎉 Unidade "${unidade.nome}" aprovada - Todos os ${projetados.length} cargos estão em "${statusUnicos[0]}"`
+      );
     }
 
     // Buscar todas as unidades de não-internação (assistance) do hospital
