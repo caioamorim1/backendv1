@@ -1,8 +1,16 @@
 import { Request, Response } from "express";
 import { HospitalRepository } from "../repositories/hospitalRepository";
+import { HospitalCargoUpdateService } from "../services/hospitalCargoUpdateService";
+import { DataSource } from "typeorm";
 
 export class HospitalController {
-  constructor(private repo: HospitalRepository) {}
+  private cargoUpdateService?: HospitalCargoUpdateService;
+
+  constructor(private repo: HospitalRepository, ds?: DataSource) {
+    if (ds) {
+      this.cargoUpdateService = new HospitalCargoUpdateService(ds);
+    }
+  }
 
   criar = async (req: Request, res: Response) => {
     try {
@@ -104,9 +112,39 @@ export class HospitalController {
         return res.status(404).json({ error: "Hospital não encontrado" });
       }
 
-      res.status(204).send(); // 204 No Content para delete bem-sucedido
+      res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Erro ao deletar hospital" });
+    }
+  };
+
+  /**
+   * GET /hospitais/:id/ultima-atualizacao-cargo
+   * Retorna quando foi a última vez que um cargo foi atualizado no hospital
+   */
+  ultimaAtualizacaoCargo = async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      if (!this.cargoUpdateService) {
+        return res.status(500).json({
+          error: "Serviço de atualização de cargo não está disponível",
+        });
+      }
+
+      const resultado = await this.cargoUpdateService.buscarUltimaAtualizacao(
+        id
+      );
+
+      res.json(resultado);
+    } catch (error) {
+      console.error(
+        "[HospitalController] Erro ao buscar última atualização de cargo:",
+        error
+      );
+      res.status(500).json({
+        error: "Erro ao buscar última atualização de cargo",
+      });
     }
   };
 }
