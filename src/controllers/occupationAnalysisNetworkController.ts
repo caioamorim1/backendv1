@@ -30,23 +30,9 @@ export class OccupationAnalysisNetworkController {
         }
       }
 
-      console.log(
-        `📊 [OccupationDashboardNetwork] Request para rede: ${redeId}${
-          dataCalculo
-            ? ` - Data: ${dataCalculo.toISOString().split("T")[0]}`
-            : ""
-        }`
-      );
-
       const t0 = Date.now();
       const result = await this.service.dashboardRede(redeId, dataCalculo);
       const t1 = Date.now();
-
-      console.log(
-        `✅ [OccupationDashboardNetwork] OK rede=${redeId} hospitais=${
-          result.hospitais.length
-        } tempo=${t1 - t0}ms`
-      );
 
       return res.json(result);
     } catch (error) {
@@ -90,23 +76,9 @@ export class OccupationAnalysisNetworkController {
         }
       }
 
-      console.log(
-        `📊 [OccupationAnalysisNetwork] Request para rede: ${redeId}${
-          dataCalculo
-            ? ` - Data: ${dataCalculo.toISOString().split("T")[0]}`
-            : ""
-        }`
-      );
-
       const t0 = Date.now();
       const result = await this.service.analisarRede(redeId, dataCalculo);
       const t1 = Date.now();
-
-      console.log(
-        `✅ [OccupationAnalysisNetwork] OK rede=${redeId} setores=${
-          result.sectors.length
-        } tempo=${t1 - t0}ms`
-      );
 
       return res.json(result);
     } catch (error) {
@@ -150,23 +122,9 @@ export class OccupationAnalysisNetworkController {
         }
       }
 
-      console.log(
-        `📊 [OccupationAnalysisNetwork] Request para grupo: ${grupoId}${
-          dataCalculo
-            ? ` - Data: ${dataCalculo.toISOString().split("T")[0]}`
-            : ""
-        }`
-      );
-
       const t0 = Date.now();
       const result = await this.service.analisarGrupo(grupoId, dataCalculo);
       const t1 = Date.now();
-
-      console.log(
-        `✅ [OccupationAnalysisNetwork] OK grupo=${grupoId} setores=${
-          result.sectors.length
-        } tempo=${t1 - t0}ms`
-      );
 
       return res.json(result);
     } catch (error) {
@@ -210,23 +168,9 @@ export class OccupationAnalysisNetworkController {
         }
       }
 
-      console.log(
-        `📊 [OccupationAnalysisNetwork] Request para região: ${regiaoId}${
-          dataCalculo
-            ? ` - Data: ${dataCalculo.toISOString().split("T")[0]}`
-            : ""
-        }`
-      );
-
       const t0 = Date.now();
       const result = await this.service.analisarRegiao(regiaoId, dataCalculo);
       const t1 = Date.now();
-
-      console.log(
-        `✅ [OccupationAnalysisNetwork] OK regiao=${regiaoId} setores=${
-          result.sectors.length
-        } tempo=${t1 - t0}ms`
-      );
 
       return res.json(result);
     } catch (error) {

@@ -29,13 +29,6 @@ export class OccupationAnalysisNetworkService {
     redeId: string,
     dataReferencia?: Date
   ): Promise<OccupationDashboardNetworkResponse> {
-    const t0 = Date.now();
-    console.log(
-      `📊 [OccDashboardNetwork] Início rede=${redeId} dataRef=${
-        dataReferencia ? dataReferencia.toISOString() : "agora"
-      }`
-    );
-
     const hospitais = await this.ds.getRepository(Hospital).find({
       where: { rede: { id: redeId } },
       relations: ["rede"],
@@ -66,7 +59,7 @@ export class OccupationAnalysisNetworkService {
           const msg = e instanceof Error ? e.message : String(e);
           // Alguns hospitais podem não ter unidades de internação; não derrubar a rede toda.
           console.warn(
-            `⚠️ [OccDashboardNetwork] Ignorando hospital=${h.id} (${h.nome}): ${msg}`
+            `[OccDashboardNetwork] Ignorando hospital=${h.id} (${h.nome}): ${msg}`
           );
           return null;
         }
@@ -83,15 +76,6 @@ export class OccupationAnalysisNetworkService {
 
     const global = this.calcularGlobalDashboard(hospitaisOk);
 
-    const t1 = Date.now();
-    console.log(
-      `✅ [OccDashboardNetwork] Fim rede=${redeId} hospitais=${
-        hospitaisOk.length
-      }/${hospitais.length} max=${global.ocupacaoMaximaAtendivel}% meses=${
-        global.historico4Meses.length
-      } tempo=${t1 - t0}ms`
-    );
-
     return {
       redeId,
       redeName,
@@ -107,13 +91,6 @@ export class OccupationAnalysisNetworkService {
     redeId: string,
     dataReferencia?: Date
   ): Promise<OccupationAnalysisResponse> {
-    const t0 = Date.now();
-    console.log(
-      `📊 [OccAnalyseNetwork] Início rede=${redeId} dataRef=${
-        dataReferencia ? dataReferencia.toISOString() : "agora"
-      }`
-    );
-
     const hospitais = await this.ds.getRepository(Hospital).find({
       where: { rede: { id: redeId } },
       relations: ["rede"],
@@ -126,15 +103,6 @@ export class OccupationAnalysisNetworkService {
     const redeName = hospitais[0]?.rede?.nome ?? "Rede";
     const sectors = await this.agregarSetores(hospitais, dataReferencia);
     const summary = this.calcularResumoGlobal(sectors);
-
-    const t1 = Date.now();
-    console.log(
-      `✅ [OccAnalyseNetwork] Fim rede=${redeId} setores=${
-        sectors.length
-      } hospitais=${hospitais.length} taxa=${summary.taxaOcupacao}% max=${
-        summary.ocupacaoMaximaAtendivel
-      }% tempo=${t1 - t0}ms`
-    );
 
     return {
       hospitalId: redeId,
@@ -151,13 +119,6 @@ export class OccupationAnalysisNetworkService {
     grupoId: string,
     dataReferencia?: Date
   ): Promise<OccupationAnalysisResponse> {
-    const t0 = Date.now();
-    console.log(
-      `📊 [OccAnalyseNetwork] Início grupo=${grupoId} dataRef=${
-        dataReferencia ? dataReferencia.toISOString() : "agora"
-      }`
-    );
-
     const hospitais = await this.ds.getRepository(Hospital).find({
       where: { grupo: { id: grupoId } },
       relations: ["grupo"],
@@ -170,15 +131,6 @@ export class OccupationAnalysisNetworkService {
     const grupoName = hospitais[0]?.grupo?.nome ?? "Grupo";
     const sectors = await this.agregarSetores(hospitais, dataReferencia);
     const summary = this.calcularResumoGlobal(sectors);
-
-    const t1 = Date.now();
-    console.log(
-      `✅ [OccAnalyseNetwork] Fim grupo=${grupoId} setores=${
-        sectors.length
-      } hospitais=${hospitais.length} taxa=${summary.taxaOcupacao}% max=${
-        summary.ocupacaoMaximaAtendivel
-      }% tempo=${t1 - t0}ms`
-    );
 
     return {
       hospitalId: grupoId,
@@ -196,11 +148,6 @@ export class OccupationAnalysisNetworkService {
     dataReferencia?: Date
   ): Promise<OccupationAnalysisResponse> {
     const t0 = Date.now();
-    console.log(
-      `📊 [OccAnalyseNetwork] Início regiao=${regiaoId} dataRef=${
-        dataReferencia ? dataReferencia.toISOString() : "agora"
-      }`
-    );
 
     const hospitais = await this.ds.getRepository(Hospital).find({
       where: { regiao: { id: regiaoId } },
@@ -214,15 +161,6 @@ export class OccupationAnalysisNetworkService {
     const regiaoName = hospitais[0]?.regiao?.nome ?? "Região";
     const sectors = await this.agregarSetores(hospitais, dataReferencia);
     const summary = this.calcularResumoGlobal(sectors);
-
-    const t1 = Date.now();
-    console.log(
-      `✅ [OccAnalyseNetwork] Fim regiao=${regiaoId} setores=${
-        sectors.length
-      } hospitais=${hospitais.length} taxa=${summary.taxaOcupacao}% max=${
-        summary.ocupacaoMaximaAtendivel
-      }% tempo=${t1 - t0}ms`
-    );
 
     return {
       hospitalId: regiaoId,
