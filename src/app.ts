@@ -28,11 +28,12 @@ export function createApp(dataSource: DataSource) {
       "/admin/criar",
       "/scp-metodos/seed/builtin",
     ];
-    // Se o caminho começar com /uploads ou /password-reset, permite sem autenticação
+    // Se o caminho começar com /uploads, /password-reset ou /debug, permite sem autenticação
     if (
       openPaths.includes(req.path) ||
       req.path.startsWith("/uploads") ||
-      req.path.startsWith("/password-reset")
+      req.path.startsWith("/password-reset") ||
+      req.path.startsWith("/debug")
     ) {
       return next();
     }

@@ -50,6 +50,22 @@ const PORT = process.env.PORT || 3110;
       console.log(
         `Pasta de uploads servida estaticamente em http://localhost:${PORT}/uploads`
       );
+      
+      // Verifica conteúdo da pasta uploads ao iniciar
+      const uploadsPath = path.join(process.cwd(), "uploads");
+      if (require("fs").existsSync(uploadsPath)) {
+        console.log("\n📂 Conteúdo da pasta uploads/:");
+        const items = require("fs").readdirSync(uploadsPath);
+        items.forEach((item: string) => {
+          const itemPath = path.join(uploadsPath, item);
+          const isDir = require("fs").statSync(itemPath).isDirectory();
+          console.log(`   ${isDir ? "📁" : "📄"} ${item}`);
+          if (isDir) {
+            const subItems = require("fs").readdirSync(itemPath);
+            console.log(`      (${subItems.length} arquivos)`);
+          }
+        });
+      }
     });
 
     server.on("error", (err) => {
