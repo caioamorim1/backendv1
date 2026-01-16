@@ -23,10 +23,10 @@ const PORT = process.env.PORT || 3110;
     // Configura o Express para servir arquivos estáticos da pasta 'uploads'
     // Isso torna as imagens acessíveis publicamente pela URL sem precisar de token.
     // A rota '/uploads' no navegador será mapeada para a pasta 'uploads' no seu backend.
-    
+
     // Use process.cwd() para garantir que funciona tanto em dev quanto em prod
     const uploadsPath = path.join(process.cwd(), "uploads");
-    
+
     console.log("═══════════════════════════════════════════════════");
     console.log("📁 [SERVER] Configurando pasta de uploads estática");
     console.log("═══════════════════════════════════════════════════");
@@ -35,7 +35,7 @@ const PORT = process.env.PORT || 3110;
     console.log("uploadsPath resolvido:", uploadsPath);
     console.log("Diretório existe?", require("fs").existsSync(uploadsPath));
     console.log("═══════════════════════════════════════════════════\n");
-    
+
     app.use("/uploads", express.static(uploadsPath));
 
     // agenda job opcional para expirar sessões de avaliação (ocupação) automaticamente
