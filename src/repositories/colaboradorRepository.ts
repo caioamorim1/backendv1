@@ -1,4 +1,4 @@
-import { DataSource, Repository } from "typeorm";
+import { DataSource, In, Repository } from "typeorm";
 import { Colaborador } from "../entities/Colaborador";
 import { Hospital } from "../entities/Hospital";
 // import { Cargo } from "../entities/Cargo";
@@ -11,6 +11,33 @@ import * as bcrypt from "bcrypt";
 import { hash } from "crypto";
 
 const JWT_SECRET = process.env.JWT_SECRET || "secreto";
+
+type ColaboradorTipo =
+  | "ADMIN"
+  | "ADMIN_GLOBAL"
+  | "GESTOR_ESTRATEGICO"
+  | "GESTOR_TATICO"
+  | "AVALIADOR"
+  | "CONSULTOR"
+  | "COMUM";
+
+function mapLegacyPermissao(permissao: string | undefined): ColaboradorTipo {
+  // Compatibilidade com payloads antigos (ADMIN/GESTOR/COMUM)
+  if (!permissao) return "COMUM";
+  const p = permissao.toUpperCase();
+  if (p === "ADMIN") return "ADMIN";
+  if (p === "ADMIN_GLOBAL") return "ADMIN";
+  if (p === "GESTOR") return "GESTOR_TATICO";
+  if (p === "COMUM") return "COMUM";
+  // Se já veio um tipo novo, tenta passar direto
+  return permissao as ColaboradorTipo;
+}
+
+function normalizeTipoForResponse(
+  permissao: string | undefined
+): ColaboradorTipo {
+  return mapLegacyPermissao(permissao);
+}
 
 export class ColaboradorRepository {
   private repo: Repository<Colaborador>;
@@ -40,6 +67,13 @@ export class ColaboradorRepository {
     const initialPlain = data.cpf || data.email;
     const senhaHash = await bcrypt.hash(initialPlain, 10);
 
+    const tipo = mapLegacyPermissao(
+      (data as any).tipo ?? (data as any).permissao
+    );
+    if (tipo === "AVALIADOR" && !data.coren) {
+      throw new Error("coren é obrigatório quando tipo/permissao é AVALIADOR");
+    }
+
     const novo = this.repo.create({
       hospital: hospital,
       nome: data.nome,
@@ -48,12 +82,12 @@ export class ColaboradorRepository {
       coren: data.coren,
       senha: senhaHash,
       mustChangePassword: true,
-      permissao: data.permissao,
+      permissao: tipo,
     } as any);
     const saved = await this.repo.save(novo);
     // não retornar hash
     const { senha, ...rest } = saved as any;
-    return rest;
+    return { ...rest, tipo: normalizeTipoForResponse(rest.permissao) };
   };
 
   /**
@@ -79,7 +113,10 @@ export class ColaboradorRepository {
       .orderBy("c.nome", "ASC");
     if (hospitalId) base.where("hospital.id = :hid", { hid: hospitalId });
     const rows = await base.getMany();
-    return rows.map(({ senha, ...rest }) => rest as any);
+    return rows.map(({ senha, ...rest }) => ({
+      ...(rest as any),
+      tipo: normalizeTipoForResponse((rest as any).permissao),
+    }));
   };
 
   criarAdmin = async (data: CreateAdminDTO) => {
@@ -104,15 +141,21 @@ export class ColaboradorRepository {
   };
 
   deletarAdmin = async (id: string) => {
-    const r = await this.repo.delete({ id, permissao: "ADMIN" });
+    const r = await this.repo.delete({
+      id,
+      permissao: In(["ADMIN", "ADMIN_GLOBAL"]) as any,
+    });
     return (r.affected ?? 0) > 0;
   };
 
   listarAdmins = async () => {
     const rows = await this.repo.find({
-      where: { permissao: "ADMIN" },
+      where: { permissao: In(["ADMIN", "ADMIN_GLOBAL"]) as any },
     });
-    return rows.map(({ senha, ...rest }) => rest as any);
+    return rows.map(({ senha, ...rest }) => ({
+      ...(rest as any),
+      tipo: normalizeTipoForResponse((rest as any).permissao),
+    }));
   };
 
   obter = async (id: string) => {
@@ -122,7 +165,7 @@ export class ColaboradorRepository {
     });
     if (!col) throw new Error("Colaborador não encontrado");
     const { senha, ...rest } = col as any;
-    return rest;
+    return { ...rest, tipo: normalizeTipoForResponse(rest.permissao) };
   };
 
   atualizar = async (
@@ -138,8 +181,16 @@ export class ColaboradorRepository {
 
     // Clone dos dados recebidos
     const updateData: Partial<Colaborador> = { ...data } as any;
-    if (data.permissao) {
-      updateData.permissao = data.permissao;
+    const incomingTipo = (data as any).tipo ?? (data as any).permissao;
+    if (incomingTipo) {
+      const tipo = mapLegacyPermissao(incomingTipo);
+      (updateData as any).permissao = tipo;
+      if (tipo === "AVALIADOR" && (data as any).coren === undefined) {
+        // mantém regra: avaliador precisa de coren
+        throw new Error(
+          "coren é obrigatório quando tipo/permissao é AVALIADOR"
+        );
+      }
     }
     if (data.coren !== undefined) {
       updateData.coren = data.coren;
@@ -163,7 +214,7 @@ export class ColaboradorRepository {
     });
     if (!col) throw new Error("Colaborador não encontrado");
     const { senha, ...rest } = col as any;
-    return rest;
+    return { ...rest, tipo: normalizeTipoForResponse(rest.permissao) };
   };
 
   deletar = async (id: string) => {

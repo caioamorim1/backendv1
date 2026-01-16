@@ -46,6 +46,8 @@ async function ensureTables() {
       questionnaire VARCHAR(255) NULL,
       questionnaire_id INTEGER NOT NULL REFERENCES public.qualitative_questionnaire(id) ON UPDATE CASCADE ON DELETE RESTRICT,
       sector_id UUID NOT NULL,
+      hospital_id UUID NULL,
+      unidade_type VARCHAR(50) NULL,
       calculate_rate NUMERIC(6,2) NOT NULL DEFAULT 0,
       answers JSONB NULL,
       created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
@@ -53,6 +55,14 @@ async function ensureTables() {
       deleted_at TIMESTAMP WITHOUT TIME ZONE NULL
     );
   `);
+
+  // Compatibilidade: adiciona colunas caso a tabela já exista no banco
+  await ds.query(
+    `ALTER TABLE public.qualitative_evaluation ADD COLUMN IF NOT EXISTS hospital_id UUID NULL;`
+  );
+  await ds.query(
+    `ALTER TABLE public.qualitative_evaluation ADD COLUMN IF NOT EXISTS unidade_type VARCHAR(50) NULL;`
+  );
 
   // 4) qualitative_projection
   await ds.query(`

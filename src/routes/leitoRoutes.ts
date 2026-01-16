@@ -14,6 +14,7 @@ export const LeitoRoutes = (ds: DataSource): Router => {
   r.get("/taxa-ocupacao-agregada", ctrl.taxaOcupacaoAgregada); // ?aggregationType=hospital|grupo|regiao|rede&entityId=... (optional)
   r.patch("/:id", ctrl.atualizar);
   r.patch("/:id/status", ctrl.atualizarStatus);
+  r.post("/:id/alta", ctrl.alta);
   r.delete("/:id", ctrl.deletar);
 
   return r;

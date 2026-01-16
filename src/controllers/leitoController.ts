@@ -1,8 +1,11 @@
 import { Request, Response } from "express";
 import { LeitoRepository } from "../repositories/leitoRepository";
 import { LeitosStatusService } from "../services/leitosStatusService";
-import { DataSource } from "typeorm";
-import { Leito } from "../entities/Leito";
+import { DataSource, IsNull } from "typeorm";
+import { Leito, StatusLeito } from "../entities/Leito";
+import { HistoricoOcupacao } from "../entities/HistoricoOcupacao";
+import { AvaliacaoSCP, StatusSessaoAvaliacao } from "../entities/AvaliacaoSCP";
+import { LeitoEvento, LeitoEventoTipo } from "../entities/LeitoEvento";
 
 export class LeitoController {
   private leitosStatusService: LeitosStatusService;
@@ -138,6 +141,167 @@ export class LeitoController {
       return res
         .status(500)
         .json({ mensagem: "Erro ao atualizar status do leito" });
+    }
+  };
+
+  /**
+   * POST /leitos/:id/alta
+   * Dá alta no leito (encerra ocupação + libera sessão + marca como VAGO) e registra evento.
+   */
+  alta = async (req: Request, res: Response) => {
+    const leitoId = req.params.id;
+    const { motivo } = (req.body ?? {}) as { motivo?: string };
+
+    if (!leitoId) {
+      return res.status(400).json({ mensagem: "id do leito é obrigatório" });
+    }
+
+    try {
+      const result = await this.ds.transaction(async (manager) => {
+        const leitoRepo = manager.getRepository(Leito);
+        const histRepo = manager.getRepository(HistoricoOcupacao);
+        const avalRepo = manager.getRepository(AvaliacaoSCP);
+        const evRepo = manager.getRepository(LeitoEvento);
+
+        const leito = await leitoRepo.findOne({
+          where: { id: leitoId },
+          relations: ["unidade", "unidade.hospital"],
+        });
+        if (!leito) {
+          return {
+            status: 404 as const,
+            body: { mensagem: "Leito não encontrado" },
+          };
+        }
+
+        if (leito.status === StatusLeito.INATIVO) {
+          return {
+            status: 400 as const,
+            body: { mensagem: "Não é possível dar alta em um leito INATIVO" },
+          };
+        }
+
+        const now = new Date();
+
+        // 1) Encontrar histórico de ocupação ativo (fim IS NULL) — padrão atual
+        //    (se futuramente existir fim > now, o createQueryBuilder cobre)
+        const historicoAtivo = await histRepo
+          .createQueryBuilder("h")
+          .leftJoinAndSelect("h.leito", "leito")
+          .where("leito.id = :leitoId", { leitoId })
+          .andWhere("(h.fim IS NULL OR h.fim > :now)", { now })
+          .orderBy("h.inicio", "DESC")
+          .getOne();
+
+        if (!historicoAtivo) {
+          return {
+            status: 409 as const,
+            body: {
+              mensagem:
+                "Não há ocupação ativa para este leito (nenhum histórico ativo encontrado)",
+            },
+          };
+        }
+
+        // 2) Encerrar ocupação
+        historicoAtivo.fim = now;
+        await histRepo.save(historicoAtivo);
+
+        // 3) Liberar quaisquer sessões/avaliações ATIVAS vinculadas ao leito
+        const sessoesAtivas = await avalRepo.find({
+          where: {
+            leito: { id: leitoId },
+            statusSessao: StatusSessaoAvaliacao.ATIVA,
+          },
+          relations: ["leito", "unidade"],
+        });
+        if (sessoesAtivas.length > 0) {
+          for (const av of sessoesAtivas) {
+            av.statusSessao = StatusSessaoAvaliacao.LIBERADA;
+            av.expiresAt = av.expiresAt ?? now;
+          }
+          await avalRepo.save(sessoesAtivas);
+        }
+
+        // 4) Marcar leito como PENDENTE
+        const statusAnterior = leito.status;
+        leito.status = StatusLeito.PENDENTE;
+        await leitoRepo.save(leito);
+
+        // 5) Registrar eventos
+        const unidadeId = leito.unidade?.id ?? null;
+        const hospitalId = (leito.unidade as any)?.hospital?.id ?? null;
+        const leitoNumero = leito.numero ?? null;
+
+        await evRepo.save(
+          evRepo.create({
+            leito,
+            tipo: LeitoEventoTipo.OCUPACAO_FINALIZADA,
+            dataHora: now,
+            unidadeId,
+            hospitalId,
+            leitoNumero,
+            avaliacaoId: null,
+            historicoOcupacaoId: historicoAtivo.id,
+            autorId: null,
+            autorNome: null,
+            motivo: "Alta",
+            payload: {
+              statusAnterior,
+              sessoesLiberadas: sessoesAtivas.length,
+            },
+          })
+        );
+
+        await evRepo.save(
+          evRepo.create({
+            leito,
+            tipo: LeitoEventoTipo.ALTA,
+            dataHora: now,
+            unidadeId,
+            hospitalId,
+            leitoNumero,
+            avaliacaoId: null,
+            historicoOcupacaoId: historicoAtivo.id,
+            autorId: null,
+            autorNome: null,
+            motivo: motivo ?? null,
+            payload: {
+              statusAnterior,
+              sessoesLiberadas: sessoesAtivas.length,
+            },
+          })
+        );
+
+        // 6) Atualizar agregados da unidade dentro da transação
+        if (unidadeId) {
+          await this.leitosStatusService.atualizarStatusUnidade(
+            unidadeId,
+            manager
+          );
+        }
+
+        return {
+          status: 200 as const,
+          body: {
+            mensagem: "Alta realizada com sucesso",
+            leitoId,
+            unidadeId,
+            historicoOcupacaoId: historicoAtivo.id,
+            sessoesLiberadas: sessoesAtivas.length,
+            statusAnterior,
+            statusAtual: leito.status,
+          },
+        };
+      });
+
+      return res.status(result.status).json(result.body);
+    } catch (err) {
+      console.error("Erro ao dar alta no leito:", err);
+      return res.status(500).json({
+        mensagem: "Erro ao dar alta no leito",
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   };
 

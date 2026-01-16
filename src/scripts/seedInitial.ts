@@ -288,7 +288,7 @@ async function seedDatabase() {
       cpf: "123.456.789-00",
       senha: senhaHash,
       mustChangePassword: false,
-      permissao: "GESTOR",
+      permissao: "GESTOR_TATICO",
       hospital: hospital1,
     });
     await AppDataSource.getRepository(Colaborador).save(colaborador1);

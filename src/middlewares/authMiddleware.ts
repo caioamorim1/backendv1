@@ -17,10 +17,7 @@ export const authMiddleware = (
   }
 
   try {
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || "chave-secreta"
-    );
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "secreto");
     req.user = decoded;
     next();
   } catch (error) {
