@@ -4,6 +4,7 @@ import { Baseline } from "../entities/Baseline";
 import { Regiao } from "../entities/Regiao";
 import { Rede } from "../entities/Rede";
 import { Grupo } from "../entities/Grupo";
+import { Cargo } from "../entities/Cargo";
 import { AtualizarHospitalDTO, CreateHospitalDTO } from "../dto/hospital.dto";
 import { create } from "domain";
 
@@ -13,12 +14,15 @@ export class HospitalRepository {
   private regiaoRepo: Repository<Regiao>;
   private redeRepo: Repository<Rede>;
   private grupoRepo: Repository<Grupo>;
+  private cargoRepo: Repository<Cargo>;
+
   constructor(private ds: DataSource) {
     this.repo = ds.getRepository(Hospital);
     this.baselineRepo = ds.getRepository(Baseline);
     this.regiaoRepo = ds.getRepository(Regiao);
     this.redeRepo = ds.getRepository(Rede);
     this.grupoRepo = ds.getRepository(Grupo);
+    this.cargoRepo = ds.getRepository(Cargo);
   }
 
   async criar(data: CreateHospitalDTO) {
@@ -99,6 +103,9 @@ export class HospitalRepository {
 
       const savedHospital = await this.repo.save(hospital);
       console.log("[HospitalRepository] hospital salvo id=", savedHospital.id);
+
+      // Criar cargos padrão para o hospital
+      await this.criarCargosPadrao(savedHospital.id);
 
       // Se tem baseline, cria depois com o ID do hospital
       if (baseline) {
@@ -278,5 +285,43 @@ export class HospitalRepository {
     }
 
     return false;
+  }
+
+  /**
+   * Criar cargos padrão para o hospital recém-criado
+   * Cria automaticamente: Técnico em Enfermagem e Enfermeiro
+   */
+  private async criarCargosPadrao(hospitalId: string): Promise<void> {
+    console.log(
+      "[HospitalRepository] Criando cargos padrão para hospital:",
+      hospitalId
+    );
+
+    const cargosPadrao = [
+      {
+        nome: "Técnico em Enfermagem",
+        carga_horaria: "44",
+        descricao: "Cargo padrão criado automaticamente",
+      },
+      {
+        nome: "Enfermeiro",
+        carga_horaria: "44",
+        descricao: "Cargo padrão criado automaticamente",
+      },
+    ];
+
+    try {
+      for (const cargoData of cargosPadrao) {
+        const cargo = this.cargoRepo.create({
+          ...cargoData,
+          hospitalId: hospitalId,
+        });
+        await this.cargoRepo.save(cargo);
+        console.log(`[HospitalRepository] Cargo "${cargoData.nome}" criado`);
+      }
+    } catch (error) {
+      console.error("[HospitalRepository] Erro ao criar cargos padrão:", error);
+      // Não faz throw para não bloquear a criação do hospital
+    }
   }
 }

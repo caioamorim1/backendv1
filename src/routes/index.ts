@@ -41,6 +41,7 @@ import { QualitativeRoutes } from "./QualitativeRoutes";
 import { OccupationAnalysisRoutes } from "./occupationAnalysisRoutes";
 import { OccupationAnalysisNetworkRoutes } from "./occupationAnalysisNetworkRoutes";
 import { ControlePeriodoRoutes } from "./controlePeriodoRoutes";
+import { TaxaOcupacaoRoutes } from "./taxaOcupacaoRoutes";
 import passwordResetRoutes from "./passwordResetRoutes";
 import cacheRoutes from "./cacheRoutes";
 
@@ -110,6 +111,9 @@ export const createIndexRouter = (dataSource: DataSource): Router => {
   router.use("/dimensionamento", DimensionamentoRoutes(dataSource));
   // Controle de período por unidade (travamento / intervalo)
   router.use("/controle-periodo", ControlePeriodoRoutes(dataSource));
+
+  // Taxa de Ocupação Customizada
+  router.use("/taxa-ocupacao", TaxaOcupacaoRoutes(dataSource));
 
   // Hospital Sectors (Internation + Assistance)
   router.use("/hospital-sectors", HospitalSectorsRoutes(dataSource));

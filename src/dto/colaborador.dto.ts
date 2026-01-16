@@ -5,7 +5,16 @@ export interface CreateColaboradorDTO {
   cpf: string;
   coren?: string;
   senha?: string; // se não informado, gerar padrão e forçar troca futura
-  permissao: "ADMIN" | "GESTOR" | "COMUM";
+  // Valores granulares (tipo). Mantido o nome do campo por compatibilidade.
+  permissao:
+    | "ADMIN"
+    | "ADMIN_GLOBAL" // legado
+    | "GESTOR_ESTRATEGICO"
+    | "GESTOR_TATICO"
+    | "GESTOR" // legado
+    | "AVALIADOR"
+    | "CONSULTOR"
+    | "COMUM";
 }
 
 export interface UpdateColaboradorDTO {
@@ -13,7 +22,15 @@ export interface UpdateColaboradorDTO {
   email?: string;
   cpf?: string;
   coren?: string;
-  permissao?: "ADMIN" | "GESTOR" | "COMUM";
+  permissao?:
+    | "ADMIN"
+    | "ADMIN_GLOBAL" // legado
+    | "GESTOR_ESTRATEGICO"
+    | "GESTOR_TATICO"
+    | "GESTOR" // legado
+    | "AVALIADOR"
+    | "CONSULTOR"
+    | "COMUM";
 }
 
 export interface CreateAdminDTO {

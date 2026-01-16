@@ -28,7 +28,7 @@ export class SnapshotDimensionamentoService {
 
   /**
    * Validar se todos os setores do hospital têm projetado final com status válido
-   * e período travado
+   * e período travado. NOVO: Todos os setores do hospital devem ter o MESMO status global.
    */
   private async validarStatusProjetadoFinal(
     hospitalId: string
@@ -46,6 +46,7 @@ export class SnapshotDimensionamentoService {
 
     const statusValidos = ["concluido_parcial", "concluido_final"];
     const setoresPendentes: string[] = [];
+    const todosStatusHospital: string[] = []; // Armazena todos os status do hospital
 
     console.log(`✅ Status válidos aceitos: ${statusValidos.join(", ")}\n`);
 
@@ -127,7 +128,7 @@ export class SnapshotDimensionamentoService {
 
       // Validação 1: Verificar se todos os projetados têm status válido
       console.log(
-        `\n   🔍 [VALIDAÇÃO 1/2] Verificando se todos os status são válidos...`
+        `\n   🔍 [VALIDAÇÃO 1/3] Verificando se todos os status são válidos...`
       );
       const temStatusInvalido = projetados.some(
         (p) => !statusValidos.includes(p.status)
@@ -152,9 +153,9 @@ export class SnapshotDimensionamentoService {
         );
       }
 
-      // Validação 2: Verificar se todos os status são iguais (sem mistura)
+      // Validação 2: Verificar se todos os status são iguais dentro da unidade (sem mistura)
       console.log(
-        `\n   🔍 [VALIDAÇÃO 2/2] Verificando consistência dos status (todos iguais)...`
+        `\n   🔍 [VALIDAÇÃO 2/3] Verificando consistência dos status dentro da unidade...`
       );
       const statusUnicos = [...new Set(projetados.map((p) => p.status))];
       console.log(
@@ -188,6 +189,9 @@ export class SnapshotDimensionamentoService {
       console.log(
         `   🎉 Unidade "${unidade.nome}" aprovada - Todos os ${projetados.length} cargos estão em "${statusUnicos[0]}"`
       );
+
+      // Adicionar status da unidade para validação global do hospital
+      todosStatusHospital.push(statusUnicos[0]);
     }
 
     // Buscar todas as unidades de não-internação (assistance) do hospital
@@ -245,7 +249,7 @@ export class SnapshotDimensionamentoService {
 
       // Validação 1: Verificar se todos os projetados têm status válido
       console.log(
-        `\n   🔍 [VALIDAÇÃO 1/2] Verificando se todos os status são válidos...`
+        `\n   🔍 [VALIDAÇÃO 1/3] Verificando se todos os status são válidos...`
       );
       const temStatusInvalido = projetados.some(
         (p) => !statusValidos.includes(p.status)
@@ -270,9 +274,9 @@ export class SnapshotDimensionamentoService {
         );
       }
 
-      // Validação 2: Verificar se todos os status são iguais (sem mistura)
+      // Validação 2: Verificar se todos os status são iguais dentro da unidade (sem mistura)
       console.log(
-        `\n   🔍 [VALIDAÇÃO 2/2] Verificando consistência dos status (todos iguais)...`
+        `\n   🔍 [VALIDAÇÃO 2/3] Verificando consistência dos status dentro da unidade...`
       );
       const statusUnicos = [...new Set(projetados.map((p) => p.status))];
       console.log(
@@ -306,6 +310,9 @@ export class SnapshotDimensionamentoService {
       console.log(
         `   🎉 Unidade "${unidade.nome}" aprovada - Todos os ${projetados.length} cargos estão em "${statusUnicos[0]}"`
       );
+
+      // Adicionar status da unidade para validação global do hospital
+      todosStatusHospital.push(statusUnicos[0]);
     }
 
     console.log("\n═══════════════════════════════════════════");
@@ -318,8 +325,72 @@ export class SnapshotDimensionamentoService {
     );
     console.log(`   Setores pendentes: ${setoresPendentes.length}`);
 
+    // VALIDAÇÃO 3: Verificar se TODO O HOSPITAL tem o mesmo status
+    console.log(
+      `\n╔════════════════════════════════════════════════════════════════╗`
+    );
+    console.log(
+      `║  🔍 [VALIDAÇÃO 3/3] CONSISTÊNCIA GLOBAL DO HOSPITAL          ║`
+    );
+    console.log(
+      `╚════════════════════════════════════════════════════════════════╝\n`
+    );
+
+    if (todosStatusHospital.length === 0) {
+      console.log(
+        `❌ ERRO: Nenhuma unidade com status válido encontrada no hospital`
+      );
+      setoresPendentes.push(
+        "Hospital - Nenhuma unidade com projetado final válido"
+      );
+    } else {
+      const statusUnicosHospital = [...new Set(todosStatusHospital)];
+      console.log(
+        `📊 Total de unidades aprovadas: ${todosStatusHospital.length}`
+      );
+      console.log(
+        `🔍 Status únicos no hospital: ${statusUnicosHospital.join(
+          ", "
+        )} (total: ${statusUnicosHospital.length})`
+      );
+
+      if (statusUnicosHospital.length > 1) {
+        // Calcular distribuição de status por unidade
+        const distribuicaoHospital = todosStatusHospital.reduce(
+          (acc, status) => {
+            acc[status] = (acc[status] || 0) + 1;
+            return acc;
+          },
+          {} as Record<string, number>
+        );
+
+        const distribuicaoStr = Object.entries(distribuicaoHospital)
+          .map(([status, count]) => `${status}(${count} unidades)`)
+          .join(", ");
+
+        console.log(
+          `\n❌ VALIDAÇÃO GLOBAL FALHOU - Hospital com status misturados entre unidades`
+        );
+        console.log(`📊 Distribuição: ${distribuicaoStr}`);
+        console.log(
+          `\n🚫 TODAS as unidades do hospital devem estar no MESMO status:`
+        );
+        console.log(
+          `   ➤ OU todas em "concluido_parcial" OU todas em "concluido_final"`
+        );
+
+        setoresPendentes.push(
+          `Hospital - Status misturados entre unidades (${distribuicaoStr})`
+        );
+      } else {
+        console.log(
+          `\n✅ CONSISTÊNCIA GLOBAL APROVADA - Todas as ${todosStatusHospital.length} unidades estão em "${statusUnicosHospital[0]}"`
+        );
+      }
+    }
+
     if (setoresPendentes.length > 0) {
-      console.log(`\n❌ VALIDAÇÃO FALHOU - Setores pendentes:`);
+      console.log(`\n❌ VALIDAÇÃO FALHOU - Problemas encontrados:`);
       setoresPendentes.forEach((setor, index) => {
         console.log(`   ${index + 1}. ${setor}`);
       });

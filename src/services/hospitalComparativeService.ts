@@ -73,7 +73,7 @@ export class HospitalComparativeService {
               if (cargo.role.toLowerCase().includes("enfermeiro"))
                 totalEnfProj += cargo.quantity;
               if (
-                cargo.role.toLowerCase().includes("técnico") ||
+                cargo.role.toLowerCase().includes("técnico em Enfermagem") ||
                 cargo.role.toLowerCase().includes("tecnico")
               )
                 totalTecProj += cargo.quantity;

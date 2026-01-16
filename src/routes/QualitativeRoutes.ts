@@ -26,10 +26,15 @@ export const QualitativeRoutes = (ds: DataSource): Router => {
   router.get("/evaluations/:id", ctrl.obterAvaliacao);
   router.put("/evaluations/:id", ctrl.atualizarAvaliacao);
   router.delete("/evaluations/:id", ctrl.excluirAvaliacao);
-  router.delete("/evaluations/:sectorid", ctrl.excluirAvaliacao);
 
   // Questionários completos (100%) com categorias por hospital
-  router.get("/completed-with-categories", ctrl.listarQuestionariosCompletosComCategorias);
+  router.get(
+    "/completed-with-categories",
+    ctrl.listarQuestionariosCompletosComCategorias
+  );
+
+  // Agregados por categoria (por tipo de unidade e consolidado hospital)
+  router.get("/aggregates/by-category", ctrl.obterAgregadosPorCategoria);
 
   return router;
 };

@@ -26,10 +26,29 @@ export class Colaborador {
 
   @Column({
     type: "enum",
-    enum: ["ADMIN", "GESTOR", "COMUM"],
+    enum: [
+      "ADMIN",
+      // Legado (pode existir no banco; mantido para compatibilidade)
+      "ADMIN_GLOBAL",
+      "GESTOR_ESTRATEGICO",
+      "GESTOR_TATICO",
+      // Legado (pode existir no banco; mantido para compatibilidade)
+      "GESTOR",
+      "AVALIADOR",
+      "CONSULTOR",
+      "COMUM",
+    ],
     default: "COMUM",
   })
-  permissao!: "ADMIN" | "GESTOR" | "COMUM";
+  permissao!:
+    | "ADMIN"
+    | "ADMIN_GLOBAL"
+    | "GESTOR_ESTRATEGICO"
+    | "GESTOR_TATICO"
+    | "GESTOR"
+    | "AVALIADOR"
+    | "CONSULTOR"
+    | "COMUM";
 
   @Column({ type: "varchar", length: 18, unique: true, nullable: true })
   cpf?: string;

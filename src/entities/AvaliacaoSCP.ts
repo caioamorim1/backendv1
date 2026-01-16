@@ -52,6 +52,10 @@ export class AvaliacaoSCP {
   @Column({ type: "varchar", length: 350, nullable: true })
   prontuario!: string | null;
 
+  // Justificativa (ex.: motivo de alteração/ajuste na sessão)
+  @Column({ type: "varchar", length: 500, nullable: true })
+  justificativa!: string | null;
+
   // Pontuação por item (flexível para DINI/Perroca/Fugulin); ex: {"alimentacao":2,"eliminacoes":3,...}
   @Column({ type: "jsonb" })
   itens!: Record<string, number>;

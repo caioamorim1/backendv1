@@ -14,6 +14,7 @@ import { DimensionamentoService } from "./dimensionamentoService";
 import { UnidadeInternacao } from "../entities/UnidadeInternacao";
 import { LeitosStatus } from "../entities/LeitosStatus";
 import { HistoricoLeitosStatus } from "../entities/HistoricoLeitosStatus";
+import { TaxaOcupacaoCustomizada } from "../entities/TaxaOcupacaoCustomizada";
 // Parâmetros adicionais serão derivados do Dimensionamento (agregados/tabela)
 
 /**
@@ -28,6 +29,25 @@ import { HistoricoLeitosStatus } from "../entities/HistoricoLeitosStatus";
 export class OccupationAnalysisService {
   constructor(private ds: DataSource) {}
 
+  private isDebugEnabled(): boolean {
+    return (
+      process.env.OCCUPATION_ANALYSIS_DEBUG === "true" ||
+      process.env.NODE_ENV !== "production"
+    );
+  }
+
+  private log(...args: any[]): void {
+    if (!this.isDebugEnabled()) return;
+    // eslint-disable-next-line no-console
+    console.log(...args);
+  }
+
+  private warn(...args: any[]): void {
+    if (!this.isDebugEnabled()) return;
+    // eslint-disable-next-line no-console
+    console.warn(...args);
+  }
+
   /**
    * NOVO: Calcula análise de ocupação para UMA unidade de internação
    */
@@ -35,6 +55,9 @@ export class OccupationAnalysisService {
     unidadeId: string,
     dataReferencia?: Date
   ): Promise<SectorOccupationDTO> {
+    this.log("\n🔄 [OCCUPATION ANALYSIS] Iniciando análise de ocupação...");
+    this.log("   Unidade ID:", unidadeId);
+    this.log("   Data Referência:", dataReferencia || "hoje");
     const t0 = Date.now();
 
     // Calcular período (início do mês até data de referência)
@@ -62,12 +85,21 @@ export class OccupationAnalysisService {
     const dataInicioStr = inicioMes.toISOString().split("T")[0];
     const dataFimStr = fimPeriodo.toISOString().split("T")[0];
 
+    this.log("\n🗓️  [PERÍODO]");
+    this.log("   Início:", inicioMes.toISOString());
+    this.log("   Fim:", fimPeriodo.toISOString());
+    this.log("   Strings (YYYY-MM-DD):", dataInicioStr, "→", dataFimStr);
+
     // Buscar unidade
     const unidade = await this.ds.getRepository(UnidadeInternacao).findOne({
       where: { id: unidadeId },
       relations: ["hospital"],
     });
     if (!unidade) throw new Error("Unidade não encontrada");
+
+    this.log("\n🏥 [UNIDADE]");
+    this.log("   Nome:", unidade.nome);
+    this.log("   Hospital:", (unidade as any)?.hospital?.nome);
 
     // ===== USAR DIMENSIONAMENTO COMO FONTE ÚNICA DE DADOS =====
     const dimService = new DimensionamentoService(this.ds);
@@ -81,6 +113,18 @@ export class OccupationAnalysisService {
     const tabela = Array.isArray((dim as any).tabela)
       ? (dim as any).tabela
       : [];
+
+    this.log("\n📦 [DIMENSIONAMENTO] Resultado recebido");
+    this.log("   Tabela linhas:", tabela.length);
+    this.log("   Agregados.totalLeitos:", (dim as any)?.agregados?.totalLeitos);
+    this.log(
+      "   Agregados.taxaOcupacaoPeriodoPercent:",
+      (dim as any)?.agregados?.taxaOcupacaoPeriodoPercent
+    );
+    this.log(
+      "   Agregados.taxaOcupacaoPeriodo (fração):",
+      (dim as any)?.agregados?.taxaOcupacaoPeriodo
+    );
 
     // Extrair dados dos agregados do dimensionamento (PERÍODO)
     const bedCount = Number(agregados?.totalLeitos ?? 0);
@@ -107,6 +151,20 @@ export class OccupationAnalysisService {
     // Taxa de ocupação atual (instantânea do dia de hoje)
     const taxaOcupacao = bedCount > 0 ? (ocupadosHoje / bedCount) * 100 : 0;
 
+    this.log("\n🛏️  [LEITOS_STATUS - AGORA]");
+    this.log("   bedCount (dimensionamento):", bedCount);
+    this.log(
+      "   evaluated/occupied:",
+      ocupadosHoje,
+      "vacant:",
+      vagosHoje,
+      "inactive:",
+      inativosHoje,
+      "avaliados:",
+      avaliadosHoje
+    );
+    this.log("   taxaOcupacao (agora):", taxaOcupacao.toFixed(2) + "%");
+
     // Buscar taxaOcupacaoHoje do histórico (dados de hoje na tabela historicos_leitos_status)
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
@@ -128,14 +186,26 @@ export class OccupationAnalysisService {
     }
     // Se não houver registro no histórico para hoje, taxaOcupacaoHoje = 0
 
+    this.log("\n📅 [HISTÓRICO - HOJE]");
+    if (!historicoHoje) {
+      this.log("   Nenhum registro encontrado para hoje (CURRENT_DATE).");
+    } else {
+      this.log(
+        "   bedCount:",
+        historicoHoje.bedCount,
+        "evaluated:",
+        historicoHoje.evaluated,
+        "taxa:",
+        taxaOcupacaoHoje.toFixed(2) + "%"
+      );
+    }
+
     // Extrair quadro de profissionais da tabela
     const enfRow = tabela.find((t: any) =>
       (t.cargoNome || "").toLowerCase().includes("enfermeiro")
     );
     const tecRow = tabela.find(
       (t: any) =>
-        (t.cargoNome || "").toLowerCase().includes("técnico") ||
-        (t.cargoNome || "").toLowerCase().includes("tecnico") ||
         (t.cargoNome || "").toLowerCase().includes("técnico em enfermagem") ||
         (t.cargoNome || "").toLowerCase().includes("tecnico em enfermagem") ||
         (t.cargoNome || "").toLowerCase().includes("técnico enfermagem") ||
@@ -149,8 +219,58 @@ export class OccupationAnalysisService {
     const quadroEnf = parseInt(enfRow?.quantidadeAtual ?? 0) || 0;
     const quadroTec = parseInt(tecRow?.quantidadeAtual ?? 0) || 0;
 
+    this.log("\n👩‍⚕️ [EQUIPE - DIMENSIONAMENTO/TABELA]");
+    this.log(
+      "   Enfermeiro row:",
+      enfRow
+        ? {
+            cargoNome: enfRow.cargoNome,
+            atual: enfRow.quantidadeAtual,
+            proj: enfRow.quantidadeProjetada,
+          }
+        : "NÃO ENCONTRADO"
+    );
+    this.log(
+      "   Técnico row:",
+      tecRow
+        ? {
+            cargoNome: tecRow.cargoNome,
+            atual: tecRow.quantidadeAtual,
+            proj: tecRow.quantidadeProjetada,
+          }
+        : "NÃO ENCONTRADO"
+    );
+    this.log("   Quadro atual (parse): Enf=", quadroEnf, "Tec=", quadroTec);
+
+    // Buscar taxa de ocupação customizada (se existir)
+    const taxaCustomizadaRepo = this.ds.getRepository(TaxaOcupacaoCustomizada);
+    const taxaCustomizada = await taxaCustomizadaRepo.findOne({
+      where: { unidadeId },
+    });
+
     // Extrair dados para calcular THE e projeção
-    const ocupacaoBase = Number(agregados?.taxaOcupacaoPeriodo ?? 0.6);
+    // Usar taxa customizada se disponível, senão usar a do período
+    const ocupacaoBase = taxaCustomizada
+      ? Number(taxaCustomizada.taxa) / 100 // Converter de % para fração
+      : Number(agregados?.taxaOcupacaoPeriodo ?? 0.6);
+
+    this.log("\n📊 [TAXA DE OCUPAÇÃO] Fonte da taxa:");
+    if (taxaCustomizada) {
+      this.log("   ✅ CUSTOMIZADA encontrada:", taxaCustomizada.taxa + "%");
+      this.log("      Taxa convertida para fração:", ocupacaoBase);
+      this.log("      Salva em:", taxaCustomizada.updatedAt);
+    } else {
+      this.log(
+        "   📈 CALCULADA (do período):",
+        (ocupacaoBase * 100).toFixed(2) + "%"
+      );
+      this.log(
+        "      Taxa do período (agregados):",
+        agregados?.taxaOcupacaoPeriodoPercent + "%"
+      );
+    }
+    this.log("   Ocupação Base (fração):", ocupacaoBase);
+
     const distribuicao: Record<string, number> =
       agregados?.distribuicaoTotalClassificacao || {};
 
@@ -170,9 +290,17 @@ export class OccupationAnalysisService {
       0
     );
 
+    this.log("\n🧾 [CLASSIFICAÇÃO / THE]");
+    this.log("   Distribuição:", distribuicao);
+    this.log("   THE Base calculado:", theBase.toFixed(2));
+
     // Necessários @BASE (projetados calculados no dimensionamento)
     const enfBase = Number(enfRow?.quantidadeProjetada ?? 0);
     const tecBase = Number(tecRow?.quantidadeProjetada ?? 0);
+
+    this.log("\n📌 [BASE NECESSÁRIOS]");
+    this.log("   Enfermeiros necessários @BASE:", enfBase);
+    this.log("   Técnicos necessários @BASE:", tecBase);
 
     // Calcular capacidade máxima atendível com o quadro atual
     let ocupacaoMaximaAtendivel = 0; // Se não houver equipe de enfermagem, capacidade é 0
@@ -188,7 +316,29 @@ export class OccupationAnalysisService {
           tecNecessariosBase: tecBase,
           metaLivreOcupacao: 0.85,
         };
+        this.log("\n🧮 [CÁLCULO PROJEÇÃO] Parâmetros:");
+        this.log(
+          "   Quadro Atual - Enfermeiros:",
+          quadroEnf,
+          "Técnicos:",
+          quadroTec
+        );
+        this.log("   Leitos:", bedCount);
+        this.log("   Ocupação Base:", (ocupacaoBase * 100).toFixed(2) + "%");
+        this.log("   THE Base:", theBase.toFixed(2));
+        this.log(
+          "   Necessários @Base - Enfermeiros:",
+          enfBase,
+          "Técnicos:",
+          tecBase
+        );
+
         const resultado = calcularProjecao(parametros);
+        this.log("\n✨ [RESULTADO PROJEÇÃO]:");
+        this.log(
+          "   Ocupação Máxima Atendível:",
+          (resultado.ocupacaoMaximaAtendivel * 100).toFixed(2) + "%"
+        );
         // DEBUG: explicar por que o valor pode estar "travado"
         const ratioEnf =
           resultado.enf100pctFTE > 0
@@ -198,10 +348,32 @@ export class OccupationAnalysisService {
           resultado.tec100pctFTE > 0
             ? parametros.quadroAtualTecnicos / resultado.tec100pctFTE
             : 0;
+
+        this.log("   Derivados @100%:");
+        this.log("     enf100pctFTE:", resultado.enf100pctFTE);
+        this.log("     tec100pctFTE:", resultado.tec100pctFTE);
+        this.log("     the100pct:", resultado.the100pct);
+        this.log("   Gargalo (min ratios):");
+        this.log("     ratioEnf:", ratioEnf.toFixed(4));
+        this.log("     ratioTec:", ratioTec.toFixed(4));
+
         ocupacaoMaximaAtendivel = resultado.ocupacaoMaximaAtendivel * 100;
+      } else {
+        this.warn("\n⚠️  [CÁLCULO PROJEÇÃO] Pulado por falta de base:");
+        this.warn(
+          "   enfBase:",
+          enfBase,
+          "tecBase:",
+          tecBase,
+          "theBase:",
+          theBase
+        );
+        this.warn(
+          "   Motivo típico: tabela do dimensionamento sem linha de Enf/Tec, ou distribuição vazia, ou ocupacaoBase inválida."
+        );
       }
     } catch (error) {
-      console.warn(
+      this.warn(
         `⚠️  Não foi possível calcular ocupação máxima para unidade ${unidade.nome}:`,
         error instanceof Error ? error.message : error
       );
@@ -236,6 +408,37 @@ export class OccupationAnalysisService {
     };
     const t1 = Date.now();
 
+    this.log("\n📋 [INDICADORES FINAIS]");
+    this.log(
+      "   Taxa Ocupação Atual (leitos_status):",
+      taxaOcupacao.toFixed(2) + "%"
+    );
+    this.log(
+      "   Taxa Ocupação Hoje (histórico):",
+      taxaOcupacaoHoje.toFixed(2) + "%"
+    );
+    this.log(
+      "   Taxa Ocupação Período (mês):",
+      taxaOcupacaoPeriodo.toFixed(2) + "%"
+    );
+    this.log(
+      "   Ocupação Máxima Atendível:",
+      ocupacaoMaximaAtendivel.toFixed(2) + "%"
+    );
+    this.log("   Ociosidade:", ociosidade.toFixed(2) + "%");
+    this.log("   Superlotação:", superlotacao.toFixed(2) + "%");
+    this.log(
+      "   Leitos: Total=",
+      bedCount,
+      "Ocupados=",
+      ocupadosHoje,
+      "Vagos=",
+      vagosHoje,
+      "Inativos=",
+      inativosHoje
+    );
+    this.log("   ⏱️  Tempo de processamento:", t1 - t0, "ms\n");
+
     return out;
   }
 
@@ -247,6 +450,10 @@ export class OccupationAnalysisService {
     dataReferencia?: Date
   ): Promise<OccupationAnalysisResponse> {
     const t0 = Date.now();
+
+    this.log("\n🏥🏥 [OCCUPATION ANALYSIS - HOSPITAL] Iniciando...");
+    this.log("   Hospital ID:", hospitalId);
+    this.log("   Data Referência:", dataReferencia || "hoje");
 
     const unidades = await this.ds.getRepository(UnidadeInternacao).find({
       where: { hospital: { id: hospitalId } },
@@ -261,14 +468,29 @@ export class OccupationAnalysisService {
 
     const hospitalName = (unidades[0] as any)?.hospital?.nome ?? "Hospital";
 
+    this.log("   Hospital Nome:", hospitalName);
+    this.log("   Unidades de internação:", unidades.length);
+
     const sectors: SectorOccupationDTO[] = [];
     for (const u of unidades) {
+      this.log("\n➡️  [HOSPITAL] Calculando setor:", u.nome, "(", u.id, ")");
       const s = await this.analisarUnidadeInternacao(u.id, dataReferencia);
       sectors.push(s);
     }
 
     const summary = this.calcularResumoGlobal(sectors);
     const t1 = Date.now();
+
+    this.log("\n📌 [HOSPITAL] Resumo global:");
+    this.log("   Total leitos:", summary.totalLeitos);
+    this.log("   Taxa hoje:", summary.taxaOcupacaoHoje.toFixed(2) + "%");
+    this.log(
+      "   Ocupação Máxima Atendível:",
+      summary.ocupacaoMaximaAtendivel.toFixed(2) + "%"
+    );
+    this.log("   Superlotação:", summary.superlotacao.toFixed(2) + "%");
+    this.log("   Ociosidade:", summary.ociosidade.toFixed(2) + "%");
+    this.log("   ⏱️  Tempo hospital:", t1 - t0, "ms\n");
 
     return { hospitalId, hospitalName, sectors, summary };
   }
@@ -370,6 +592,10 @@ export class OccupationAnalysisService {
   ): Promise<OccupationDashboardResponse> {
     const agora = dataReferencia ? new Date(dataReferencia) : new Date();
 
+    this.log("\n📊 [DASHBOARD OCUPAÇÃO] Iniciando...");
+    this.log("   Hospital ID:", hospitalId);
+    this.log("   Data Referência:", agora.toISOString());
+
     // Buscar unidades do hospital
     const unidades = await this.ds.getRepository(UnidadeInternacao).find({
       where: { hospital: { id: hospitalId } },
@@ -387,9 +613,23 @@ export class OccupationAnalysisService {
     // Calcular últimos 4 meses (do mais antigo para o mais recente)
     const meses = this.calcularUltimos4Meses(agora);
 
+    this.log("   Hospital Nome:", hospitalName);
+    this.log("   Unidades:", unidades.length);
+    this.log(
+      "   Meses (4):",
+      meses.map((m) => m.toISOString().slice(0, 7)).join(", ")
+    );
+
     const sectors: SectorOccupationDashboardDTO[] = [];
 
     for (const unidade of unidades) {
+      this.log(
+        "\n➡️  [DASHBOARD] Unidade:",
+        unidade.nome,
+        "(",
+        unidade.id,
+        ")"
+      );
       const sectorData = await this.calcularDashboardUnidade(
         unidade,
         meses,
@@ -400,6 +640,12 @@ export class OccupationAnalysisService {
 
     // Calcular resumo do hospital (médias ponderadas)
     const summary = this.calcularDashboardSummary(sectors);
+
+    this.log("\n📌 [DASHBOARD] Summary:");
+    this.log(
+      "   Ocupação Máxima Atendível (média simples):",
+      summary.ocupacaoMaximaAtendivel
+    );
 
     return {
       hospitalId,
@@ -436,6 +682,11 @@ export class OccupationAnalysisService {
     );
     const ocupacaoMaximaAtendivel = analiseAtual.ocupacaoMaximaAtendivel;
 
+    this.log(
+      "   Ocupação Máxima Atendível (atual):",
+      ocupacaoMaximaAtendivel.toFixed(2) + "%"
+    );
+
     // 2. Calcular histórico de 4 meses
     const historico4Meses: MonthlyOccupationData[] = [];
 
@@ -455,6 +706,13 @@ export class OccupationAnalysisService {
         unidade.id,
         mesInicio,
         mesFim
+      );
+
+      this.log(
+        "   Histórico mês",
+        mesInicio.toISOString().slice(0, 7),
+        ":",
+        taxaOcupacaoMes.toFixed(2) + "%"
       );
 
       const monthLabel = this.formatarMesLabel(mesInicio);
@@ -496,6 +754,12 @@ export class OccupationAnalysisService {
       .getMany();
 
     if (registros.length === 0) {
+      this.log(
+        "   (histórico)",
+        inicio.toISOString().slice(0, 7),
+        "sem registros para unidade",
+        unidadeId
+      );
       return 0;
     }
 
@@ -509,10 +773,32 @@ export class OccupationAnalysisService {
     }
 
     if (somaLeitos === 0) {
+      this.warn(
+        "   (histórico)",
+        inicio.toISOString().slice(0, 7),
+        "somaLeitos=0 para unidade",
+        unidadeId,
+        "(registros:",
+        registros.length,
+        ")"
+      );
       return 0;
     }
 
-    return (somaOcupados / somaLeitos) * 100;
+    const taxa = (somaOcupados / somaLeitos) * 100;
+    this.log(
+      "   (histórico)",
+      inicio.toISOString().slice(0, 7),
+      "registros:",
+      registros.length,
+      "somaOcupados:",
+      somaOcupados,
+      "somaLeitos:",
+      somaLeitos,
+      "taxa:",
+      taxa.toFixed(2) + "%"
+    );
+    return taxa;
   }
 
   /**

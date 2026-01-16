@@ -34,7 +34,7 @@ export class DimensionamentoService {
       "\n╔════════════════════════════════════════════════════════════════╗"
     );
     console.log(
-      "║  🏥 INÍCIO DO DIMENSIONAMENTO - UNIDADE DE INTERNAÇÃO         ║"
+      "║   INÍCIO DO DIMENSIONAMENTO - UNIDADE DE INTERNAÇÃO         ║"
     );
     console.log(
       "╚════════════════════════════════════════════════════════════════╝\n"
@@ -55,7 +55,7 @@ export class DimensionamentoService {
       throw new Error("Unidade de internação não encontrada");
     }
 
-    console.log("✅ Unidade encontrada:", unidade.nome);
+    console.log(" Unidade encontrada:", unidade.nome);
     console.log("   Número de leitos:", unidade.leitos.length);
     console.log(
       "   Número de cargos cadastrados:",
@@ -864,6 +864,16 @@ export class DimensionamentoService {
       leitosInativos,
       totalLeitos,
       distribuicaoTotalClassificacao: somaTotalClassificacao,
+      // Constante de Marinho (KM)
+      kmEnfermeiro,
+      kmTecnico,
+      // Porcentagens de distribuição
+      percentualEnfermeiro,
+      percentualTecnico,
+      percentualEnfermeiroPercent: Number(
+        (percentualEnfermeiro * 100).toFixed(1)
+      ),
+      percentualTecnicoPercent: Number((percentualTecnico * 100).toFixed(1)),
     };
 
     const valorHorasExtras = parseFloat(

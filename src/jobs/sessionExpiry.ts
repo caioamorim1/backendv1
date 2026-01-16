@@ -4,6 +4,7 @@ import { AvaliacaoSCP, StatusSessaoAvaliacao } from "../entities/AvaliacaoSCP";
 import { HistoricoOcupacao } from "../entities/HistoricoOcupacao";
 import { Leito, StatusLeito } from "../entities/Leito";
 import { LeitosStatusService } from "../services/leitosStatusService";
+import { LeitoEvento, LeitoEventoTipo } from "../entities/LeitoEvento";
 
 /**
  * Job que executa À MEIA-NOITE para:
@@ -39,6 +40,7 @@ export async function runSessionExpiryForDate(
       const avalRepo = manager.getRepository(AvaliacaoSCP);
       const histRepo = manager.getRepository(HistoricoOcupacao);
       const leitoRepo = manager.getRepository(Leito);
+      const evRepo = manager.getRepository(LeitoEvento);
 
       // 1. Buscar avaliações ativas do dia
       const avals = await avalRepo.find({
@@ -87,6 +89,31 @@ export async function runSessionExpiryForDate(
           historicoAtivo.fim = fimDodia;
           await histRepo.save(historicoAtivo);
           console.log(`  ✅ Histórico finalizado - Leito ${av.leito.numero}`);
+
+          // ✅ Evento de finalização de ocupação por expiração
+          try {
+            await evRepo.save(
+              evRepo.create({
+                leito: av.leito,
+                tipo: LeitoEventoTipo.OCUPACAO_FINALIZADA,
+                dataHora: fimDodia,
+                unidadeId: av.unidade?.id || null,
+                hospitalId: null,
+                leitoNumero: av.leito.numero,
+                avaliacaoId: av.id,
+                historicoOcupacaoId: historicoAtivo.id,
+                autorId: null,
+                autorNome: null,
+                motivo: "Sessão expirada (fim do dia)",
+                payload: { via: "sessionExpiry", dateStr },
+              })
+            );
+          } catch (e) {
+            console.warn(
+              "⚠️  Falha ao registrar evento OCUPACAO_FINALIZADA (sessionExpiry):",
+              e
+            );
+          }
         } else {
           console.warn(
             `  ⚠️  Histórico não encontrado para leito ${av.leito.numero}`
@@ -119,6 +146,31 @@ export async function runSessionExpiryForDate(
       console.log(
         `✅ [SessionExpiry] ${avals.length} avaliações marcadas como EXPIRADA`
       );
+
+      // ✅ Eventos de sessão expirada (auditoria)
+      for (const av of avals) {
+        if (!av.leito) continue;
+        try {
+          await evRepo.save(
+            evRepo.create({
+              leito: av.leito,
+              tipo: LeitoEventoTipo.SESSAO_EXPIRADA,
+              dataHora: fimDodia,
+              unidadeId: av.unidade?.id || null,
+              hospitalId: null,
+              leitoNumero: av.leito.numero,
+              avaliacaoId: av.id,
+              historicoOcupacaoId: null,
+              autorId: null,
+              autorNome: null,
+              motivo: null,
+              payload: { dateStr },
+            })
+          );
+        } catch (e) {
+          console.warn("⚠️  Falha ao registrar evento SESSAO_EXPIRADA:", e);
+        }
+      }
 
       // 5. Atualizar leitos_status das unidades afetadas
       if (unidadesAfetadas.size > 0) {

@@ -12,9 +12,24 @@ export type AuthResult = {
   nome: string;
   id: string;
   hospital?: { id: string; nome: string };
+  tipo?: string;
   role?: string;
   mustChangePassword?: boolean;
 };
+
+function roleFromTipo(tipo: string | undefined): "ADMIN" | "GESTOR" | "COMUM" {
+  if (!tipo) return "COMUM";
+  if (tipo === "ADMIN" || tipo === "ADMIN_GLOBAL") return "ADMIN";
+  if (tipo.startsWith("GESTOR_")) return "GESTOR";
+  return "COMUM";
+}
+
+function normalizeTipo(tipo: string | undefined): string | undefined {
+  if (!tipo) return undefined;
+  if (tipo === "ADMIN_GLOBAL") return "ADMIN";
+  if (tipo === "GESTOR") return "GESTOR_TATICO";
+  return tipo;
+}
 
 export class AuthService {
   private colaboradorRepo = this.ds.getRepository(Colaborador);
@@ -35,12 +50,17 @@ export class AuthService {
     const okCol = await bcrypt.compare(senha, user.senha as string);
     if (!okCol) return null;
 
+    const tipoRaw = (user as any).permissao as string | undefined;
+    const tipo = normalizeTipo(tipoRaw);
+    const role = roleFromTipo(tipo);
+
     const token = jwt.sign(
       {
         id: user.id,
         email: user.email,
         nome: user.nome,
-        role: user.permissao,
+        tipo,
+        role,
         mustChangePassword: user.mustChangePassword,
         hospital: user.hospital
           ? { id: user.hospital.id, nome: user.hospital.nome }
@@ -57,7 +77,8 @@ export class AuthService {
       hospital: user.hospital
         ? { id: user.hospital.id, nome: user.hospital.nome }
         : undefined,
-      role: user.permissao,
+      tipo,
+      role,
       mustChangePassword: user.mustChangePassword,
     };
   }

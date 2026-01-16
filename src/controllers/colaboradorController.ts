@@ -31,7 +31,10 @@ export class ColaboradorController {
   deletarAdmin = async (req: Request, res: Response) => {
     const { id } = req.params;
     const colaborador = await this.repo.obter(id);
-    if (!colaborador || colaborador.permissao !== "ADMIN") {
+    if (
+      !colaborador ||
+      !["ADMIN", "ADMIN_GLOBAL"].includes((colaborador as any).permissao)
+    ) {
       return res.status(404).json({ mensagem: "Admin não encontrado" });
     }
     const ok = await this.repo.deletarAdmin(id);

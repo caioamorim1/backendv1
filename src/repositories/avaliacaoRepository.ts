@@ -17,6 +17,7 @@ import { ScpMetodo } from "../entities/ScpMetodo";
 import { Colaborador } from "../entities/Colaborador";
 import { LeitosStatusService } from "../services/leitosStatusService";
 import { HistoricoOcupacao } from "../entities/HistoricoOcupacao";
+import { LeitoEvento, LeitoEventoTipo } from "../entities/LeitoEvento";
 
 export class AvaliacaoRepository {
   private repo: Repository<AvaliacaoSCP>;
@@ -269,6 +270,36 @@ export class AvaliacaoRepository {
             historicoAtivo.autorId = autor.id;
             historicoAtivo.autorNome = autor.nome;
             await historicoRepo.save(historicoAtivo);
+
+            // ✅ Evento de atualização de avaliação (overwrite)
+            try {
+              const evRepo = manager.getRepository(LeitoEvento);
+              await evRepo.save(
+                evRepo.create({
+                  leito: existing.leito!,
+                  tipo: LeitoEventoTipo.AVALIACAO_ATUALIZADA,
+                  dataHora: new Date(),
+                  unidadeId: unidade.id,
+                  hospitalId: unidade.hospital?.id || null,
+                  leitoNumero: existing.leito?.numero ?? null,
+                  avaliacaoId: existing.id,
+                  historicoOcupacaoId: historicoAtivo.id,
+                  autorId: autor.id,
+                  autorNome: autor.nome,
+                  motivo: "overwrite",
+                  payload: {
+                    scp: expectedKey,
+                    totalPontos: total,
+                    classificacao: classe,
+                  },
+                })
+              );
+            } catch (e) {
+              console.warn(
+                "Não foi possível registrar evento AVALIACAO_ATUALIZADA (overwrite):",
+                e
+              );
+            }
           }
 
           return await manager.getRepository(AvaliacaoSCP).save(existing);
@@ -342,6 +373,55 @@ export class AvaliacaoRepository {
         `Historico criado id=${historico.id} leito=${leitoId} classificacao=${historico.classificacao} inicio=${historico.inicio}`
       );
 
+      // ✅ Registrar eventos (auditoria)
+      try {
+        const evRepo = manager.getRepository(LeitoEvento);
+        const agora = new Date();
+
+        await evRepo.save(
+          evRepo.create({
+            leito,
+            tipo: LeitoEventoTipo.AVALIACAO_CRIADA,
+            dataHora: agora,
+            unidadeId: unidade.id,
+            hospitalId: unidade.hospital?.id || null,
+            leitoNumero: leito.numero,
+            avaliacaoId: saved.id,
+            historicoOcupacaoId: historico.id,
+            autorId: autor.id,
+            autorNome: autor.nome,
+            motivo: null,
+            payload: {
+              scp: expectedKey,
+              totalPontos: total,
+              classificacao: classe,
+            },
+          })
+        );
+
+        await evRepo.save(
+          evRepo.create({
+            leito,
+            tipo: LeitoEventoTipo.OCUPACAO_INICIADA,
+            dataHora: agora,
+            unidadeId: unidade.id,
+            hospitalId: unidade.hospital?.id || null,
+            leitoNumero: leito.numero,
+            avaliacaoId: saved.id,
+            historicoOcupacaoId: historico.id,
+            autorId: autor.id,
+            autorNome: autor.nome,
+            motivo: null,
+            payload: {
+              scp: expectedKey,
+              classificacao: classe,
+            },
+          })
+        );
+      } catch (e) {
+        console.warn("Não foi possível registrar eventos do leito:", e);
+      }
+
       // Atualiza leitos_status da unidade após criar/atualizar avaliação
       try {
         console.log(
@@ -388,6 +468,34 @@ export class AvaliacaoRepository {
           );
           historicoAtivo.fim = new Date();
           await historicoRepo.save(historicoAtivo);
+
+          // ✅ Evento de finalização de ocupação (liberação de sessão)
+          try {
+            if (av.leito) {
+              const evRepo = manager.getRepository(LeitoEvento);
+              await evRepo.save(
+                evRepo.create({
+                  leito: av.leito,
+                  tipo: LeitoEventoTipo.OCUPACAO_FINALIZADA,
+                  dataHora: new Date(),
+                  unidadeId: av.unidade?.id || null,
+                  hospitalId: null,
+                  leitoNumero: av.leito.numero,
+                  avaliacaoId: av.id,
+                  historicoOcupacaoId: historicoAtivo.id,
+                  autorId: null,
+                  autorNome: null,
+                  motivo: "Sessão liberada",
+                  payload: { via: "liberarSessao" },
+                })
+              );
+            }
+          } catch (e) {
+            console.warn(
+              "Não foi possível registrar evento OCUPACAO_FINALIZADA:",
+              e
+            );
+          }
         }
       }
 
@@ -409,6 +517,31 @@ export class AvaliacaoRepository {
       console.log(
         `Sessao liberada id=${saved.id} leito=${saved.leito?.id} statusSessao=${saved.statusSessao}`
       );
+
+      // ✅ Evento de liberação de sessão
+      try {
+        if (saved.leito) {
+          const evRepo = manager.getRepository(LeitoEvento);
+          await evRepo.save(
+            evRepo.create({
+              leito: saved.leito,
+              tipo: LeitoEventoTipo.SESSAO_LIBERADA,
+              dataHora: new Date(),
+              unidadeId: saved.unidade?.id || null,
+              hospitalId: null,
+              leitoNumero: saved.leito.numero,
+              avaliacaoId: saved.id,
+              historicoOcupacaoId: null,
+              autorId: null,
+              autorNome: null,
+              motivo: null,
+              payload: { statusSessao: saved.statusSessao },
+            })
+          );
+        }
+      } catch (e) {
+        console.warn("Não foi possível registrar evento SESSAO_LIBERADA:", e);
+      }
 
       // Atualiza leitos_status da unidade após liberar sessão
       if (av.unidade?.id) {
@@ -440,10 +573,17 @@ export class AvaliacaoRepository {
       itens?: Record<string, number>;
       colaboradorId?: string;
       prontuario?: string | null;
+      justificativa?: string | null;
       scp?: string;
     }
   ) {
-    const { itens, colaboradorId, prontuario = null, scp } = params;
+    const {
+      itens,
+      colaboradorId,
+      prontuario = null,
+      justificativa,
+      scp,
+    } = params;
     console.log(avaliacaoId);
 
     const av = await this.repo.findOne({
@@ -482,6 +622,9 @@ export class AvaliacaoRepository {
     // atualiza itens/prontuario/scp
     if (itens) av.itens = itens;
     av.prontuario = prontuario ?? av.prontuario;
+    if (Object.prototype.hasOwnProperty.call(params, "justificativa")) {
+      av.justificativa = justificativa ?? null;
+    }
     av.scp = effectiveScp;
 
     // recalc total e classificacao
@@ -521,6 +664,57 @@ export class AvaliacaoRepository {
     }
 
     const saved = await this.repo.save(av);
+
+    // ✅ Evento de atualização de avaliação
+    try {
+      if (saved.leito) {
+        const evRepo = this.repo.manager.getRepository(LeitoEvento);
+        await evRepo.save(
+          evRepo.create({
+            leito: saved.leito,
+            tipo: LeitoEventoTipo.AVALIACAO_ATUALIZADA,
+            dataHora: new Date(),
+            unidadeId: saved.unidade?.id || null,
+            hospitalId: null,
+            leitoNumero: saved.leito.numero,
+            avaliacaoId: saved.id,
+            historicoOcupacaoId: null,
+            autorId: saved.autor?.id || null,
+            autorNome: saved.autor?.nome || null,
+            motivo: "atualizarSessao",
+            payload: {
+              scp: saved.scp,
+              totalPontos: saved.totalPontos,
+              classificacao: saved.classificacao,
+              updatedFields: {
+                itens: Boolean(itens),
+                colaboradorId: Boolean(colaboradorId),
+                prontuario: Object.prototype.hasOwnProperty.call(
+                  params,
+                  "prontuario"
+                ),
+                justificativa: Object.prototype.hasOwnProperty.call(
+                  params,
+                  "justificativa"
+                ),
+                scp: Boolean(scp),
+              },
+              justificativa: Object.prototype.hasOwnProperty.call(
+                params,
+                "justificativa"
+              )
+                ? saved.justificativa
+                : undefined,
+            },
+          })
+        );
+      }
+    } catch (e) {
+      console.warn(
+        "Não foi possível registrar evento AVALIACAO_ATUALIZADA (atualizarSessao):",
+        e
+      );
+    }
 
     // **ATUALIZAR HISTÓRICO ATIVO**
     if ((itens || colaboradorId) && av.leito) {

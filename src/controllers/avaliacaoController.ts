@@ -47,6 +47,7 @@ export class AvaliacaoController {
         itens?: Record<string, number>;
         colaboradorId?: string;
         prontuario?: string | null;
+        justificativa?: string | null;
         scp?: string;
       };
 
