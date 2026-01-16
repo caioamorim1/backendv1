@@ -41,10 +41,6 @@ export class LeitosStatusService {
       where: { unidade: { id: unidadeId } },
       relations: ["unidade"],
     });
-    console.log(
-      `leitosStatusService.atualizarStatusUnidade: unidadeId=${unidadeId}, totalLeitosFound=${leitos.length}`
-    );
-    console.log(`leitos IDs: ${leitos.map((l) => l.id).join(", ")}`);
 
     const totalLeitos = leitos.length;
 
@@ -65,16 +61,6 @@ export class LeitosStatusService {
       .andWhere("h.inicio <= :now", { now })
       .andWhere("(h.fim IS NULL OR h.fim > :now)", { now })
       .getMany();
-
-    console.log(`historicosAtivos count=${historicosAtivos.length}`);
-    // log sample of historico entries
-    for (const h of historicosAtivos.slice(0, 10)) {
-      console.log(
-        `  historico id=${h.id} leitoId=${
-          h.leito?.id ?? "unknown"
-        } classificacao=${h.classificacao} inicio=${h.inicio} fim=${h.fim}`
-      );
-    }
 
     const avaliados = historicosAtivos.length;
 
@@ -99,10 +85,6 @@ export class LeitosStatusService {
       (h) => h.classificacao === ClassificacaoCuidado.INTENSIVOS
     ).length;
 
-    console.log(
-      `counts by classification: minimum=${minimumCare}, intermediate=${intermediateCare}, highDependency=${highDependency}, semiIntensive=${semiIntensive}, intensive=${intensive}`
-    );
-
     // Buscar ou criar registro de status
     let leitoStatus = await leitosStatusRepo.findOne({
       where: { unidade: { id: unidadeId } },
@@ -124,7 +106,6 @@ export class LeitosStatusService {
     leitoStatus.evaluated = avaliados;
     leitoStatus.vacant = vagos;
     leitoStatus.inactive = inativos;
-    console.log("leito status", leitoStatus);
 
     const savedStatus = await leitosStatusRepo.save(leitoStatus);
 
@@ -150,7 +131,7 @@ export class LeitosStatusService {
    * Salva um registro histórico do status dos leitos
    * Mantém apenas 1 registro por unidade por dia (atualiza se já existir)
    *
-   * ✅ Salva momento atual - PostgreSQL armazena em UTC automaticamente
+   * Salva momento atual - PostgreSQL armazena em UTC automaticamente
    */
   private async _salvarHistorico(
     manager: EntityManager,
@@ -179,14 +160,7 @@ export class LeitosStatusService {
     const agoraEmSP = DateTime.fromJSDate(agora).setZone(ZONE);
     const dataStr = agoraEmSP.toISODate(); // YYYY-MM-DD em São Paulo
 
-    console.log(
-      `\n🔍 [HISTÓRICO] Salvando histórico para unidade ${unidadeId}`
-    );
-    console.log(`📅 Momento atual em São Paulo: ${agoraEmSP.toISO()}`);
-    console.log(`📅 Armazenado como UTC no banco: ${agora.toISOString()}`);
-    console.log(`📅 Data para comparação: ${dataStr}`);
-
-    // ✅ Query timezone-aware: compara apenas a DATA em São Paulo
+    // Query timezone-aware: compara apenas a DATA em São Paulo
     const registroExistente = await historicoRepo
       .createQueryBuilder("h")
       .leftJoinAndSelect("h.unidade", "unidade")
@@ -198,21 +172,11 @@ export class LeitosStatusService {
       .getOne();
 
     if (registroExistente) {
-      console.log(
-        `♻️  Registro encontrado (id=${registroExistente.id}) - ATUALIZANDO`
-      );
-
       Object.assign(registroExistente, dados);
       registroExistente.data = agora;
 
       await historicoRepo.save(registroExistente);
-      console.log(`✅ Histórico ATUALIZADO`);
-      console.log(
-        `   Dados: evaluated=${dados.evaluated}, vacant=${dados.vacant}, inactive=${dados.inactive}`
-      );
     } else {
-      console.log(`🆕 CRIANDO novo histórico para ${dataStr}`);
-
       const historico = historicoRepo.create({
         unidade: { id: unidadeId } as UnidadeInternacao,
         data: agora,
@@ -220,10 +184,6 @@ export class LeitosStatusService {
       });
 
       await historicoRepo.save(historico);
-      console.log(`✅ Novo histórico CRIADO`);
-      console.log(
-        `   Dados: evaluated=${dados.evaluated}, vacant=${dados.vacant}, inactive=${dados.inactive}`
-      );
     }
   }
 
@@ -248,19 +208,12 @@ export class LeitosStatusService {
     const unidadeRepo = this.ds.getRepository(UnidadeInternacao);
     const unidades = await unidadeRepo.find();
 
-    console.log(
-      `📊 Atualizando status de ${unidades.length} unidades de internação...`
-    );
-
     for (const unidade of unidades) {
       try {
         await this.atualizarStatusUnidade(unidade.id);
-        console.log(`  ✓ Unidade ${unidade.nome} atualizada`);
       } catch (error) {
-        console.error(`  ✗ Erro ao atualizar unidade ${unidade.nome}:`, error);
+        console.error(`Erro ao atualizar unidade ${unidade.nome}:`, error);
       }
     }
-
-    console.log("✅ Atualização de status concluída");
   }
 }

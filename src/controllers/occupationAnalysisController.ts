@@ -38,28 +38,13 @@ export class OccupationAnalysisController {
         }
       }
 
-      console.log(
-        `📊 [OccupationAnalysis] Request para hospital: ${hospitalId}${
-          dataCalculo
-            ? ` - Data: ${dataCalculo.toISOString().split("T")[0]}`
-            : ""
-        }`
-      );
-
       const t0 = Date.now();
       const result = await this.service.calcularAnaliseOcupacao(
         hospitalId,
         dataCalculo
       );
       const t1 = Date.now();
-      console.log(
-        `✅ [OccupationAnalysis] OK hospital=${hospitalId} setores=${
-          result.sectors.length
-        } tempo=${t1 - t0}ms`
-      );
-      console.log(
-        `   summary: taxa=${result.summary.taxaOcupacao}% max=${result.summary.ocupacaoMaximaAtendivel}% ocios=${result.summary.ociosidade}% super=${result.summary.superlotacao}%`
-      );
+
       return res.json(result);
     } catch (error) {
       console.error("[OccupationAnalysisController] Erro:", error);
@@ -239,29 +224,12 @@ export class OccupationAnalysisController {
         }
       }
 
-      console.log(
-        `📊 [OccupationDashboard] Request para hospital: ${hospitalId}${
-          dataCalculo
-            ? ` - Data: ${dataCalculo.toISOString().split("T")[0]}`
-            : ""
-        }`
-      );
-
       const t0 = Date.now();
       const result = await this.service.calcularDashboardOcupacao(
         hospitalId,
         dataCalculo
       );
       const t1 = Date.now();
-
-      console.log(
-        `✅ [OccupationDashboard] OK hospital=${hospitalId} setores=${
-          result.sectors.length
-        } tempo=${t1 - t0}ms`
-      );
-      console.log(
-        `   summary: max=${result.summary.ocupacaoMaximaAtendivel}% meses=${result.summary.historico4Meses.length}`
-      );
 
       return res.json(result);
     } catch (error) {

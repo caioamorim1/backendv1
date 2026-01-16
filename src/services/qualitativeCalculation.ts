@@ -145,10 +145,6 @@ export function computeQualitativeScores(params: {
   let totalObtained = 0;
   let totalMax = 0;
 
-  console.log("\n=== INÍCIO DO CÁLCULO QUALITATIVO ===");
-  console.log("Total de perguntas no questionário:", questions.length);
-  console.log("Total de respostas recebidas:", answers.length);
-
   for (const q of questions) {
     const weight = Number(q.weight ?? 1) || 1;
 
@@ -167,35 +163,8 @@ export function computeQualitativeScores(params: {
 
     const categoryId = Number(q.categoryId);
 
-    console.log(`\n--- Pergunta ID: ${q.id} | Categoria: ${categoryId} ---`);
-    console.log(`  Peso da Pergunta (weight): ${weight}`);
-
     // Mostrar alternativas disponíveis
     const alts = q.alternatives ?? q.alternativas ?? q.options ?? q.opcoes;
-    if (Array.isArray(alts) && alts.length > 0) {
-      console.log(`  Alternativas disponíveis:`);
-      alts.forEach((alt: any, idx: number) => {
-        const altWeight = alt.weight ?? alt.peso ?? alt.points ?? 0;
-        console.log(
-          `    [${idx + 1}] Peso: ${altWeight} | Texto: ${
-            alt.text ?? alt.label ?? alt.value ?? "(sem texto)"
-          }`
-        );
-      });
-    }
-
-    console.log(
-      `  Peso da Resposta Escolhida (responsePoints): ${responsePoints}`
-    );
-    console.log(
-      `  Peso Máximo das Alternativas (maxResponsePoints): ${maxResponsePoints}`
-    );
-    console.log(
-      `  Pontuação Obtida (responsePoints × weight): ${responsePoints} × ${weight} = ${score}`
-    );
-    console.log(
-      `  Pontuação Máxima (maxResponsePoints × weight): ${maxResponsePoints} × ${weight} = ${maxScore}`
-    );
 
     normalizedAnswers.push({
       questionId: Number(q.id),
@@ -229,37 +198,11 @@ export function computeQualitativeScores(params: {
     })
     .sort((a, b) => a.categoryId - b.categoryId);
 
-  console.log("\n=== RESULTADOS POR CATEGORIA ===");
-  categories.forEach((cat) => {
-    console.log(`\nCategoria ID: ${cat.categoryId}`);
-    console.log(
-      `  Pontuação Obtida da Categoria (soma de scores): ${cat.obtained}`
-    );
-    console.log(
-      `  Pontuação Máxima da Categoria (soma de maxScores): ${cat.max}`
-    );
-    console.log(
-      `  % da Categoria: (${cat.obtained} / ${
-        cat.max
-      }) × 100 = ${cat.score.toFixed(2)}%`
-    );
-  });
-
   const totals: QualitativeTotals = {
     obtained: round2(totalObtained),
     max: round2(totalMax),
     percent: round2(totalMax > 0 ? (totalObtained / totalMax) * 100 : 0),
   };
-
-  console.log("\n=== TOTAIS GERAIS ===");
-  console.log(`Pontuação Total Obtida: ${totals.obtained}`);
-  console.log(`Pontuação Total Máxima: ${totals.max}`);
-  console.log(
-    `% Total: (${totals.obtained} / ${
-      totals.max
-    }) × 100 = ${totals.percent.toFixed(2)}%`
-  );
-  console.log("=== FIM DO CÁLCULO ===\n");
 
   return { normalizedAnswers, categories, totals };
 }

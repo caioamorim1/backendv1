@@ -33,22 +33,9 @@ export class SnapshotDimensionamentoService {
   private async validarStatusProjetadoFinal(
     hospitalId: string
   ): Promise<{ valido: boolean; setoresPendentes: string[] }> {
-    console.log(
-      "\n╔════════════════════════════════════════════════════════════════╗"
-    );
-    console.log(
-      "║  🔍 VALIDANDO STATUS DO PROJETADO FINAL E PERÍODO TRAVADO   ║"
-    );
-    console.log(
-      "╚════════════════════════════════════════════════════════════════╝\n"
-    );
-    console.log(`📋 Hospital ID: ${hospitalId}`);
-
     const statusValidos = ["concluido_parcial", "concluido_final"];
     const setoresPendentes: string[] = [];
     const todosStatusHospital: string[] = []; // Armazena todos os status do hospital
-
-    console.log(`✅ Status válidos aceitos: ${statusValidos.join(", ")}\n`);
 
     // Buscar todas as unidades de internação do hospital
     const unidadesInternacao = await this.ds
@@ -58,42 +45,19 @@ export class SnapshotDimensionamentoService {
         select: ["id", "nome"],
       });
 
-    console.log(
-      `🏥 Encontradas ${unidadesInternacao.length} unidades de INTERNAÇÃO\n`
-    );
-
     // Validar internação (período travado + status)
-    console.log("═══ VALIDANDO UNIDADES DE INTERNAÇÃO ═══");
-    for (const unidade of unidadesInternacao) {
-      console.log(`\n📍 Unidade: ${unidade.nome} (ID: ${unidade.id})`);
 
+    for (const unidade of unidadesInternacao) {
       // Verificar se tem período travado
       const periodoTravado =
         await this.controlePeriodoService.buscarTravadoPorUnidade(unidade.id);
 
-      console.log(
-        `   🔍 Período encontrado: ${
-          periodoTravado
-            ? `travado=${periodoTravado.travado}, ${periodoTravado.dataInicial} a ${periodoTravado.dataFinal}`
-            : "NENHUM"
-        }`
-      );
-
       if (!periodoTravado || periodoTravado.travado !== true) {
-        console.log(
-          `   ❌ PENDENTE: Período não está travado (travado=${
-            periodoTravado?.travado ?? "undefined"
-          })`
-        );
         setoresPendentes.push(
           `${unidade.nome} (Internação) - Período não travado`
         );
         continue;
       }
-
-      console.log(
-        `   ✅ Período travado confirmado: ${periodoTravado.dataInicial} a ${periodoTravado.dataFinal}`
-      );
 
       const projetados = await this.ds
         .getRepository(ProjetadoFinalInternacao)
@@ -101,15 +65,8 @@ export class SnapshotDimensionamentoService {
           where: { unidadeId: unidade.id },
         });
 
-      console.log(
-        `   📊 Encontrados ${projetados.length} registros de projetado final`
-      );
-
       // Se não tem nenhum projetado final, setor está pendente
       if (projetados.length === 0) {
-        console.log(
-          `   ❌ PENDENTE: Nenhum registro de projetado final encontrado`
-        );
         setoresPendentes.push(`${unidade.nome} (Internação)`);
         continue;
       }
@@ -118,18 +75,10 @@ export class SnapshotDimensionamentoService {
       projetados.forEach((p, index) => {
         const isValido = statusValidos.includes(p.status);
         const emoji = isValido ? "✅" : "⚠️";
-        console.log(
-          `   ${emoji} Cargo ${index + 1}: cargoId=${p.cargoId.substring(
-            0,
-            8
-          )}... | status="${p.status}" | projetadoFinal=${p.projetadoFinal}`
-        );
       });
 
       // Validação 1: Verificar se todos os projetados têm status válido
-      console.log(
-        `\n   🔍 [VALIDAÇÃO 1/3] Verificando se todos os status são válidos...`
-      );
+
       const temStatusInvalido = projetados.some(
         (p) => !statusValidos.includes(p.status)
       );
@@ -138,57 +87,37 @@ export class SnapshotDimensionamentoService {
         const statusInvalidos = projetados
           .filter((p) => !statusValidos.includes(p.status))
           .map((p) => p.status);
-        console.log(
-          `   ❌ PENDENTE: Encontrados status inválidos: ${[
-            ...new Set(statusInvalidos),
-          ].join(", ")}`
-        );
+
         setoresPendentes.push(
           `${unidade.nome} (Internação) - Status inválidos`
         );
         continue;
       } else {
-        console.log(
-          `   ✅ Todos os status são válidos (${statusValidos.join(", ")})`
-        );
       }
 
       // Validação 2: Verificar se todos os status são iguais dentro da unidade (sem mistura)
-      console.log(
-        `\n   🔍 [VALIDAÇÃO 2/3] Verificando consistência dos status dentro da unidade...`
-      );
+
       const statusUnicos = [...new Set(projetados.map((p) => p.status))];
-      console.log(
-        `   🔍 Status únicos encontrados: ${statusUnicos.join(", ")} (total: ${
-          statusUnicos.length
-        })`
-      );
 
       if (statusUnicos.length > 1) {
         // Calcular distribuição de status
-        const distribuicao = projetados.reduce((acc, p) => {
-          acc[p.status] = (acc[p.status] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>);
+        const distribuicao = projetados.reduce(
+          (acc, p) => {
+            acc[p.status] = (acc[p.status] || 0) + 1;
+            return acc;
+          },
+          {} as Record<string, number>
+        );
 
         const distribuicaoStr = Object.entries(distribuicao)
           .map(([status, count]) => `${status}(${count})`)
           .join(", ");
 
-        console.log(`   ❌ PENDENTE: Cargos com status misturados`);
-        console.log(`   📊 Distribuição: ${distribuicaoStr}`);
-        console.log(
-          `   🚫 BLOQUEANDO unidade "${unidade.nome}" - Status misturados detectado`
-        );
         setoresPendentes.push(
           `${unidade.nome} (Internação) - Status misturados (${distribuicaoStr})`
         );
         continue;
       }
-
-      console.log(
-        `   🎉 Unidade "${unidade.nome}" aprovada - Todos os ${projetados.length} cargos estão em "${statusUnicos[0]}"`
-      );
 
       // Adicionar status da unidade para validação global do hospital
       todosStatusHospital.push(statusUnicos[0]);
@@ -202,55 +131,30 @@ export class SnapshotDimensionamentoService {
         select: ["id", "nome"],
       });
 
-    console.log(
-      `\n🏥 Encontradas ${unidadesNaoInternacao.length} unidades de NÃO-INTERNAÇÃO\n`
-    );
-
     // Validar não-internação (status por unidade)
-    console.log("═══ VALIDANDO UNIDADES DE NÃO-INTERNAÇÃO ═══");
-    for (const unidade of unidadesNaoInternacao) {
-      console.log(`\n📍 Unidade: ${unidade.nome} (ID: ${unidade.id})`);
 
+    for (const unidade of unidadesNaoInternacao) {
       const projetados = await this.ds
         .getRepository(ProjetadoFinalNaoInternacao)
         .find({
           where: { unidadeId: unidade.id },
         });
 
-      console.log(
-        `   📊 Encontrados ${projetados.length} registros de projetado final`
-      );
-
       // Se não tem nenhum projetado final, setor está pendente
       if (projetados.length === 0) {
-        console.log(
-          `   ❌ PENDENTE: Nenhum registro de projetado final encontrado`
-        );
         setoresPendentes.push(`${unidade.nome} (Não-Internação)`);
         continue;
       }
 
       // Log de cada projetado (agrupado por sítio)
-      console.log(
-        `\n   📦 Listando todos os ${projetados.length} cargos da unidade:`
-      );
+
       projetados.forEach((p, index) => {
         const isValido = statusValidos.includes(p.status);
         const emoji = isValido ? "✅" : "⚠️";
-        console.log(
-          `   ${emoji} Cargo ${index + 1}: cargoId=${p.cargoId.substring(
-            0,
-            8
-          )}... | sitioId=${p.sitioId?.substring(0, 8) || "N/A"}... | status="${
-            p.status
-          }" | projetadoFinal=${p.projetadoFinal}`
-        );
       });
 
       // Validação 1: Verificar se todos os projetados têm status válido
-      console.log(
-        `\n   🔍 [VALIDAÇÃO 1/3] Verificando se todos os status são válidos...`
-      );
+
       const temStatusInvalido = projetados.some(
         (p) => !statusValidos.includes(p.status)
       );
@@ -259,100 +163,48 @@ export class SnapshotDimensionamentoService {
         const statusInvalidos = projetados
           .filter((p) => !statusValidos.includes(p.status))
           .map((p) => p.status);
-        console.log(
-          `   ❌ PENDENTE: Encontrados status inválidos: ${[
-            ...new Set(statusInvalidos),
-          ].join(", ")}`
-        );
+
         setoresPendentes.push(
           `${unidade.nome} (Não-Internação) - Status inválidos`
         );
         continue;
       } else {
-        console.log(
-          `   ✅ Todos os status são válidos (${statusValidos.join(", ")})`
-        );
       }
 
       // Validação 2: Verificar se todos os status são iguais dentro da unidade (sem mistura)
-      console.log(
-        `\n   🔍 [VALIDAÇÃO 2/3] Verificando consistência dos status dentro da unidade...`
-      );
+
       const statusUnicos = [...new Set(projetados.map((p) => p.status))];
-      console.log(
-        `   🔍 Status únicos encontrados: ${statusUnicos.join(", ")} (total: ${
-          statusUnicos.length
-        })`
-      );
 
       if (statusUnicos.length > 1) {
         // Calcular distribuição de status
-        const distribuicao = projetados.reduce((acc, p) => {
-          acc[p.status] = (acc[p.status] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>);
+        const distribuicao = projetados.reduce(
+          (acc, p) => {
+            acc[p.status] = (acc[p.status] || 0) + 1;
+            return acc;
+          },
+          {} as Record<string, number>
+        );
 
         const distribuicaoStr = Object.entries(distribuicao)
           .map(([status, count]) => `${status}(${count})`)
           .join(", ");
 
-        console.log(`   ❌ PENDENTE: Cargos com status misturados`);
-        console.log(`   📊 Distribuição: ${distribuicaoStr}`);
-        console.log(
-          `   🚫 BLOQUEANDO unidade "${unidade.nome}" - Status misturados detectado`
-        );
         setoresPendentes.push(
           `${unidade.nome} (Não-Internação) - Status misturados (${distribuicaoStr})`
         );
         continue;
       }
 
-      console.log(
-        `   🎉 Unidade "${unidade.nome}" aprovada - Todos os ${projetados.length} cargos estão em "${statusUnicos[0]}"`
-      );
-
       // Adicionar status da unidade para validação global do hospital
       todosStatusHospital.push(statusUnicos[0]);
     }
 
-    console.log("\n═══════════════════════════════════════════");
-    console.log(`📋 RESUMO DA VALIDAÇÃO:`);
-    console.log(
-      `   Total de unidades de internação verificadas: ${unidadesInternacao.length}`
-    );
-    console.log(
-      `   Total de unidades de não-internação verificadas: ${unidadesNaoInternacao.length}`
-    );
-    console.log(`   Setores pendentes: ${setoresPendentes.length}`);
-
-    // VALIDAÇÃO 3: Verificar se TODO O HOSPITAL tem o mesmo status
-    console.log(
-      `\n╔════════════════════════════════════════════════════════════════╗`
-    );
-    console.log(
-      `║  🔍 [VALIDAÇÃO 3/3] CONSISTÊNCIA GLOBAL DO HOSPITAL          ║`
-    );
-    console.log(
-      `╚════════════════════════════════════════════════════════════════╝\n`
-    );
-
     if (todosStatusHospital.length === 0) {
-      console.log(
-        `❌ ERRO: Nenhuma unidade com status válido encontrada no hospital`
-      );
       setoresPendentes.push(
         "Hospital - Nenhuma unidade com projetado final válido"
       );
     } else {
       const statusUnicosHospital = [...new Set(todosStatusHospital)];
-      console.log(
-        `📊 Total de unidades aprovadas: ${todosStatusHospital.length}`
-      );
-      console.log(
-        `🔍 Status únicos no hospital: ${statusUnicosHospital.join(
-          ", "
-        )} (total: ${statusUnicosHospital.length})`
-      );
 
       if (statusUnicosHospital.length > 1) {
         // Calcular distribuição de status por unidade
@@ -368,50 +220,17 @@ export class SnapshotDimensionamentoService {
           .map(([status, count]) => `${status}(${count} unidades)`)
           .join(", ");
 
-        console.log(
-          `\n❌ VALIDAÇÃO GLOBAL FALHOU - Hospital com status misturados entre unidades`
-        );
-        console.log(`📊 Distribuição: ${distribuicaoStr}`);
-        console.log(
-          `\n🚫 TODAS as unidades do hospital devem estar no MESMO status:`
-        );
-        console.log(
-          `   ➤ OU todas em "concluido_parcial" OU todas em "concluido_final"`
-        );
-
         setoresPendentes.push(
           `Hospital - Status misturados entre unidades (${distribuicaoStr})`
         );
       } else {
-        console.log(
-          `\n✅ CONSISTÊNCIA GLOBAL APROVADA - Todas as ${todosStatusHospital.length} unidades estão em "${statusUnicosHospital[0]}"`
-        );
       }
     }
-
-    if (setoresPendentes.length > 0) {
-      console.log(`\n❌ VALIDAÇÃO FALHOU - Problemas encontrados:`);
-      setoresPendentes.forEach((setor, index) => {
-        console.log(`   ${index + 1}. ${setor}`);
-      });
-      console.log(
-        `\n🚫 SNAPSHOT BLOQUEADO - Corrija os problemas acima antes de continuar.`
-      );
-    } else {
-      console.log(
-        `\n✅ VALIDAÇÃO OK - Todos os setores estão prontos para snapshot`
-      );
-    }
-    console.log("═══════════════════════════════════════════\n");
 
     const resultado = {
       valido: setoresPendentes.length === 0,
       setoresPendentes,
     };
-
-    console.log(
-      `🔒 Retornando validação: valido=${resultado.valido}, pendentes=${resultado.setoresPendentes.length}`
-    );
 
     return resultado;
   }
@@ -442,9 +261,8 @@ export class SnapshotDimensionamentoService {
       await this.hospitalSectorsRepo.getAllSectorsByHospital(hospitalId);
 
     // Buscar projetado final de todas as unidades
-    const projetadoFinalData = await this.buscarTodoProjetadoFinal(
-      dadosHospital
-    );
+    const projetadoFinalData =
+      await this.buscarTodoProjetadoFinal(dadosHospital);
 
     // ✅ SANITIZAR dados antes de salvar
     const dadosSanitizados = this.sanitizarDados(dadosHospital, "root");
@@ -508,9 +326,8 @@ export class SnapshotDimensionamentoService {
     const unidadeSanitizada = this.sanitizarDados(unidade);
 
     // Buscar projetado final da unidade
-    const projetadoFinal = await this.projetadoFinalService.buscarInternacao(
-      unidadeId
-    );
+    const projetadoFinal =
+      await this.projetadoFinalService.buscarInternacao(unidadeId);
     if (projetadoFinal) {
       unidadeSanitizada.projetadoFinal = projetadoFinal;
     }
@@ -566,9 +383,8 @@ export class SnapshotDimensionamentoService {
     const unidadeSanitizada = this.sanitizarDados(unidade);
 
     // Buscar projetado final da unidade
-    const projetadoFinal = await this.projetadoFinalService.buscarNaoInternacao(
-      unidadeId
-    );
+    const projetadoFinal =
+      await this.projetadoFinalService.buscarNaoInternacao(unidadeId);
     if (projetadoFinal) {
       unidadeSanitizada.projetadoFinal = projetadoFinal;
     }
@@ -681,8 +497,6 @@ export class SnapshotDimensionamentoService {
    * Buscar situação atual do hospital (funcionários reais e custos)
    */
   async buscarSituacaoAtual(hospitalId: string) {
-    console.log(`🔍 Buscando situação atual do hospital ${hospitalId}...`);
-
     // Buscar unidades de internação
     const unidadesInternacao = await this.ds
       .getRepository(UnidadeInternacao)
@@ -859,13 +673,6 @@ export class SnapshotDimensionamentoService {
     );
 
     const custoTotalFinal = custoTotalGeral + custoUnidadesNeutras;
-
-    console.log(
-      `✅ Situação atual: ${unidadesAtual.length} unidades, ${totalGeralFuncionarios} funcionários`
-    );
-    console.log(`   💰 Custo unidades: R$ ${custoTotalGeral.toFixed(2)}`);
-    console.log(`   💰 Custo neutras: R$ ${custoUnidadesNeutras.toFixed(2)}`);
-    console.log(`   💰 Custo total: R$ ${custoTotalFinal.toFixed(2)}`);
 
     return {
       unidades: unidadesAtual,
@@ -1323,10 +1130,6 @@ export class SnapshotDimensionamentoService {
             (unidadeEntity?.horas_extra_reais || "0").replace(",", ".")
           );
 
-          console.log(
-            `📊 Unidade Não-Internação ${unidade.name}: horas_extra_reais = "${unidadeEntity?.horas_extra_reais}" => ${horasExtraUnidade}`
-          );
-
           // Adicionar custos aos cargos de não-internação (agregados por sítio)
           let custoTotalUnidade = 0;
           let totalFuncionariosUnidade = 0;
@@ -1348,10 +1151,6 @@ export class SnapshotDimensionamentoService {
                       (cargoEntity.adicionais_tributos || "0").replace(",", ".")
                     );
                     custoUnitario = salario + adicionais + horasExtraUnidade;
-
-                    console.log(
-                      `  💰 Cargo ${cargoEntity.nome}: salário=${salario} + adicionais=${adicionais} + horasExtra=${horasExtraUnidade} = ${custoUnitario}`
-                    );
                   }
 
                   const projetadoQtd = cargo.projetadoFinal || 0;
@@ -1477,9 +1276,8 @@ export class SnapshotDimensionamentoService {
     // Buscar snapshot selecionado para cada hospital
     const hospitalIds = hospitais.map((h: any) => h.id);
 
-    const snapshots = await this.snapshotRepo.buscarSelecionadosPorHospitais(
-      hospitalIds
-    );
+    const snapshots =
+      await this.snapshotRepo.buscarSelecionadosPorHospitais(hospitalIds);
 
     return snapshots.map((snapshot: SnapshotDimensionamento) => ({
       ...snapshot,

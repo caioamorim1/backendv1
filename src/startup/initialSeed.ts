@@ -14,15 +14,8 @@ export async function runInitialScpMetodoSeed(ds: DataSource) {
       if (found) existing++;
     }
     if (existing < requiredKeys.length) {
-      console.log(
-        `[SCP] Inicial: encontrados ${existing}/${requiredKeys.length}. Executando seedBuiltin()`
-      );
       await repo.seedBuiltin();
-      console.log("[SCP] Seed builtin concluído.");
     } else {
-      console.log(
-        "[SCP] Métodos builtin já presentes. Seed automático ignorado."
-      );
     }
 
     // Criação do admin padrão se não existir
@@ -37,9 +30,7 @@ export async function runInitialScpMetodoSeed(ds: DataSource) {
         nome: "Administrador",
         cpf: "00000000000",
       });
-      console.log("[SEED] Admin padrão criado: admin@admin.com / admin123");
     } else {
-      console.log("[SEED] Admin padrão já existe, não será criado.");
     }
 
     await runColetaSeed(ds);

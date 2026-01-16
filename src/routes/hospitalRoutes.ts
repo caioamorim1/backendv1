@@ -14,7 +14,24 @@ export const HospitalRoutes = (ds: DataSource): Router => {
     );
 
   // Route: POST /hospitais - com upload de foto
-  r.post("/", uploadHospitalFoto.single("foto"), ctrl.criar);
+  r.post(
+    "/",
+    (req, res, next) => {
+      console.log("\n🔄 [ROTA HOSPITAL] POST / - Upload iniciado");
+      uploadHospitalFoto.single("foto")(req, res, (err) => {
+        if (err) {
+          console.error("❌ [MULTER ERROR]:", err);
+          return res.status(400).json({
+            error: "Erro no upload",
+            details: err.message,
+          });
+        }
+        console.log("✅ [MULTER] Upload middleware concluído");
+        next();
+      });
+    },
+    ctrl.criar
+  );
 
   // Route: GET /hospitais
   r.get("/", ctrl.listar);

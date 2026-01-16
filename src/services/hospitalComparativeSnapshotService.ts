@@ -21,8 +21,6 @@ export class HospitalComparativeSnapshotService {
    * Busca o comparativo completo para um hospital
    */
   async getHospitalComparative(hospitalId: string) {
-    console.log(`\n🔍 ===== COMPARATIVO SNAPSHOT HOSPITAL ${hospitalId} =====`);
-
     // 1. Buscar dados ATUAIS (tempo real)
     const dadosAtuaisReal =
       await this.hospitalSectorsRepo.getAllSectorsByHospital(hospitalId);
@@ -44,10 +42,6 @@ export class HospitalComparativeSnapshotService {
         `Nenhum snapshot selecionado encontrado para o hospital ${hospitalId}`
       );
     }
-
-    console.log(
-      `📸 Snapshot selecionado: ${snapshotSelecionado.id} (${snapshotSelecionado.dataHora})`
-    );
 
     // 3. Extrair dados do snapshot
     const dadosSnapshot = snapshotSelecionado.dados;
@@ -75,8 +69,6 @@ export class HospitalComparativeSnapshotService {
       dadosAtuaisReal.neutral || [],
       dadosSnapshot.neutral || []
     );
-
-    console.log(`✅ ===== FIM COMPARATIVO SNAPSHOT =====\n`);
 
     const resultado = {
       hospitalId,
@@ -137,10 +129,6 @@ export class HospitalComparativeSnapshotService {
         this.cargoCache.set(cargo.id, cargo.nome);
       }
     }
-
-    console.log(
-      `🏷️  Carregados ${this.cargoCache.size} nomes de cargos no cache`
-    );
   }
 
   /**
@@ -464,8 +452,6 @@ export class HospitalComparativeSnapshotService {
    * Busca comparativo agregado para uma rede
    */
   async getRedeComparative(redeId: string) {
-    console.log(`\n🔍 ===== COMPARATIVO SNAPSHOT REDE ${redeId} =====`);
-
     // Buscar todos os hospitais da rede
     const hospitalsQuery = `SELECT id FROM public.hospitais WHERE "redeId" = $1`;
     const hospitals = await this.ds.query(hospitalsQuery, [redeId]);
@@ -482,45 +468,20 @@ export class HospitalComparativeSnapshotService {
     for (const hospital of hospitals) {
       try {
         const hospitalData = await this.getHospitalComparative(hospital.id);
-        console.log(
-          `📊 Hospital ${hospital.id} - Internação: ${
-            hospitalData.sectors.internation?.length || 0
-          } setores`
-        );
-        console.log(
-          `📊 Hospital ${hospital.id} - Assistência: ${
-            hospitalData.sectors.assistance?.length || 0
-          } setores`
-        );
-
-        // Debug: mostrar dados do primeiro setor
-        if (hospitalData.sectors.internation?.[0]) {
-          console.log(
-            `🔍 Primeiro setor internação:`,
-            JSON.stringify(hospitalData.sectors.internation[0], null, 2)
-          );
-        }
 
         allInternation.push(...(hospitalData.sectors.internation || []));
         allAssistance.push(...(hospitalData.sectors.assistance || []));
         allNeutral.push(...(hospitalData.sectors.neutral || []));
       } catch (error) {
-        console.warn(`⚠️ Erro ao buscar hospital ${hospital.id}:`, error);
+        console.warn(`Erro ao buscar hospital ${hospital.id}:`, error);
         // Continua com os próximos hospitais
       }
     }
-
-    console.log(`\n📦 Total agregado antes de processar:`);
-    console.log(`   Internação: ${allInternation.length} setores`);
-    console.log(`   Assistência: ${allAssistance.length} setores`);
-    console.log(`   Neutras: ${allNeutral.length} unidades`);
 
     // Agregar por nome de setor
     const internation = this.agregarSetores(allInternation);
     const assistance = this.agregarSetores(allAssistance);
     const neutral = this.agregarNeutras(allNeutral);
-
-    console.log(`✅ ===== FIM COMPARATIVO SNAPSHOT REDE =====\n`);
 
     return {
       redeId,
@@ -537,8 +498,6 @@ export class HospitalComparativeSnapshotService {
    * Busca comparativo agregado para um grupo
    */
   async getGrupoComparative(grupoId: string) {
-    console.log(`\n🔍 ===== COMPARATIVO SNAPSHOT GRUPO ${grupoId} =====`);
-
     const hospitalsQuery = `SELECT id FROM public.hospitais WHERE "grupoId" = $1`;
     const hospitals = await this.ds.query(hospitalsQuery, [grupoId]);
 
@@ -565,8 +524,6 @@ export class HospitalComparativeSnapshotService {
     const assistance = this.agregarSetores(allAssistance);
     const neutral = this.agregarNeutras(allNeutral);
 
-    console.log(`✅ ===== FIM COMPARATIVO SNAPSHOT GRUPO =====\n`);
-
     return {
       grupoId,
       hospitalsCount: hospitals.length,
@@ -582,8 +539,6 @@ export class HospitalComparativeSnapshotService {
    * Busca comparativo agregado para uma região
    */
   async getRegiaoComparative(regiaoId: string) {
-    console.log(`\n🔍 ===== COMPARATIVO SNAPSHOT REGIÃO ${regiaoId} =====`);
-
     const hospitalsQuery = `SELECT id FROM public.hospitais WHERE "regiaoId" = $1`;
     const hospitals = await this.ds.query(hospitalsQuery, [regiaoId]);
 
@@ -609,8 +564,6 @@ export class HospitalComparativeSnapshotService {
     const internation = this.agregarSetores(allInternation);
     const assistance = this.agregarSetores(allAssistance);
     const neutral = this.agregarNeutras(allNeutral);
-
-    console.log(`✅ ===== FIM COMPARATIVO SNAPSHOT REGIÃO =====\n`);
 
     return {
       regiaoId,

@@ -609,12 +609,10 @@ async function seedDatabase() {
       }
     );
     await AppDataSource.getRepository(ParametrosNaoInternacao).save(paramNI);
-    console.log(`  ✓ Parâmetros NI: ${unidadeAmbulatorio.nome}`);
 
     // ========================================
     // 11. CRIAR AVALIAÇÕES E HISTÓRICO DE OCUPAÇÃO
     // ========================================
-    console.log("\n📊 Criando avaliações e histórico de ocupação...");
 
     const hoje = DateTime.now().setZone("America/Sao_Paulo");
     const avaliacoesRepo = AppDataSource.getRepository(AvaliacaoSCP);
@@ -754,34 +752,8 @@ async function seedDatabase() {
         totalHistorico++;
       }
     }
-
-    console.log(`  ✓ ${totalAvaliacoes} avaliações SCP criadas`);
-    console.log(
-      `  ✓ ${totalHistorico} registros de histórico de ocupação criados`
-    );
-
-    console.log("\n✅ Seed concluído com sucesso!");
-    console.log("\n📊 Resumo:");
-    console.log(`  • 2 Redes`);
-    console.log(`  • 2 Grupos`);
-    console.log(`  • 2 Regiões`);
-    console.log(`  • 2 Hospitais`);
-    console.log(`  • 4 Cargos`);
-    console.log(`  • 3 Colaboradores`);
-    console.log(`  • 1 Administrador`);
-    console.log(`  • 1 Método SCP (Fugulin)`);
-    console.log(`  • 3 Unidades de Internação`);
-    console.log(`  • ${leitos.length} Leitos`);
-    console.log(`  • 2 Unidades de Não Internação`);
-    console.log(`  • 3 Sítios Funcionais`);
-    console.log(`  • ${totalAvaliacoes} Avaliações SCP (últimos 30 dias)`);
-    console.log(`  • ${totalHistorico} Registros de histórico de ocupação`);
-    console.log(`  • Cargos, distribuições e parâmetros configurados`);
-    console.log("\n🔐 Credenciais de acesso:");
-    console.log(`  Admin: admin@dimensiona.com / admin123`);
-    console.log(`  Colaborador: joao.silva@hospital1.com / senha123`);
   } catch (error) {
-    console.error("\n❌ Erro durante o seed:", error);
+    console.error("\nErro durante o seed:", error);
     process.exitCode = 1;
   } finally {
     await AppDataSource.destroy();

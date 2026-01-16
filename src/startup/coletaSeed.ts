@@ -20,10 +20,7 @@ export async function runColetaSeed(ds: DataSource) {
           nome: q.nome,
           perguntas: perguntasComId,
         });
-
-        console.log(`[SEED] Questionário criado: ${q.nome}`);
       } else {
-        console.log(`[SEED] Questionário já existe: ${q.nome}`);
       }
     }
   } catch (err) {
