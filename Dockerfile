@@ -65,7 +65,7 @@ COPY --from=build /usr/src/app/dist ./dist
 COPY --from=build /usr/src/app/src/utils/exporters ./src/utils/exporters
 
 # Create uploads directory structure with proper permissions BEFORE switching to node user
-RUN mkdir -p /usr/src/app/uploads/coleta && \
+RUN mkdir -p /usr/src/app/uploads/coleta /usr/src/app/uploads/hospital && \
     chown -R node:node /usr/src/app/uploads
 
 # Run the application as a non-root user.

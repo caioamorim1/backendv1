@@ -2,25 +2,44 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 
-const uploadDir = path.resolve(__dirname, "../../uploads/hospital");
+// Use process.cwd() para garantir que funciona tanto em dev quanto em prod
+const uploadDir = path.join(process.cwd(), "uploads", "hospital");
+
+console.log("═══════════════════════════════════════════════════");
+console.log("📁 [MULTER HOSPITAL] Configurando upload");
+console.log("═══════════════════════════════════════════════════");
+console.log("__dirname:", __dirname);
+console.log("uploadDir resolvido:", uploadDir);
+console.log("Diretório existe?", fs.existsSync(uploadDir));
 
 // Tentar criar o diretório se não existir (com tratamento de erro)
 try {
   if (!fs.existsSync(uploadDir)) {
+    console.log("⚠️  Diretório não existe, tentando criar...");
     fs.mkdirSync(uploadDir, { recursive: true });
+    console.log("✅ Diretório criado com sucesso!");
+  } else {
+    console.log("✅ Diretório já existe");
   }
 } catch (err) {
   // Se der erro de permissão, assume que a pasta já existe (foi criada pelo Docker)
-  console.warn(`Aviso ao criar diretório de uploads: ${err}`);
+  console.error("❌ Erro ao criar diretório de uploads:", err);
 }
+console.log("═══════════════════════════════════════════════════\n");
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
+    console.log("📤 [MULTER] Salvando arquivo:", file.originalname);
+    console.log("   - Destination:", uploadDir);
+    console.log("   - Mimetype:", file.mimetype);
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+    const filename = uniqueSuffix + path.extname(file.originalname);
+    console.log("   - Filename gerado:", filename);
+    console.log("   - Path completo:", path.join(uploadDir, filename));
+    cb(null, filename);
   },
 });
 
