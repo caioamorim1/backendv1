@@ -44,11 +44,15 @@ import { ControlePeriodoRoutes } from "./controlePeriodoRoutes";
 import { TaxaOcupacaoRoutes } from "./taxaOcupacaoRoutes";
 import passwordResetRoutes from "./passwordResetRoutes";
 import cacheRoutes from "./cacheRoutes";
+import debugRoutes from "./debugRoutes";
 
 export const createIndexRouter = (dataSource: DataSource): Router => {
   const router = Router();
 
   router.get("/", (req, res) => res.status(200).json({ message: "API ON" }));
+
+  // Debug Routes (Public - para diagnosticar uploads)
+  router.use("/debug", debugRoutes);
 
   // Unified login for both admin and colaboradores
   router.use("/login", AuthRoutes(dataSource));
