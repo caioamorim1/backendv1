@@ -50,7 +50,7 @@ const PORT = process.env.PORT || 3110;
       console.log(
         `Pasta de uploads servida estaticamente em http://localhost:${PORT}/uploads`
       );
-      
+
       // Verifica conteúdo da pasta uploads ao iniciar
       const uploadsPath = path.join(process.cwd(), "uploads");
       if (require("fs").existsSync(uploadsPath)) {

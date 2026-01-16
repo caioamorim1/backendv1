@@ -6,7 +6,10 @@ import { DataSource } from "typeorm";
 export class HospitalController {
   private cargoUpdateService?: HospitalCargoUpdateService;
 
-  constructor(private repo: HospitalRepository, ds?: DataSource) {
+  constructor(
+    private repo: HospitalRepository,
+    ds?: DataSource
+  ) {
     if (ds) {
       this.cargoUpdateService = new HospitalCargoUpdateService(ds);
     }
@@ -132,9 +135,8 @@ export class HospitalController {
         });
       }
 
-      const resultado = await this.cargoUpdateService.buscarUltimaAtualizacao(
-        id
-      );
+      const resultado =
+        await this.cargoUpdateService.buscarUltimaAtualizacao(id);
 
       res.json(resultado);
     } catch (error) {
