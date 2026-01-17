@@ -1012,6 +1012,7 @@ export class SnapshotDimensionamentoService {
     const resultado: any = {
       internacao: [],
       naoInternacao: [],
+      neutras: [],
     };
 
     // Buscar projetado final de unidades de internação
@@ -1185,6 +1186,20 @@ export class SnapshotDimensionamentoService {
             unidadeNome: unidade.name,
           });
         }
+      }
+    }
+
+    // Incluir unidades neutras salvas no snapshot (baseline)
+    // Usar o custo que estava no momento do snapshot
+    if (dadosHospital.neutral && Array.isArray(dadosHospital.neutral)) {
+      for (const unidade of dadosHospital.neutral) {
+        resultado.neutras.push({
+          unidadeId: unidade.id,
+          unidadeNome: unidade.name,
+          custoTotal: parseFloat(unidade.costAmount || 0),
+          status: unidade.status,
+          descricao: unidade.descr,
+        });
       }
     }
 
