@@ -946,12 +946,27 @@ function computeProjetadoFromSnapshot(
     0
   );
 
-  const neutrasCost = Array.isArray(situacaoAtual?.unidadesNeutras)
-    ? (situacaoAtual.unidadesNeutras as any[]).reduce(
-        (s, u) => s + Number(u?.custoTotal || 0),
+  // Buscar custo das unidades neutras:
+  // 1. Tenta do projetadoFinal.neutras (snapshots novos)
+  // 2. Fallback: busca do baseline snapshot.dados.neutral (snapshots antigos)
+  let neutrasCost = 0;
+
+  if (Array.isArray(proj.neutras) && proj.neutras.length > 0) {
+    // Snapshots novos: usa projetadoFinal.neutras
+    neutrasCost = (proj.neutras as any[]).reduce(
+      (s, u) => s + moneyProjetadoToBRL(u?.custoTotal || 0),
+      0
+    );
+  } else {
+    // Snapshots antigos: busca do baseline (snapshot.dados.neutral)
+    const neutral = (snapshot.dados as any)?.neutral;
+    if (Array.isArray(neutral) && neutral.length > 0) {
+      neutrasCost = (neutral as any[]).reduce(
+        (s, u) => s + moneySnapshotToBRL(u?.costAmount || 0),
         0
-      )
-    : 0;
+      );
+    }
+  }
 
   return {
     custoMensal: roundBRL(internCost + naoInternCost + neutrasCost),
