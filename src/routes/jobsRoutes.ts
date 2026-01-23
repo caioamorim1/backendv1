@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { DataSource } from "typeorm";
-import { runSessionExpiryForDate } from "../jobs/sessionExpiry";
+import {
+  runSessionExpiryForDate,
+  processPendingSessionExpiries,
+} from "../jobs/sessionExpiry";
 import { DateTime } from "luxon";
 import { AvaliacaoSCP, StatusSessaoAvaliacao } from "../entities/AvaliacaoSCP";
 
@@ -66,6 +69,67 @@ export const JobsRoutes = (dataSource: DataSource) => {
       return res
         .status(500)
         .json({ ok: false, error: e?.message || String(e) });
+    }
+  });
+
+  // POST /jobs/session-expiry/process-pending
+  // Processa todas as sessões pendentes (avaliações ATIVAS de dias anteriores)
+  // Executa o mesmo processo que roda ao iniciar o servidor
+  router.post("/session-expiry/process-pending", async (req, res) => {
+    try {
+      const ZONE = "America/Sao_Paulo";
+      const today = DateTime.now().setZone(ZONE).toISODate();
+      if (!today) {
+        return res.status(500).json({ error: "Falha ao obter data de hoje" });
+      }
+
+      // Verificar se há sessões pendentes antes de processar
+      const repo = dataSource.getRepository(AvaliacaoSCP);
+      const rows = await repo
+        .createQueryBuilder("a")
+        .select("a.dataAplicacao", "date")
+        .addSelect("COUNT(*)", "count")
+        .where("a.statusSessao = :status", {
+          status: StatusSessaoAvaliacao.ATIVA,
+        })
+        .andWhere("a.dataAplicacao <> :today", { today })
+        .groupBy("a.dataAplicacao")
+        .orderBy("a.dataAplicacao", "ASC")
+        .getRawMany<{ date: string; count: string }>();
+
+      if (rows.length === 0) {
+        return res.status(200).json({
+          ok: true,
+          message: "Nenhuma sessão pendente para processar",
+          processed: 0,
+          dates: [],
+        });
+      }
+
+      const dates = rows.map((r) => ({
+        date: r.date,
+        count: parseInt(r.count, 10) || 0,
+      }));
+      const totalActive = dates.reduce((acc, d) => acc + d.count, 0);
+
+      console.log(
+        `[Jobs API] Iniciando processamento manual de ${totalActive} sessões pendentes em ${rows.length} datas...`
+      );
+
+      await processPendingSessionExpiries(dataSource);
+
+      return res.status(200).json({
+        ok: true,
+        message: `${totalActive} sessões pendentes processadas com sucesso`,
+        processed: totalActive,
+        dates: dates,
+      });
+    } catch (e: any) {
+      console.error("[Jobs API] Erro ao processar sessões pendentes:", e);
+      return res.status(500).json({
+        ok: false,
+        error: e?.message || String(e),
+      });
     }
   });
 
