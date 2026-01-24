@@ -331,12 +331,14 @@ export async function processPendingSessionExpiries(ds: DataSource) {
     console.log(
       "[SessionExpiry] Resetando TODOS os leitos para PENDENTE (servidor não rodou à meia-noite)..."
     );
-    await leitoRepo
+    const result = await leitoRepo
       .createQueryBuilder()
       .update(Leito)
       .set({ status: StatusLeito.PENDENTE })
       .execute();
-    console.log("✅ [SessionExpiry] Todos os leitos resetados para PENDENTE");
+    console.log(
+      `✅ [SessionExpiry] ${result.affected || 0} leitos resetados para PENDENTE`
+    );
   } catch (e) {
     console.error(
       "[SessionExpiry] Falha ao verificar sessões pendentes no startup:",
