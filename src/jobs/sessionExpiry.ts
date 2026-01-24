@@ -22,10 +22,16 @@ export async function runSessionExpiryForDate(
 ) {
   const ZONE = "America/Sao_Paulo";
   // Normaliza entrada (banco pode retornar Date em getRawMany)
-  const dateStr =
-    typeof dateInput === "string"
-      ? DateTime.fromISO(dateInput, { zone: ZONE }).toISODate()
-      : DateTime.fromJSDate(dateInput, { zone: ZONE }).toISODate();
+  // Se for Date do banco, já está normalizado para o dia correto em UTC (meia-noite)
+  // Apenas extrair ano/mês/dia sem aplicar conversão de timezone
+  let dateStr: string | null;
+  if (typeof dateInput === "string") {
+    dateStr = DateTime.fromISO(dateInput, { zone: ZONE }).toISODate();
+  } else {
+    // Date do PostgreSQL: Wed Jan 21 2026 00:00:00 GMT+0000
+    // Usar UTC para não deslocar o dia
+    dateStr = DateTime.fromJSDate(dateInput, { zone: "UTC" }).toISODate();
+  }
 
   if (!dateStr) {
     throw new Error(
