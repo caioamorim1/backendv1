@@ -5,6 +5,7 @@ import { UnidadeNaoInternacao } from "../entities/UnidadeNaoInternacao";
 import { AvaliacaoRepository } from "../repositories/avaliacaoRepository";
 import { ParametrosUnidade } from "../entities/ParametrosUnidade";
 import { ParametrosNaoInternacao } from "../entities/ParametrosNaoInternacao";
+import { TaxaOcupacaoCustomizada } from "../entities/TaxaOcupacaoCustomizada";
 
 import {
   AnaliseInternacaoResponse,
@@ -37,7 +38,12 @@ export class DimensionamentoService {
 
     const unidade = await unidadeRepo.findOne({
       where: { id: unidadeId },
-      relations: ["leitos", "cargosUnidade", "cargosUnidade.cargo"],
+      relations: [
+        "leitos",
+        "cargosUnidade",
+        "cargosUnidade.cargo",
+        "scpMetodo",
+      ],
     });
 
     if (!unidade) {
@@ -52,6 +58,12 @@ export class DimensionamentoService {
     const ist = Number(parametros?.ist ?? 0.15);
     const equipeComRestricoes = parametros?.aplicarIST ?? false;
     const diasTrabalhoSemana = parametros?.diasSemana ?? 7;
+
+    // Buscar taxa de ocupação customizada (se existir)
+    const taxaOcupacaoRepo = this.ds.getRepository(TaxaOcupacaoCustomizada);
+    const taxaCustomizada = await taxaOcupacaoRepo.findOne({
+      where: { unidade: { id: unidadeId } },
+    });
 
     // --- ETAPA 2: DEFINIÇÃO DO PERÍODO ---
     const ZONE = "America/Sao_Paulo";
@@ -342,11 +354,11 @@ export class DimensionamentoService {
       INTENSIVOS: 18, // PCIt - Pacientes de Cuidados Intensivos
     };
 
-    const totalHorasEnfermagem = Object.keys(somaTotalClassificacao).reduce(
+    const totalHorasEnfermagem = Object.keys(mediaDiariaClassificacao).reduce(
       (total, key) => {
         const horas = horasPorClassificacao[key] ?? 0;
-        const quantidadeTotal = somaTotalClassificacao[key];
-        const horasClassificacao = horas * quantidadeTotal;
+        const quantidadeMediaDiaria = mediaDiariaClassificacao[key];
+        const horasClassificacao = horas * quantidadeMediaDiaria;
 
         return total + horasClassificacao;
       },
@@ -354,23 +366,22 @@ export class DimensionamentoService {
     );
 
     // --- ETAPA 4: CALCULAR PERCENTUAL DA EQUIPE (ENF / TEC) ---
-    // Agora: usar o TOTAL DE HORAS por classificação (não a média diária)
-    // Total de horas por classificação já tem as "horas por paciente" multiplicadas pelo total mensal de pacientes daquela classificação
+    // Usar média diária de cada classificação para calcular as horas
     const hMinimos =
       (horasPorClassificacao["MINIMOS"] || 0) *
-      (somaTotalClassificacao["MINIMOS"] || 0);
+      (mediaDiariaClassificacao["MINIMOS"] || 0);
     const hIntermediarios =
       (horasPorClassificacao["INTERMEDIARIOS"] || 0) *
-      (somaTotalClassificacao["INTERMEDIARIOS"] || 0);
+      (mediaDiariaClassificacao["INTERMEDIARIOS"] || 0);
     const hAltaDependencia =
       (horasPorClassificacao["ALTA_DEPENDENCIA"] || 0) *
-      (somaTotalClassificacao["ALTA_DEPENDENCIA"] || 0);
+      (mediaDiariaClassificacao["ALTA_DEPENDENCIA"] || 0);
     const hSemiIntensivos =
       (horasPorClassificacao["SEMI_INTENSIVOS"] || 0) *
-      (somaTotalClassificacao["SEMI_INTENSIVOS"] || 0);
+      (mediaDiariaClassificacao["SEMI_INTENSIVOS"] || 0);
     const hIntensivos =
       (horasPorClassificacao["INTENSIVOS"] || 0) *
-      (somaTotalClassificacao["INTENSIVOS"] || 0);
+      (mediaDiariaClassificacao["INTENSIVOS"] || 0);
 
     // Equivalente do S (PCM + PCI), mas em HORAS totais
     const S = hMinimos + hIntermediarios;
@@ -382,7 +393,7 @@ export class DimensionamentoService {
 
     if (S >= hAltaDependencia && S >= hSemiIntensivos && S >= hIntensivos) {
       percentualEnfermeiro = 0.33;
-      criterioAplicado = "S (PCM+PCI) predominante (0.33)";
+      criterioAplicado = "S (PCM + PCI) = 33 % ";
     } else {
       // Critério 2 (HORAS): else if (PADC > S and PADC >= PCSI and PADC >= PCIt) then f = 0.37
 
@@ -392,7 +403,7 @@ export class DimensionamentoService {
         hAltaDependencia >= hIntensivos
       ) {
         percentualEnfermeiro = 0.37;
-        criterioAplicado = "ALTA_DEPENDENCIA (PADC) predominante (0.37)";
+        criterioAplicado = "ALTA DEPENDENCIA = 37 % ";
       } else {
         // Critério 3 (HORAS): else if (PCSI > S and PCSI > PADC and PCSI >= PCIt) then f = 0.42
 
@@ -402,12 +413,12 @@ export class DimensionamentoService {
           hSemiIntensivos >= hIntensivos
         ) {
           percentualEnfermeiro = 0.42;
-          criterioAplicado = "SEMI_INTENSIVOS (PCSI) predominante (0.42)";
+          criterioAplicado = "SEMI INTENSIVOS = 42 % ";
         } else {
           // Critério 4: else f = 0.52 (padrão)
 
           percentualEnfermeiro = 0.52;
-          criterioAplicado = "Padrão (0.52)";
+          criterioAplicado = "Padrão 52 % ";
         }
       }
     }
@@ -453,8 +464,125 @@ export class DimensionamentoService {
     const qpEnfermeiros = Math.round(qpEnfermeirosExato);
     const qpTecnicos = Math.round(qpTecnicosExato);
 
+    // 📊 CONSOLE LOG: MÉTRICAS DO DIMENSIONAMENTO - INTERNAÇÃO
+    console.log("\n" + "=".repeat(80));
+    console.log("📊 DIMENSIONAMENTO CALCULADO - UNIDADE DE INTERNAÇÃO");
+    console.log("=".repeat(80));
+    console.log(`🏥 Unidade: ${unidade.nome} (ID: ${unidadeId})`);
+    console.log(
+      `📋 Método de Avaliação SCP: ${unidade.scpMetodo?.title || "NÃO DEFINIDO"} ${unidade.scpMetodo?.key ? `(${unidade.scpMetodo.key})` : ""}`
+    );
+    console.log("-".repeat(80));
+
+    console.log("\n📅 PERÍODO DE AVALIAÇÃO:");
+    console.log(`   Início: ${inicioPeriodo.toFormat("dd/MM/yyyy HH:mm")}`);
+    console.log(`   Fim: ${fimPeriodo.toFormat("dd/MM/yyyy HH:mm")}`);
+    console.log(`   Total de Dias Avaliados: ${diasNoPeriodo}`);
+
+    console.log("\n🛏️  LEITOS DO SETOR:");
+    console.log(`   Total de Leitos: ${totalLeitos}`);
+    console.log(`   Total de Leitos-Dia Disponível: ${totalLeitosDia}`);
+    console.log(`   Leitos Ocupados no Período: ${leitosOcupados}`);
+    console.log(`   Leitos Vagos no Período: ${leitosVagos}`);
+    console.log(`   Leitos Inativos no Período: ${leitosInativos}`);
+    console.log(
+      `   Percentual de Leitos Avaliados: ${percentualLeitosAvaliados.toFixed(2)}%`
+    );
+
+    console.log("\n📈 TAXA DE OCUPAÇÃO:");
+    console.log(
+      `   Taxa média de Ocupação no Período: ${(taxaOcupacaoPeriodo * 100).toFixed(2)}%`
+    );
+    if (taxaCustomizada) {
+      console.log(
+        `   ⭐ Taxa de Ocupação Customizada (salva): ${Number(taxaCustomizada.taxa).toFixed(2)}%`
+      );
+    }
+    console.log(
+      `   Taxa de Ocupação Considerada para Cálculo: ${(taxaOcupacaoPeriodo * 100).toFixed(2)}%`
+    );
+    console.log(
+      `   Total de Pacientes Médio: ${totalPacientesMedio.toFixed(2)}`
+    );
+
+    console.log("\n👥 CLASSIFICAÇÃO DE PACIENTES:");
+    console.log(
+      `   Cuidados Mínimos: ${somaTotalClassificacao["MINIMOS"] || 0} (${mediaDiariaClassificacao["MINIMOS"]?.toFixed(2) || 0} média/dia)`
+    );
+    console.log(
+      `   Cuidados Intermediários: ${somaTotalClassificacao["INTERMEDIARIOS"] || 0} (${mediaDiariaClassificacao["INTERMEDIARIOS"]?.toFixed(2) || 0} média/dia)`
+    );
+    console.log(
+      `   Cuidados Alta-Dependência: ${somaTotalClassificacao["ALTA_DEPENDENCIA"] || 0} (${mediaDiariaClassificacao["ALTA_DEPENDENCIA"]?.toFixed(2) || 0} média/dia)`
+    );
+    console.log(
+      `   Cuidados Semi-Intensivos: ${somaTotalClassificacao["SEMI_INTENSIVOS"] || 0} (${mediaDiariaClassificacao["SEMI_INTENSIVOS"]?.toFixed(2) || 0} média/dia)`
+    );
+    console.log(
+      `   Cuidados Intensivos: ${somaTotalClassificacao["INTENSIVOS"] || 0} (${mediaDiariaClassificacao["INTENSIVOS"]?.toFixed(2) || 0} média/dia)`
+    );
+
+    console.log("\n⏱️  HORAS DE ENFERMAGEM:");
+    console.log(
+      `   THE (Total Horas Enfermagem): ${totalHorasEnfermagem.toFixed(2)}h`
+    );
+    console.log(
+      `   THE/Dia: ${(totalHorasEnfermagem / diasNoPeriodo).toFixed(2)}h`
+    );
+
+    console.log("\n👨‍⚕️ DISTRIBUIÇÃO DA EQUIPE:");
+    console.log(
+      `   QP (Técnicos & Enfermeiros): ${qpEnfermeiros + qpTecnicos}`
+    );
+    console.log(
+      `   Enfermeiros: ${qpEnfermeiros} (${(percentualEnfermeiro * 100).toFixed(1)}%)`
+    );
+    console.log(
+      `   Técnicos: ${qpTecnicos} (${(percentualTecnico * 100).toFixed(1)}%)`
+    );
+    console.log(`   Nível de Cuidado Predominante: ${criterioAplicado}`);
+
+    console.log("\n⚙️  PARÂMETROS:");
+    console.log(
+      `   IST (Índice Segurança Técnica): ${(ist * 100).toFixed(0)}%`
+    );
+    console.log(`   N. de dias trabalhados na semana: ${diasTrabalhoSemana}`);
+    console.log(
+      `   Carga Horária Semanal Enfermeiro (CHS): ${cargaHorariaEnfermeiro}h`
+    );
+    console.log(
+      `   Carga Horária Semanal Técnico (CHS): ${cargaHorariaTecnico}h`
+    );
+    console.log(
+      `   Equipe com restrições/idade avançada: ${equipeComRestricoes ? "SIM" : "NÃO"}`
+    );
+    console.log(`   Fator de Restrição aplicado: ${fatorRestricao}`);
+
+    console.log("\n🔢 CONSTANTES DE CÁLCULO:");
+    console.log(`   KOM (Enfermeiro): ${kmEnfermeiro.toFixed(4)}`);
+    console.log(`   KOM (Técnico): ${kmTecnico.toFixed(4)}`);
+
+    console.log("\n🔍 VALORES EXATOS (antes do arredondamento):");
+    console.log(
+      `   Enfermeiros: ${qpEnfermeirosExato.toFixed(4)} → ${qpEnfermeiros} (arredondado)`
+    );
+    console.log(
+      `   Técnicos: ${qpTecnicosExato.toFixed(4)} → ${qpTecnicos} (arredondado)`
+    );
+
+    console.log("=".repeat(80) + "\n");
+
     // --- Montar a resposta da API ---
     const agregados = {
+      // Informações da Unidade
+      unidadeNome: unidade.nome,
+      metodoAvaliacaoSCP: {
+        title: unidade.scpMetodo?.title || null,
+        key: unidade.scpMetodo?.key || null,
+        description: unidade.scpMetodo?.description || null,
+      },
+
+      // Período
       periodo: {
         inicio: inicioPeriodo.toISO()!,
         fim: fimPeriodo.toISO()!,
@@ -464,31 +592,72 @@ export class DimensionamentoService {
           | "mes_corrente",
         parametrosEntrada: { inicio: inicio || null, fim: fim || null },
       },
+
+      // Leitos
+      totalLeitos,
       totalLeitosDia: unidade.leitos.length * diasNoPeriodo,
-      totalAvaliacoes: Math.round(totalPacientesMedio * diasNoPeriodo),
-      // Taxa de ocupação: leitos ocupados / total de leitos (fração 0..1)
-      taxaOcupacaoPeriodo,
-      // Taxa de ocupação em porcentagem 0..100
-      taxaOcupacaoPeriodoPercent: Number(
-        (taxaOcupacaoPeriodo * 100).toFixed(2)
-      ),
-      // Percentual de leitos avaliados: leitos ocupados / leitos vagos
-      percentualLeitosAvaliados,
       leitosOcupados,
       leitosVagos,
       leitosInativos,
-      totalLeitos,
+      percentualLeitosAvaliados,
+
+      // Ocupação e Avaliações
+      totalAvaliacoes: Math.round(totalPacientesMedio * diasNoPeriodo),
+      totalPacientesMedio: Number(totalPacientesMedio.toFixed(2)),
+      taxaOcupacaoPeriodo,
+      taxaOcupacaoPeriodoPercent: Number(
+        (taxaOcupacaoPeriodo * 100).toFixed(2)
+      ),
+      taxaOcupacaoCustomizada: taxaCustomizada
+        ? {
+            taxa: Number(taxaCustomizada.taxa),
+            createdAt: taxaCustomizada.createdAt,
+            updatedAt: taxaCustomizada.updatedAt,
+          }
+        : null,
+
+      // Classificação de Pacientes
       distribuicaoTotalClassificacao: somaTotalClassificacao,
-      // Constante de Marinho (KM)
-      kmEnfermeiro,
-      kmTecnico,
-      // Porcentagens de distribuição
+      mediaDiariaClassificacao: Object.keys(mediaDiariaClassificacao).reduce(
+        (acc, key) => {
+          acc[key] = Number(mediaDiariaClassificacao[key].toFixed(2));
+          return acc;
+        },
+        {} as { [key: string]: number }
+      ),
+
+      // Horas de Enfermagem
+      totalHorasEnfermagem: Number(totalHorasEnfermagem.toFixed(2)),
+      totalHorasEnfermagemDia: Number(
+        (totalHorasEnfermagem / diasNoPeriodo).toFixed(2)
+      ),
+
+      // Distribuição da Equipe
+      qpEnfermeiros,
+      qpTecnicos,
+      qpTotal: qpEnfermeiros + qpTecnicos,
       percentualEnfermeiro,
       percentualTecnico,
       percentualEnfermeiroPercent: Number(
         (percentualEnfermeiro * 100).toFixed(1)
       ),
       percentualTecnicoPercent: Number((percentualTecnico * 100).toFixed(1)),
+      nivelCuidadoPredominante: criterioAplicado,
+
+      // Parâmetros
+      parametros: {
+        ist,
+        istPercent: Number((ist * 100).toFixed(0)),
+        diasTrabalhoSemana,
+        cargaHorariaEnfermeiro,
+        cargaHorariaTecnico,
+        equipeComRestricoes,
+        fatorRestricao,
+      },
+
+      // Constantes de Cálculo
+      kmEnfermeiro: Number(kmEnfermeiro.toFixed(4)),
+      kmTecnico: Number(kmTecnico.toFixed(4)),
     };
 
     const valorHorasExtras = parseFloat(
