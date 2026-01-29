@@ -398,9 +398,8 @@ export class QualitativeController {
         (before as any).sector_id ?? (before as any).sectorId ?? ""
       );
       if (status === "completed" && sectorId) {
-        const latest = await this.repo.obterUltimaAvaliacaoCompletaPorSetor(
-          sectorId
-        );
+        const latest =
+          await this.repo.obterUltimaAvaliacaoCompletaPorSetor(sectorId);
         if (!latest) {
           // Não sobrou nenhuma avaliação completa -> remove projeção do setor
           await this.repo.excluirProjectionPorSetor(sectorId);
@@ -458,9 +457,8 @@ export class QualitativeController {
     }
 
     try {
-      const result = await this.repo.listarQuestionariosCompletosComCategorias(
-        hospitalId
-      );
+      const result =
+        await this.repo.listarQuestionariosCompletosComCategorias(hospitalId);
       return res.json(result);
     } catch (err) {
       console.error(err);
@@ -477,9 +475,8 @@ export class QualitativeController {
     }
 
     try {
-      const rows = await this.repo.getQualitativeAggregatesByHospital(
-        hospitalId
-      );
+      const rows =
+        await this.repo.getQualitativeAggregatesByHospital(hospitalId);
 
       const byUnitType: Record<
         string,
@@ -555,6 +552,28 @@ export class QualitativeController {
       return res
         .status(500)
         .json({ error: "Erro ao obter agregados por categoria." });
+    }
+  };
+
+  obterAgregadosPorSetor = async (req: Request, res: Response) => {
+    const sectorId = String(req.query.sectorId ?? "").trim();
+    if (!sectorId) {
+      return res.status(400).json({ error: "sectorId é obrigatório." });
+    }
+
+    try {
+      const result = await this.repo.getQualitativeAggregatesBySector(sectorId);
+
+      return res.json({
+        sectorId,
+        aggregates: result.aggregates,
+        evaluations: result.evaluations,
+      });
+    } catch (err) {
+      console.error(err);
+      return res
+        .status(500)
+        .json({ error: "Erro ao obter agregados por setor." });
     }
   };
 }

@@ -355,4 +355,143 @@ export class QualitativeRepository {
     const result = await this.ds.query(query, [hospitalId]);
     return result;
   }
+
+  async getQualitativeAggregatesBySector(sectorId: string): Promise<{
+    aggregates: Array<{
+      categoryId: number;
+      name: string;
+      meta: number | null;
+      averageScore: number;
+      samples: number;
+    }>;
+    evaluations: Array<{
+      evaluationId: number;
+      title: string;
+      evaluator: string;
+      date: Date;
+      totalScore: number;
+      questionnaire: string;
+      categories: Array<{
+        categoryId: number;
+        categoryName: string;
+        obtained: number;
+        max: number;
+        score: number;
+      }>;
+    }>;
+  }> {
+    // Buscar agregados por categoria para o setor
+    const aggregatesQuery = `
+      SELECT
+        qc.id AS category_id,
+        qc.name,
+        qc.meta,
+        CASE 
+          WHEN SUM((elem->>'max')::numeric) > 0 
+          THEN (SUM((elem->>'obtained')::numeric) / SUM((elem->>'max')::numeric)) * 100
+          ELSE 0
+        END AS media_score,
+        COUNT(*) AS samples
+      FROM public.qualitative_projection qp
+      JOIN public.qualitative_category qc ON TRUE
+      CROSS JOIN LATERAL jsonb_array_elements(qp.rates) AS elem
+      WHERE
+        qp.unidade_id = $1
+        AND qc.id = (elem->>'categoryId')::int
+        AND qc.deleted_at IS NULL
+      GROUP BY qc.id, qc.name, qc.meta
+      ORDER BY qc.id;
+    `;
+
+    const aggregatesRows = await this.ds.query(aggregatesQuery, [sectorId]);
+
+    const aggregates = aggregatesRows.map((r: any) => ({
+      categoryId: Number(r.category_id),
+      name: String(r.name),
+      meta: r.meta === null ? null : Number(r.meta),
+      averageScore: Number(r.media_score),
+      samples: Number(r.samples),
+    }));
+
+    // Buscar todas as avaliações individuais do setor com questionário
+    const evaluationsQuery = `
+      SELECT
+        qe.id AS evaluation_id,
+        qe.title,
+        qe.evaluator,
+        qe.date,
+        qe.calculate_rate AS total_score,
+        qe.questionnaire AS questionnaire_name,
+        qe.questionnaire_id,
+        qe.answers,
+        qq.questions
+      FROM public.qualitative_evaluation qe
+      LEFT JOIN public.qualitative_questionnaire qq ON qe.questionnaire_id = qq.id
+      WHERE
+        qe.sector_id = $1
+        AND qe.status = 'completed'
+        AND qe.deleted_at IS NULL
+      ORDER BY qe.date DESC;
+    `;
+
+    const evaluationsRows = await this.ds.query(evaluationsQuery, [sectorId]);
+
+    // Buscar todas as categorias para ter os nomes corretos (uma vez só)
+    const categoriesQuery = await this.ds.query(
+      `SELECT id, name FROM public.qualitative_category WHERE deleted_at IS NULL`
+    );
+    const categoriesNamesMap = new Map<number, string>();
+    categoriesQuery.forEach((cat: any) => {
+      categoriesNamesMap.set(Number(cat.id), String(cat.name));
+    });
+
+    const evaluations = evaluationsRows.map((r: any) => {
+      // Parse questions do questionário
+      let questions = r.questions || [];
+      if (typeof questions === "string") {
+        try {
+          questions = JSON.parse(questions);
+        } catch (e) {
+          questions = [];
+        }
+      }
+
+      // Parse answers (respostas armazenadas na avaliação)
+      let answers = r.answers || [];
+      if (typeof answers === "string") {
+        try {
+          answers = JSON.parse(answers);
+        } catch (e) {
+          answers = [];
+        }
+      }
+
+      // Os answers já vêm calculados por categoria!
+      // Estrutura: [{ categoryId, categoryName, totalScore, maxScore, questions: [...] }]
+      const categories = answers.map((cat: any) => ({
+        categoryId: Number(cat.categoryId),
+        categoryName:
+          categoriesNamesMap.get(Number(cat.categoryId)) ||
+          String(cat.categoryName || ""),
+        obtained: Number(cat.totalScore || 0),
+        max: Number(cat.maxScore || 0),
+        score:
+          cat.maxScore > 0
+            ? Number(((cat.totalScore / cat.maxScore) * 100).toFixed(2))
+            : 0,
+      }));
+
+      return {
+        evaluationId: Number(r.evaluation_id),
+        title: String(r.title),
+        evaluator: String(r.evaluator),
+        date: r.date,
+        totalScore: Number(r.total_score),
+        questionnaire: String(r.questionnaire_name),
+        categories,
+      };
+    });
+
+    return { aggregates, evaluations };
+  }
 }

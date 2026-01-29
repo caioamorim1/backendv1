@@ -35,6 +35,7 @@ export const QualitativeRoutes = (ds: DataSource): Router => {
 
   // Agregados por categoria (por tipo de unidade e consolidado hospital)
   router.get("/aggregates/by-category", ctrl.obterAgregadosPorCategoria);
+  router.get("/aggregates/by-sector", ctrl.obterAgregadosPorSetor);
 
   return router;
 };
