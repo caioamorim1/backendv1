@@ -40,19 +40,12 @@ export class HospitalSectorsRepository {
             * COALESCE(cuni.quantidade_funcionarios, 0)
           )
         ) AS "costAmount",
-        COALESCE(ls.bed_count, 0) AS "bedCount",
-        JSON_BUILD_OBJECT(
-          'minimumCare',      COALESCE(ls.minimum_care, 0),
-          'intermediateCare', COALESCE(ls.intermediate_care, 0),
-          'highDependency',   COALESCE(ls.high_dependency, 0),
-          'semiIntensive',    COALESCE(ls.semi_intensive, 0),
-          'intensive',        COALESCE(ls.intensive, 0)
-        ) AS "careLevel",
+        (SELECT COUNT(*) FROM public.leitos WHERE "unidadeId" = uni.id) AS "bedCount",
         JSON_BUILD_OBJECT(
           'evaluated', COALESCE(ls.evaluated, 0),
           'vacant',    COALESCE(ls.vacant, 0),
           'inactive',  COALESCE(ls.inactive, 0),
-          'pending',   COALESCE(ls.bed_count, 0) - (
+          'pending',   (SELECT COUNT(*) FROM public.leitos WHERE "unidadeId" = uni.id) - (
             COALESCE(ls.evaluated, 0) + 
             COALESCE(ls.vacant, 0) + 
             COALESCE(ls.inactive, 0)
@@ -80,34 +73,79 @@ export class HospitalSectorsRepository {
       FROM public.unidades_internacao uni
       LEFT JOIN public.cargos_unidade cuni ON cuni.unidade_id = uni.id
       LEFT JOIN public.cargo c ON c.id = cuni.cargo_id
-      LEFT JOIN public.historicos_leitos_status ls ON ls.unidade_id = uni.id AND DATE(ls.data) = CURRENT_DATE
+      LEFT JOIN public.leitos_status ls ON ls.unidade_id = uni.id
       WHERE uni."hospitalId" = $1
       GROUP BY 
         uni.id, uni.nome, uni.descricao,
-        ls.bed_count, ls.minimum_care, ls.intermediate_care,
-        ls.high_dependency, ls.semi_intensive, ls.intensive,
         ls.evaluated, ls.vacant, ls.inactive
       ORDER BY uni.nome
     `;
 
     const rawResults = await this.ds.query(query, [hospitalId]);
 
-    // Para cada unidade, se bedCount = 0, buscar a quantidade real de leitos
+    // Para cada unidade, calcular distribuição de classificação via eventos (tempo real)
     const results = await Promise.all(
       rawResults.map(async (unit: any) => {
-        if (unit.bedCount === 0) {
-          const leitosCount = await this.ds.query(
-            `SELECT COUNT(*) as count FROM public.leitos WHERE "unidadeId" = $1`,
-            [unit.id]
-          );
-          const realBedCount = parseInt(leitosCount[0]?.count || 0);
-          unit.bedCount = realBedCount;
-          unit.bedStatus.pending =
-            realBedCount -
-            (unit.bedStatus.evaluated +
-              unit.bedStatus.vacant +
-              unit.bedStatus.inactive);
-        }
+        // Buscar classificações de todos os pacientes ativos hoje via eventos
+        const careLevelQuery = `
+          WITH eventos_hoje AS (
+            SELECT DISTINCT ON (e."leitoId")
+              e."leitoId",
+              e.classificacao,
+              e."timestamp"
+            FROM public.eventos e
+            INNER JOIN public.leitos l ON l.id = e."leitoId"
+            WHERE l."unidadeId" = $1
+              AND DATE(e."timestamp" AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE
+              AND e.tipo IN ('ENTRADA', 'ALTA')
+            ORDER BY e."leitoId", e."timestamp" DESC
+          ),
+          historicos_ativos AS (
+            SELECT DISTINCT
+              h.classificacao
+            FROM public.historicos_ocupacao h
+            WHERE h."unidadeId" = $1
+              AND h.inicio < NOW()
+              AND (h.fim IS NULL OR h.fim >= CURRENT_DATE)
+              AND NOT EXISTS (
+                SELECT 1 FROM eventos_hoje ev WHERE ev."leitoId" = h."leitoId"
+              )
+          ),
+          eventos_entrada_hoje AS (
+            SELECT classificacao
+            FROM eventos_hoje
+            WHERE classificacao IS NOT NULL
+          )
+          SELECT 
+            COALESCE(SUM(CASE WHEN classificacao = 'MINIMOS' THEN 1 ELSE 0 END), 0) as minimum_care,
+            COALESCE(SUM(CASE WHEN classificacao = 'INTERMEDIARIOS' THEN 1 ELSE 0 END), 0) as intermediate_care,
+            COALESCE(SUM(CASE WHEN classificacao = 'ALTA_DEPENDENCIA' THEN 1 ELSE 0 END), 0) as high_dependency,
+            COALESCE(SUM(CASE WHEN classificacao = 'SEMI_INTENSIVOS' THEN 1 ELSE 0 END), 0) as semi_intensive,
+            COALESCE(SUM(CASE WHEN classificacao = 'INTENSIVOS' THEN 1 ELSE 0 END), 0) as intensive
+          FROM (
+            SELECT classificacao FROM historicos_ativos
+            UNION ALL
+            SELECT classificacao FROM eventos_entrada_hoje
+          ) todas_classificacoes
+        `;
+
+        const careLevelResult = await this.ds.query(careLevelQuery, [unit.id]);
+        const careLevel = careLevelResult[0] || {
+          minimum_care: 0,
+          intermediate_care: 0,
+          high_dependency: 0,
+          semi_intensive: 0,
+          intensive: 0,
+        };
+
+        unit.careLevel = {
+          minimumCare: parseInt(careLevel.minimum_care) || 0,
+          intermediateCare: parseInt(careLevel.intermediate_care) || 0,
+          highDependency: parseInt(careLevel.high_dependency) || 0,
+          semiIntensive: parseInt(careLevel.semi_intensive) || 0,
+          intensive: parseInt(careLevel.intensive) || 0,
+        };
+
         return unit;
       })
     );
