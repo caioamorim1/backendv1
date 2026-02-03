@@ -1,4 +1,5 @@
 import { DataSource } from "typeorm";
+import { DateTime } from "luxon";
 import {
   SectorOccupationDTO,
   OccupationSummaryDTO,
@@ -15,6 +16,8 @@ import { UnidadeInternacao } from "../entities/UnidadeInternacao";
 import { LeitosStatus } from "../entities/LeitosStatus";
 import { HistoricoLeitosStatus } from "../entities/HistoricoLeitosStatus";
 import { TaxaOcupacaoCustomizada } from "../entities/TaxaOcupacaoCustomizada";
+
+const SAO_PAULO_TZ = "America/Sao_Paulo";
 // Parâmetros adicionais serão derivados do Dimensionamento (agregados/tabela)
 
 /**
@@ -60,35 +63,27 @@ export class OccupationAnalysisService {
     this.log("   Data Referência:", dataReferencia || "hoje");
     const t0 = Date.now();
 
-    // Calcular período (início do mês até data de referência)
-    const agora = dataReferencia ? new Date(dataReferencia) : new Date();
-    const inicioMes = new Date(
-      agora.getFullYear(),
-      agora.getMonth(),
-      1,
-      0,
-      0,
-      0,
-      0
-    );
-    const fimPeriodo = new Date(
-      agora.getFullYear(),
-      agora.getMonth(),
-      agora.getDate(),
-      23,
-      59,
-      59,
-      999
-    );
+    // Calcular período usando Luxon com timezone de São Paulo
+    const agoraSP = dataReferencia
+      ? DateTime.fromJSDate(dataReferencia, { zone: SAO_PAULO_TZ })
+      : DateTime.now().setZone(SAO_PAULO_TZ);
+
+    const inicioMesSP = agoraSP.startOf("month");
+    const fimPeriodoSP = agoraSP.endOf("day");
 
     // Formatar datas para passar ao dimensionamento (YYYY-MM-DD)
-    const dataInicioStr = inicioMes.toISOString().split("T")[0];
-    const dataFimStr = fimPeriodo.toISOString().split("T")[0];
+    const dataInicioStr = inicioMesSP.toFormat("yyyy-MM-dd");
+    const dataFimStr = fimPeriodoSP.toFormat("yyyy-MM-dd");
 
-    this.log("\n🗓️  [PERÍODO]");
-    this.log("   Início:", inicioMes.toISOString());
-    this.log("   Fim:", fimPeriodo.toISOString());
+    this.log("\n🗓️  [PERÍODO] (Timezone: America/Sao_Paulo)");
+    this.log("   Agora SP:", agoraSP.toISO());
+    this.log("   Início do mês:", inicioMesSP.toISO());
+    this.log("   Fim do período:", fimPeriodoSP.toISO());
     this.log("   Strings (YYYY-MM-DD):", dataInicioStr, "→", dataFimStr);
+
+    // Converter para Date JS para compatibilidade com código existente
+    const inicioMes = inicioMesSP.toJSDate();
+    const fimPeriodo = fimPeriodoSP.toJSDate();
 
     // Buscar unidade
     const unidade = await this.ds.getRepository(UnidadeInternacao).findOne({
@@ -142,10 +137,26 @@ export class OccupationAnalysisService {
       where: { unidade: { id: unidadeId } },
     });
 
-    // Dados do DIA ATUAL (não do período)
-    const ocupadosHoje = leitosStatusHoje?.evaluated ?? 0;
-    const vagosHoje = leitosStatusHoje?.vacant ?? 0;
-    const inativosHoje = leitosStatusHoje?.inactive ?? 0;
+    // Verificar se leitos_status foi atualizado HOJE (timezone São Paulo)
+    const hojeSP = DateTime.now().setZone(SAO_PAULO_TZ).startOf("day");
+    let leitosStatusAtualizadoHoje = false;
+    if (leitosStatusHoje?.updatedAt) {
+      const updatedAtSP = DateTime.fromJSDate(leitosStatusHoje.updatedAt, {
+        zone: SAO_PAULO_TZ,
+      }).startOf("day");
+      leitosStatusAtualizadoHoje = updatedAtSP.equals(hojeSP);
+    }
+
+    // Se não foi atualizado hoje, considerar 0 (sem avaliação do dia)
+    const ocupadosHoje = leitosStatusAtualizadoHoje
+      ? (leitosStatusHoje?.evaluated ?? 0)
+      : 0;
+    const vagosHoje = leitosStatusAtualizadoHoje
+      ? (leitosStatusHoje?.vacant ?? 0)
+      : 0;
+    const inativosHoje = leitosStatusAtualizadoHoje
+      ? (leitosStatusHoje?.inactive ?? 0)
+      : 0;
     const avaliadosHoje = ocupadosHoje + vagosHoje + inativosHoje;
 
     // Taxa de ocupação atual (instantânea do dia de hoje)
@@ -153,6 +164,14 @@ export class OccupationAnalysisService {
 
     this.log("\n🛏️  [LEITOS_STATUS - AGORA]");
     this.log("   bedCount (dimensionamento):", bedCount);
+    this.log(
+      "   leitos_status.updatedAt:",
+      leitosStatusHoje?.updatedAt?.toISOString() ?? "N/A"
+    );
+    this.log(
+      "   Atualizado HOJE?:",
+      leitosStatusAtualizadoHoje ? "SIM ✅" : "NÃO ❌"
+    );
     this.log(
       "   evaluated/occupied:",
       ocupadosHoje,
@@ -166,29 +185,45 @@ export class OccupationAnalysisService {
     this.log("   taxaOcupacao (agora):", taxaOcupacao.toFixed(2) + "%");
 
     // Buscar taxaOcupacaoHoje do histórico (dados de hoje na tabela historicos_leitos_status)
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
-    const amanha = new Date(hoje);
-    amanha.setDate(amanha.getDate() + 1);
+    // Usar data de São Paulo para comparação
+    const hojeStrSP = DateTime.now()
+      .setZone(SAO_PAULO_TZ)
+      .toFormat("yyyy-MM-dd");
 
     const historicoHojeRepo = this.ds.getRepository(HistoricoLeitosStatus);
     const historicoHoje = await historicoHojeRepo
       .createQueryBuilder("h")
       .where("h.unidade_id = :unidadeId", { unidadeId })
-      .andWhere("DATE(h.data) = CURRENT_DATE")
+      .andWhere("DATE(h.data AT TIME ZONE 'America/Sao_Paulo') = :hojeStr", {
+        hojeStr: hojeStrSP,
+      })
       .getOne();
 
     // Taxa de ocupação de hoje do histórico
+    // IMPORTANTE: Se leitos_status não foi atualizado hoje, significa que não houve avaliação
+    // Então também devemos ignorar o histórico (que pode ter dados stale de um job automático)
     let taxaOcupacaoHoje = 0;
-    if (historicoHoje && historicoHoje.bedCount > 0) {
+    if (
+      leitosStatusAtualizadoHoje &&
+      historicoHoje &&
+      historicoHoje.bedCount > 0
+    ) {
       taxaOcupacaoHoje =
         (historicoHoje.evaluated / historicoHoje.bedCount) * 100;
     }
-    // Se não houver registro no histórico para hoje, taxaOcupacaoHoje = 0
 
-    this.log("\n📅 [HISTÓRICO - HOJE]");
+    this.log("\n📅 [HISTÓRICO - HOJE] (Data SP:", hojeStrSP, ")");
     if (!historicoHoje) {
-      this.log("   Nenhum registro encontrado para hoje (CURRENT_DATE).");
+      this.log("   Nenhum registro encontrado para hoje.");
+    } else if (!leitosStatusAtualizadoHoje) {
+      this.log(
+        "   Registro encontrado MAS ignorado (leitos_status não atualizado hoje):",
+        "bedCount:",
+        historicoHoje.bedCount,
+        "evaluated:",
+        historicoHoje.evaluated
+      );
+      this.log("   taxaOcupacaoHoje considerada: 0.00%");
     } else {
       this.log(
         "   bedCount:",

@@ -19,7 +19,6 @@ export const connectToDatabase = async (): Promise<void> => {
     }
 
     // Adiciona constraint de exclusão para evitar períodos sobrepostos por leito
-    
   } catch (error) {
     console.error(" Erro ao conectar ao banco de dados:", error);
     process.exit(1);

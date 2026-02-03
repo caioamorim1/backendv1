@@ -27,6 +27,7 @@ export class HospitalSectorsRepository {
   private async getInternationSectors(
     hospitalId: string
   ): Promise<InternationSectorDTO[]> {
+    // Query principal para dados básicos das unidades e staff
     const query = `
       SELECT 
         uni.id AS "id",
@@ -40,24 +41,6 @@ export class HospitalSectorsRepository {
             * COALESCE(cuni.quantidade_funcionarios, 0)
           )
         ) AS "costAmount",
-        COALESCE(ls.bed_count, 0) AS "bedCount",
-        JSON_BUILD_OBJECT(
-          'minimumCare',      COALESCE(ls.minimum_care, 0),
-          'intermediateCare', COALESCE(ls.intermediate_care, 0),
-          'highDependency',   COALESCE(ls.high_dependency, 0),
-          'semiIntensive',    COALESCE(ls.semi_intensive, 0),
-          'intensive',        COALESCE(ls.intensive, 0)
-        ) AS "careLevel",
-        JSON_BUILD_OBJECT(
-          'evaluated', COALESCE(ls.evaluated, 0),
-          'vacant',    COALESCE(ls.vacant, 0),
-          'inactive',  COALESCE(ls.inactive, 0),
-          'pending',   COALESCE(ls.bed_count, 0) - (
-            COALESCE(ls.evaluated, 0) + 
-            COALESCE(ls.vacant, 0) + 
-            COALESCE(ls.inactive, 0)
-          )
-        ) AS "bedStatus",
         JSON_AGG(
           JSON_BUILD_OBJECT(
             'id', c.id,
@@ -80,35 +63,140 @@ export class HospitalSectorsRepository {
       FROM public.unidades_internacao uni
       LEFT JOIN public.cargos_unidade cuni ON cuni.unidade_id = uni.id
       LEFT JOIN public.cargo c ON c.id = cuni.cargo_id
-      LEFT JOIN public.historicos_leitos_status ls ON ls.unidade_id = uni.id AND DATE(ls.data) = CURRENT_DATE
       WHERE uni."hospitalId" = $1
-      GROUP BY 
-        uni.id, uni.nome, uni.descricao,
-        ls.bed_count, ls.minimum_care, ls.intermediate_care,
-        ls.high_dependency, ls.semi_intensive, ls.intensive,
-        ls.evaluated, ls.vacant, ls.inactive
+      GROUP BY uni.id, uni.nome, uni.descricao
       ORDER BY uni.nome
     `;
 
     const rawResults = await this.ds.query(query, [hospitalId]);
 
-    // Para cada unidade, se bedCount = 0, buscar a quantidade real de leitos
+    // Para cada unidade, calcular dados em tempo real
     const results = await Promise.all(
       rawResults.map(async (unit: any) => {
-        if (unit.bedCount === 0) {
-          const leitosCount = await this.ds.query(
-            `SELECT COUNT(*) as count FROM public.leitos WHERE "unidadeId" = $1`,
-            [unit.id]
-          );
-          const realBedCount = parseInt(leitosCount[0]?.count || 0);
-          unit.bedCount = realBedCount;
-          unit.bedStatus.pending =
-            realBedCount -
-            (unit.bedStatus.evaluated +
-              unit.bedStatus.vacant +
-              unit.bedStatus.inactive);
+        const unidadeId = unit.id;
+
+        // 1. Contar total de leitos da unidade
+        const leitosResult = await this.ds.query(
+          `SELECT 
+            COUNT(*) as total,
+            COUNT(*) FILTER (WHERE status = 'INATIVO') as inactive
+          FROM public.leitos WHERE "unidadeId" = $1`,
+          [unidadeId]
+        );
+        const bedCount = parseInt(leitosResult[0]?.total || 0);
+        const inactive = parseInt(leitosResult[0]?.inactive || 0);
+
+        // 2. Contar leitos com avaliação ATIVA do dia (ocupados/avaliados)
+        const avaliacoesAtivasResult = await this.ds.query(
+          `SELECT 
+            COUNT(DISTINCT a."leitoId") as evaluated,
+            COUNT(*) FILTER (WHERE a.classificacao = 'MINIMOS') as minimum_care,
+            COUNT(*) FILTER (WHERE a.classificacao = 'INTERMEDIARIOS') as intermediate_care,
+            COUNT(*) FILTER (WHERE a.classificacao = 'ALTA_DEPENDENCIA') as high_dependency,
+            COUNT(*) FILTER (WHERE a.classificacao = 'SEMI_INTENSIVOS') as semi_intensive,
+            COUNT(*) FILTER (WHERE a.classificacao = 'INTENSIVOS') as intensive
+          FROM public.avaliacoes_scp a
+          WHERE a."unidadeId" = $1
+            AND a."dataAplicacao" = CURRENT_DATE
+            AND a."statusSessao" = 'ATIVA'`,
+          [unidadeId]
+        );
+
+        const evaluated = parseInt(avaliacoesAtivasResult[0]?.evaluated || 0);
+        const minimumCare = parseInt(
+          avaliacoesAtivasResult[0]?.minimum_care || 0
+        );
+        const intermediateCare = parseInt(
+          avaliacoesAtivasResult[0]?.intermediate_care || 0
+        );
+        const highDependency = parseInt(
+          avaliacoesAtivasResult[0]?.high_dependency || 0
+        );
+        const semiIntensive = parseInt(
+          avaliacoesAtivasResult[0]?.semi_intensive || 0
+        );
+        const intensive = parseInt(avaliacoesAtivasResult[0]?.intensive || 0);
+
+        // 3. Buscar distribuição de classificação do dia via leito_eventos
+        // Para cada CICLO DE OCUPAÇÃO (historico_ocupacao_id), pega apenas a última classificação
+        // Isso evita duplicar quando edita, mas conta alta + nova entrada separadamente
+        const eventosResult = await this.ds.query(
+          `WITH ultima_classificacao_por_ciclo AS (
+            SELECT DISTINCT ON (COALESCE(historico_ocupacao_id, avaliacao_id, id))
+              COALESCE(historico_ocupacao_id, avaliacao_id, id) as ciclo_id,
+              payload->>'classificacao' as classificacao
+            FROM public.leito_eventos
+            WHERE unidade_id = $1
+              AND tipo IN ('AVALIACAO_CRIADA', 'AVALIACAO_ATUALIZADA')
+              AND DATE(data_hora AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE
+              AND payload->>'classificacao' IS NOT NULL
+            ORDER BY COALESCE(historico_ocupacao_id, avaliacao_id, id), data_hora DESC
+          )
+          SELECT classificacao, COUNT(*) as quantidade
+          FROM ultima_classificacao_por_ciclo
+          GROUP BY classificacao`,
+          [unidadeId]
+        );
+
+        // Se houver eventos do dia, usar esses dados (captura rotatividade)
+        let careLevelFromEvents = {
+          minimumCare: 0,
+          intermediateCare: 0,
+          highDependency: 0,
+          semiIntensive: 0,
+          intensive: 0,
+        };
+
+        if (eventosResult.length > 0) {
+          eventosResult.forEach((ev: any) => {
+            const qtd = parseInt(ev.quantidade || 0);
+            switch (ev.classificacao) {
+              case "MINIMOS":
+                careLevelFromEvents.minimumCare = qtd;
+                break;
+              case "INTERMEDIARIOS":
+                careLevelFromEvents.intermediateCare = qtd;
+                break;
+              case "ALTA_DEPENDENCIA":
+                careLevelFromEvents.highDependency = qtd;
+                break;
+              case "SEMI_INTENSIVOS":
+                careLevelFromEvents.semiIntensive = qtd;
+                break;
+              case "INTENSIVOS":
+                careLevelFromEvents.intensive = qtd;
+                break;
+            }
+          });
         }
-        return unit;
+
+        // Usar eventos se houver, senão usar avaliações ativas
+        const useCareLevel =
+          eventosResult.length > 0
+            ? careLevelFromEvents
+            : {
+                minimumCare,
+                intermediateCare,
+                highDependency,
+                semiIntensive,
+                intensive,
+              };
+
+        // 4. Calcular vagos e pendentes
+        const vacant = bedCount - evaluated - inactive;
+        const pending = 0; // Todos os leitos estão classificados (avaliado, vago ou inativo)
+
+        return {
+          ...unit,
+          bedCount,
+          careLevel: useCareLevel,
+          bedStatus: {
+            evaluated,
+            vacant: vacant > 0 ? vacant : 0,
+            inactive,
+            pending,
+          },
+        };
       })
     );
 
