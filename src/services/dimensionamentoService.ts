@@ -381,13 +381,13 @@ export class DimensionamentoService {
     const S = hMinimos + hIntermediarios;
 
     let percentualEnfermeiro = 0.52;
-    let criterioAplicado = "Padrão (0.52)";
+    let criterioAplicado = "Intensivos / padrão";
 
     // Critério 1 (agora com HORAS): if (S >= PADC and S >= PCSI and S >= PCIt) then f = 0.33
 
     if (S >= hAltaDependencia && S >= hSemiIntensivos && S >= hIntensivos) {
       percentualEnfermeiro = 0.33;
-      criterioAplicado = "S (PCM + PCI) = 33 % ";
+      criterioAplicado = "Mínimos + Intermediários";
     } else {
       // Critério 2 (HORAS): else if (PADC > S and PADC >= PCSI and PADC >= PCIt) then f = 0.37
 
@@ -397,7 +397,7 @@ export class DimensionamentoService {
         hAltaDependencia >= hIntensivos
       ) {
         percentualEnfermeiro = 0.37;
-        criterioAplicado = "ALTA DEPENDENCIA = 37 % ";
+        criterioAplicado = "Alta Dependência";
       } else {
         // Critério 3 (HORAS): else if (PCSI > S and PCSI > PADC and PCSI >= PCIt) then f = 0.42
 
@@ -407,12 +407,12 @@ export class DimensionamentoService {
           hSemiIntensivos >= hIntensivos
         ) {
           percentualEnfermeiro = 0.42;
-          criterioAplicado = "SEMI INTENSIVOS = 42 % ";
+          criterioAplicado = "Semi-Intensivos";
         } else {
-          // Critério 4: else f = 0.52 (padrão)
+          // Critério 4: else f = 0.52 (Intensivos / padrão)
 
           percentualEnfermeiro = 0.52;
-          criterioAplicado = "Padrão 52 % ";
+          criterioAplicado = "Intensivos / padrão";
         }
       }
     }
