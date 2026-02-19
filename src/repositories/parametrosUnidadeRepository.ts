@@ -23,12 +23,21 @@ export class ParametrosUnidadeRepository {
     const unidade = await this.unidadeRepo.findOneByOrFail({ id: unidadeId });
     const existente = await this.obterPorUnidadeId(unidadeId);
 
+    // Normaliza diasSemana para número (front pode enviar como string)
+    const sanitized = {
+      ...data,
+      diasSemana:
+        data.diasSemana !== undefined && data.diasSemana !== null
+          ? parseInt(String(data.diasSemana), 10)
+          : undefined,
+    };
+
     if (existente) {
-      Object.assign(existente, data);
+      Object.assign(existente, sanitized);
       return this.repo.save(existente);
     }
 
-    const novo = this.repo.create({ unidade, ...data });
+    const novo = this.repo.create({ unidade, ...sanitized });
     return this.repo.save(novo);
   }
 

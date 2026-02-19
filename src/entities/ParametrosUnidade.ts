@@ -41,6 +41,10 @@ export class ParametrosUnidade {
   @Column({ type: "decimal", precision: 5, scale: 2, nullable: true })
   cargaHorariaTecnico?: number;
 
+  // Método de cálculo do dimensionamento (ex: "COFEN", "FUGULIN", etc.)
+  @Column({ type: "text", nullable: true })
+  metodoCalculo?: string;
+
   @CreateDateColumn()
   created_at!: Date;
 

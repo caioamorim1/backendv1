@@ -234,23 +234,18 @@ export class DimensionamentoService {
         where: { unidade: { id: unidadeId } },
       });
 
+      // leitosPendentes sempre vem do status real dos leitos
+      for (const leito of unidade.leitos) {
+        if (leito.status === StatusLeito.PENDENTE) leitosPendentes++;
+        if (leito.status === StatusLeito.INATIVO) leitosInativos++;
+      }
+
       if (leitosStatus) {
         leitosOcupados = leitosStatus.evaluated;
         leitosInativos = leitosStatus.inactive;
         leitosVagos = leitosStatus.vacant;
       } else {
         leitosOcupados = 0;
-        leitosPendentes = 0;
-        leitosInativos = 0;
-
-        // Contar por status
-        for (const leito of unidade.leitos) {
-          if (leito.status === StatusLeito.INATIVO) {
-            leitosInativos++;
-          } else if (leito.status === StatusLeito.PENDENTE) {
-            leitosPendentes++;
-          }
-        }
 
         // Contar ocupados do histórico atual
         const leitosOcupadosSet = new Set<string>();
@@ -301,28 +296,27 @@ export class DimensionamentoService {
         });
       }
 
-      if (historicosStatus.length > 0) {
-        // CORREÇÃO: Usar TOTAL (soma) ao invés de média
-        let somaOcupados = 0;
-        let somaVagos = 0;
-        let somaInativos = 0;
+      // leitosOcupados vem da MESMA fonte de historicos_ocupacao usada em totalAvaliacoes
+      // para garantir consistência (leitosOcupados === totalAvaliacoes)
+      leitosOcupados = Math.round(totalPacientesMedio * diasNoPeriodo);
 
+      if (historicosStatus.length > 0) {
+        // leitosInativos usa historicos_leitos_status (leitos inativos não dependem de avaliações)
+        let somaInativos = 0;
         historicosStatus.forEach((h) => {
-          somaOcupados += h.evaluated;
-          somaVagos += h.vacant;
           somaInativos += h.inactive;
         });
-
-        // Usar o total (soma)
-        leitosOcupados = somaOcupados;
-        leitosVagos = somaVagos;
         leitosInativos = somaInativos;
       } else {
-        leitosOcupados = 0;
-        leitosVagos = 0;
         leitosInativos = 0;
         leitosPendentes = 0;
       }
+
+      // leitosVagos = total leitos-dia - ocupados - inativos (fecha o total de forma consistente)
+      leitosVagos = Math.max(
+        0,
+        totalLeitos * diasNoPeriodo - leitosOcupados - leitosInativos
+      );
     }
 
     // Calcular total de leitos-dia (total de leitos × dias no período)
@@ -464,6 +458,25 @@ export class DimensionamentoService {
     const qpEnfermeiros = Math.round(qpEnfermeirosExato);
     const qpTecnicos = Math.round(qpTecnicosExato);
 
+    // --- CUIDADO e SEGURANÇA ---
+    // cuidado = THE * (diasSemana / jornada) * percentual
+    // seguranca = qp - cuidado
+    const cuidadoEnfermeiro =
+      cargaHorariaEnfermeiro > 0
+        ? totalHorasEnfermagem *
+          (diasTrabalhoSemana / cargaHorariaEnfermeiro) *
+          percentualEnfermeiro
+        : 0;
+    const segurancaEnfermeiro = qpEnfermeirosExato - cuidadoEnfermeiro;
+
+    const cuidadoTecnico =
+      cargaHorariaTecnico > 0
+        ? totalHorasEnfermagem *
+          (diasTrabalhoSemana / cargaHorariaTecnico) *
+          percentualTecnico
+        : 0;
+    const segurancaTecnico = qpTecnicosExato - cuidadoTecnico;
+
     // 📊 CONSOLE LOG: MÉTRICAS DO DIMENSIONAMENTO - INTERNAÇÃO
     console.log("\n" + "=".repeat(80));
     console.log("📊 DIMENSIONAMENTO CALCULADO - UNIDADE DE INTERNAÇÃO");
@@ -599,6 +612,7 @@ export class DimensionamentoService {
       leitosOcupados,
       leitosVagos,
       leitosInativos,
+      leitosPendentes,
       percentualLeitosAvaliados,
 
       // Ocupação e Avaliações
@@ -643,6 +657,12 @@ export class DimensionamentoService {
       ),
       percentualTecnicoPercent: Number((percentualTecnico * 100).toFixed(1)),
       nivelCuidadoPredominante: criterioAplicado,
+
+      // Cuidado e Segurança
+      cuidadoEnfermeiro: Number(cuidadoEnfermeiro.toFixed(4)),
+      segurancaEnfermeiro: Number(segurancaEnfermeiro.toFixed(4)),
+      cuidadoTecnico: Number(cuidadoTecnico.toFixed(4)),
+      segurancaTecnico: Number(segurancaTecnico.toFixed(4)),
 
       // Parâmetros
       parametros: {
