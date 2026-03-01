@@ -544,15 +544,15 @@ interface CargoRowPdf {
   atualQtd: number;
   baselineQtd: number;
   calculadoQtd: number | null;
-  ajusteQtd: number | null;
+  ajusteQtd: number;          // projetado - atual (ajuste qualitativo)
   projetadoQtd: number;
-  variacaoQtd: number;
+  variacaoQtd: number | null; // projetado - calculado (variação)
   atualRs: number;
   baselineRs: number;
   calculadoRs: number | null;
-  ajusteRs: number | null;
+  ajusteRs: number;
   projetadoRs: number;
-  variacaoRs: number;
+  variacaoRs: number | null;
   observacao: string;
 }
 
@@ -655,18 +655,19 @@ function drawTotalRow(
   const totBaseQtd   = cargos.reduce((s, r) => s + r.baselineQtd, 0);
   const totCalcQtd   = cargos.some((r) => r.calculadoQtd != null)
     ? cargos.reduce((s, r) => s + (r.calculadoQtd ?? 0), 0) : null;
-  const totAjusteQtd = cargos.some((r) => r.ajusteQtd != null)
-    ? cargos.reduce((s, r) => s + (r.ajusteQtd ?? 0), 0) : null;
+  // ajuste qualitativo (projetado-atual) é sempre definido; variação (projetado-calculado) é nullable
+  const totAjusteQtd = cargos.reduce((s, r) => s + r.ajusteQtd, 0);
   const totProjQtd   = cargos.reduce((s, r) => s + r.projetadoQtd, 0);
-  const totVarQtd    = cargos.reduce((s, r) => s + r.variacaoQtd, 0);
+  const totVarQtd    = cargos.some((r) => r.variacaoQtd != null)
+    ? cargos.reduce((s, r) => s + (r.variacaoQtd ?? 0), 0) : null;
   const totAtualRs   = cargos.reduce((s, r) => s + r.atualRs, 0);
   const totBaseRs    = cargos.reduce((s, r) => s + r.baselineRs, 0);
   const totCalcRs    = cargos.some((r) => r.calculadoRs != null)
     ? cargos.reduce((s, r) => s + (r.calculadoRs ?? 0), 0) : null;
-  const totAjusteRs  = cargos.some((r) => r.ajusteRs != null)
-    ? cargos.reduce((s, r) => s + (r.ajusteRs ?? 0), 0) : null;
+  const totAjusteRs  = cargos.reduce((s, r) => s + r.ajusteRs, 0);
   const totProjRs    = cargos.reduce((s, r) => s + r.projetadoRs, 0);
-  const totVarRs     = cargos.reduce((s, r) => s + r.variacaoRs, 0);
+  const totVarRs     = cargos.some((r) => r.variacaoRs != null)
+    ? cargos.reduce((s, r) => s + (r.variacaoRs ?? 0), 0) : null;
 
   const cells = buildRowCells(
     { cargoNome: "TOTAL", atualQtd: totAtualQtd, baselineQtd: totBaseQtd,
@@ -701,29 +702,30 @@ function buildRowCells(
   const vRsC = (n: number) => (n >= 0 ? `+${fmtRsC(n)}` : fmtRsC(n));
 
   if (tipo === "MAPA") {
+    // No MAPA não há coluna CALCULADO; VARIAÇÃO = projetado - atual (ajuste qualitativo)
     if (escopo === "QUANTIDADE")
-      return [r.cargoNome, fmtQtd(r.atualQtd), fmtQtd(r.baselineQtd), fmtQtd(r.projetadoQtd), v(r.variacaoQtd)];
+      return [r.cargoNome, fmtQtd(r.atualQtd), fmtQtd(r.baselineQtd), fmtQtd(r.projetadoQtd), v(Math.round(r.ajusteQtd))];
     if (escopo === "FINANCEIRO")
-      return [r.cargoNome, fmtRs(r.atualRs), fmtRs(r.baselineRs), fmtRs(r.projetadoRs), vRs(r.variacaoRs)];
+      return [r.cargoNome, fmtRs(r.atualRs), fmtRs(r.baselineRs), fmtRs(r.projetadoRs), vRs(r.ajusteRs)];
     // GERAL
-    return [r.cargoNome, fmtRs(r.atualRs), fmtQtd(r.atualQtd), fmtRs(r.baselineRs), fmtQtd(r.baselineQtd), fmtRs(r.projetadoRs), fmtQtd(r.projetadoQtd), vRs(r.variacaoRs), v(r.variacaoQtd)];
+    return [r.cargoNome, fmtRs(r.atualRs), fmtQtd(r.atualQtd), fmtRs(r.baselineRs), fmtQtd(r.baselineQtd), fmtRs(r.projetadoRs), fmtQtd(r.projetadoQtd), vRs(r.ajusteRs), v(Math.round(r.ajusteQtd))];
   }
   // DETALHAMENTO
   if (escopo === "QUANTIDADE")
     return [r.cargoNome, fmtQtd(r.atualQtd), fmtQtd(r.baselineQtd),
-      fmtNull(r.calculadoQtd, fmtQtd), fmtNull(r.ajusteQtd, (n) => v(Math.round(n))),
-      fmtQtd(r.projetadoQtd), v(r.variacaoQtd), r.observacao];
+      fmtNull(r.calculadoQtd, fmtQtd), v(Math.round(r.ajusteQtd)),
+      fmtQtd(r.projetadoQtd), fmtNull(r.variacaoQtd, (n) => v(Math.round(n))), r.observacao];
   if (escopo === "FINANCEIRO")
     return [r.cargoNome, fmtRs(r.atualRs), fmtRs(r.baselineRs),
-      fmtNull(r.calculadoRs, fmtRs), fmtNull(r.ajusteRs, vRs),
-      fmtRs(r.projetadoRs), vRs(r.variacaoRs), r.observacao];
+      fmtNull(r.calculadoRs, fmtRs), vRs(r.ajusteRs),
+      fmtRs(r.projetadoRs), fmtNull(r.variacaoRs, vRs), r.observacao];
   // GERAL — usa formato compacto (sem "R$ ") para caber nas colunas estreitas
   return [r.cargoNome, fmtRsC(r.atualRs), fmtQtd(r.atualQtd),
     fmtRsC(r.baselineRs), fmtQtd(r.baselineQtd),
     fmtNull(r.calculadoRs, fmtRsC), fmtNull(r.calculadoQtd, fmtQtd),
-    fmtNull(r.ajusteRs, vRsC), fmtNull(r.ajusteQtd, (n) => v(Math.round(n))),
+    vRsC(r.ajusteRs), v(Math.round(r.ajusteQtd)),
     fmtRsC(r.projetadoRs), fmtQtd(r.projetadoQtd),
-    vRsC(r.variacaoRs), v(r.variacaoQtd), r.observacao];
+    fmtNull(r.variacaoRs, vRsC), fmtNull(r.variacaoQtd, (n) => v(Math.round(n))), r.observacao];
 }
 
 function buildHeaders(

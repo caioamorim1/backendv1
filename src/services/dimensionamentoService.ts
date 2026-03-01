@@ -6,6 +6,7 @@ import { AvaliacaoRepository } from "../repositories/avaliacaoRepository";
 import { ParametrosUnidade } from "../entities/ParametrosUnidade";
 import { ParametrosNaoInternacao } from "../entities/ParametrosNaoInternacao";
 import { TaxaOcupacaoCustomizada } from "../entities/TaxaOcupacaoCustomizada";
+import { DimensionamentoNaoInternacao } from "../entities/DimensionamentoNaoInternacao";
 
 import {
   AnaliseInternacaoResponse,
@@ -753,6 +754,7 @@ export class DimensionamentoService {
     const unidade = await unidadeRepo.findOne({
       where: { id: unidadeId },
       relations: [
+        "hospital",
         "sitiosFuncionais",
         "sitiosFuncionais.cargosSitio",
         "sitiosFuncionais.cargosSitio.cargoUnidade",
@@ -808,6 +810,13 @@ export class DimensionamentoService {
 
     let totalSitiosEnfermeiro = 0;
     let totalSitiosTecnico = 0;
+
+    // Captura horas ENF/TEC por sítio para persistência
+    const sitioHorasMap: Record<string, { totalEnf: number; totalTec: number }> = {};
+
+    // Soma dos arredondamentos por sítio (coerente com a tabela)
+    let somaArredEnfermeiro = 0;
+    let somaArredTecnico = 0;
 
     const tabela: GrupoCargosNaoInternacao[] = (
       unidade.sitiosFuncionais || []
@@ -899,6 +908,9 @@ export class DimensionamentoService {
 
       totalSitiosEnfermeiro += totalEnf;
       totalSitiosTecnico += totalTec;
+      somaArredEnfermeiro += pessoalEnfermeiroArredondado;
+      somaArredTecnico += pessoalTecnicoArredondado;
+      sitioHorasMap[sitio.id] = { totalEnf, totalTec };
 
       return {
         id: sitio.id,
@@ -907,7 +919,39 @@ export class DimensionamentoService {
       };
     });
 
+    // === ETAPA 2.5: PERSISTIR RESULTADO NAS TABELA dimensionamento_nao_internacao ===
+    try {
+      const dimNaoIntRepo = this.ds.getRepository(DimensionamentoNaoInternacao);
+      const hospitalId = unidade.hospital?.id ?? "";
+      const registros: Partial<DimensionamentoNaoInternacao>[] = [];
+      for (const sitio of tabela) {
+        const horas = sitioHorasMap[sitio.id] ?? { totalEnf: 0, totalTec: 0 };
+        for (const cargo of sitio.cargos) {
+          registros.push({
+            hospitalId,
+            unidadeId,
+            sitioId: sitio.id,
+            cargoId: cargo.cargoId,
+            quantidadeCalculada: cargo.quantidadeProjetada ?? 0,
+            kmEnfermeiro,
+            kmTecnico,
+            totalHorasEnfSitio: horas.totalEnf,
+            totalHorasTecSitio: horas.totalTec,
+          });
+        }
+      }
+      if (registros.length > 0) {
+        await dimNaoIntRepo.upsert(registros as DimensionamentoNaoInternacao[], {
+          conflictPaths: ["unidadeId", "sitioId", "cargoId"],
+          skipUpdateIfNoValuesChanged: true,
+        });
+      }
+    } catch (err) {
+      console.error("[DimensionamentoNaoInternacao] Erro ao persistir resultado:", err);
+    }
+
     // === ETAPA 3: RESUMO FINAL (mantendo formato original) ===
+    // pessoalEnfermeiro/Tecnico bruto para referência nos outros campos
     const pessoalEnfermeiro = kmEnfermeiro * totalSitiosEnfermeiro;
     const pessoalTecnico = kmTecnico * totalSitiosTecnico;
 
@@ -919,8 +963,9 @@ export class DimensionamentoService {
       totalSitiosTecnico,
       pessoalEnfermeiro: Number(pessoalEnfermeiro.toFixed(2)),
       pessoalTecnico: Number(pessoalTecnico.toFixed(2)),
-      pessoalEnfermeiroArredondado: Math.round(pessoalEnfermeiro),
-      pessoalTecnicoArredondado: Math.round(pessoalTecnico),
+      // Usa a SOMA dos arredondamentos por sítio — coerente com a tabela e com o relatório
+      pessoalEnfermeiroArredondado: somaArredEnfermeiro,
+      pessoalTecnicoArredondado: somaArredTecnico,
     };
 
     const resumoDistribuicao = {

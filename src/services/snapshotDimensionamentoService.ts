@@ -1,4 +1,4 @@
-import { DataSource } from "typeorm";
+import { DataSource, In } from "typeorm";
 import { SnapshotDimensionamento } from "../entities/SnapshotDimensionamento";
 import { SnapshotDimensionamentoRepository } from "../repositories/snapshotDimensionamentoRepository";
 import { HospitalSectorsRepository } from "../repositories/hospitalSectorsRepository";
@@ -9,6 +9,7 @@ import { ProjetadoFinalInternacao } from "../entities/ProjetadoFinalInternacao";
 import { ProjetadoFinalNaoInternacao } from "../entities/ProjetadoFinalNaoInternacao";
 import { UnidadeInternacao } from "../entities/UnidadeInternacao";
 import { UnidadeNaoInternacao } from "../entities/UnidadeNaoInternacao";
+import { DimensionamentoNaoInternacao } from "../entities/DimensionamentoNaoInternacao";
 import { createHash } from "crypto";
 
 export class SnapshotDimensionamentoService {
@@ -1142,6 +1143,40 @@ export class SnapshotDimensionamentoService {
             (unidadeEntity?.horas_extra_reais || "0").replace(",", ".")
           );
 
+          // Calcular dimensionamento puro para salvar quantidadeCalculada por sítio/cargo
+          // Tenta ler da tabela persistida primeiro; recalcula se não encontrar
+          // Map sitioId → { cargoId → quantidadeCalculada }
+          const calculadoPorSitioCargo: Record<string, Record<string, number>> = {};
+          try {
+            const dimNaoIntRepo = this.ds.getRepository(DimensionamentoNaoInternacao);
+            const registrosSalvos = await dimNaoIntRepo.find({
+              where: { unidadeId: unidade.id },
+              select: ["sitioId", "cargoId", "quantidadeCalculada"],
+            });
+
+            if (registrosSalvos.length > 0) {
+              // Fast-path: usa dados já persistidos
+              for (const reg of registrosSalvos) {
+                if (!calculadoPorSitioCargo[reg.sitioId])
+                  calculadoPorSitioCargo[reg.sitioId] = {};
+                calculadoPorSitioCargo[reg.sitioId][reg.cargoId] = reg.quantidadeCalculada;
+              }
+            } else {
+              // Fallback: recalcula e persiste (a própria chamada já persiste)
+              const dim = await this.dimensionamentoService.calcularParaNaoInternacao(unidade.id);
+              for (const sitioTabela of dim?.tabela || []) {
+                calculadoPorSitioCargo[sitioTabela.id] = {};
+                for (const cargo of sitioTabela.cargos || []) {
+                  if (cargo.cargoId) {
+                    calculadoPorSitioCargo[sitioTabela.id][cargo.cargoId] = cargo.quantidadeProjetada ?? 0;
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            console.error(`Erro ao obter dimensionamento não-internação para snapshot (unidade ${unidade.id}):`, err);
+          }
+
           // Adicionar custos aos cargos de não-internação (agregados por sítio)
           let custoTotalUnidade = 0;
           let totalFuncionariosUnidade = 0;
@@ -1175,9 +1210,13 @@ export class SnapshotDimensionamentoService {
                   const custoTotal = custoUnitario * projetadoQtd;
                   custoTotalSitio += custoTotal;
 
+                  const quantidadeCalculada =
+                    calculadoPorSitioCargo[sitio.sitioId]?.[cargo.cargoId] ?? null;
+
                   return {
                     ...cargo,
                     cargoNome: cargoEntity?.nome ?? "",
+                    quantidadeCalculada,
                     custoUnitario,
                     custoTotal,
                   };
