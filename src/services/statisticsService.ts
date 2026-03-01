@@ -5,7 +5,7 @@ import { LeitoRepository } from "../repositories/leitoRepository";
 import { UnidadeRepository } from "../repositories/unidadeRepository";
 import { ClassificacaoCuidado } from "../entities/AvaliacaoSCP";
 import { StatusLeito } from "../entities/Leito";
-import { pdfResumoDiario, pdfMensal } from "../utils/exporters/pdf";
+
 
 export class StatisticsService {
   constructor(private ds: DataSource) {}
@@ -139,68 +139,15 @@ export class StatisticsService {
     };
   }
 
-  // Exporta PDF: para unidade, cria resumo diário ou mensal conforme periodo
+  // Exporta PDF — use GET /export/dimensionamento/:unidadeId/pdf
   async exportUnidadePdf(
-    unidadeId: string,
-    dataIni?: string,
-    dataFim?: string
-  ) {
-    const stats = await this.unidadeStats(unidadeId, dataIni, dataFim);
-
-    // Decide se é diário (mesmo dia) ou mensal (intervalo)
-    const sameDay = !!dataIni && !!dataFim && dataIni === dataFim;
-
-    if (sameDay) {
-      // --------- DIÁRIO ----------
-      // Se não houver histórico para o dia, cai no número de avaliações do próprio dia
-      const ocupadosDia =
-        (stats?.ocupacao?.dias?.[0]?.ocupados ??
-          (Array.isArray(stats?.avaliacoes) ? stats.avaliacoes.length : 0)) ||
-        0;
-
-      // totalLeitos deve representar todos os leitos (não apenas ativos)
-      const totalLeitos = Number(stats?.totalLeitos ?? 0);
-
-      // Taxa diária = ocupados do dia / total de leitos
-      const taxaOcupacaoDia = totalLeitos > 0 ? ocupadosDia / totalLeitos : 0;
-
-      return await pdfResumoDiario({
-        data: dataIni!, // já garantimos sameDay com dataIni definido
-        unidade: stats?.unidade?.nome ?? "",
-        numeroLeitos: totalLeitos,
-        ocupacao: { usada: ocupadosDia },
-        taxaOcupacao: taxaOcupacaoDia, // << aqui é a correção
-        distribuicao: stats?.distribuicao ?? {},
-        avaliacoes: (stats?.avaliacoes ?? []).map((a: any) => ({
-          leito: a?.leito ?? {},
-          created_at: a?.created_at,
-          autor: a?.autor ?? {},
-          classificacao: a?.classificacao,
-        })),
-      });
-    }
-
-    // se mensal (dataIni,dataFim diferentes) -> usar pdfMensal simplificado
-    const ano = Number(dataIni?.slice(0, 4) || new Date().getFullYear());
-    const mes = Number(dataIni?.slice(5, 7) || new Date().getMonth() + 1);
-    const buf = await pdfMensal({
-      ano,
-      mes,
-      unidade: stats.unidade.nome,
-      numeroLeitos: stats.totalLeitos,
-      ocupacaoMensal: {
-        mediaOcupadosDia: stats.ocupacao.mediaOcupadosDia,
-        taxaOcupacaoMedia: stats.ocupacao.taxaOcupacaoMedia,
-        avaliacao: stats.ocupacao.dias,
-      },
-      distribuicaoMensal: stats.distribuicao,
-      colaboradores: stats.colaboradores.map((c: any) => ({
-        nome: c.nome,
-        total: c.total,
-        distribuicao: c.distribuicao,
-      })),
-    });
-    return buf;
+    _unidadeId: string,
+    _dataIni?: string,
+    _dataFim?: string
+  ): Promise<Buffer> {
+    throw new Error(
+      "Relatório PDF migrado. Use GET /export/dimensionamento/:unidadeId/pdf"
+    );
   }
 
   // Resumo diário (compatível com antigo RelatoriosController.resumoDiario)
