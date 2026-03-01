@@ -7,11 +7,17 @@ export const ExportRoutes = (ds: DataSource): Router => {
   const ctrl = new ExportController(ds);
 
   r.get("/relatorios/resumo-diario.xlsx", ctrl.resumoDiarioXlsx);
-
   r.get("/relatorios/mensal.xlsx", ctrl.mensalXlsx);
-  r.get("/relatorios/mensal.pdf", ctrl.mensalPdf);
-  r.get("/relatorios/resumo-diario.pdf", ctrl.resumoDiarioPdf);
-  r.get("/relatorios/consolidado-mensal.pdf", ctrl.consolidadoMensalPdf);
+
+  // PDF de dimensionamento de unidade
+  // GET /export/dimensionamento/:unidadeId/pdf?inicio=YYYY-MM-DD&fim=YYYY-MM-DD
+  r.get("/dimensionamento/:unidadeId/pdf", ctrl.dimensionamentoUnidadePdf);
+
+  // PDF de variação de snapshot
+  // GET /export/snapshot/:hospitalId/variacao/pdf?tipo=MAPA&escopo=QUANTIDADE
+  // tipo: MAPA | DETALHAMENTO
+  // escopo: QUANTIDADE | FINANCEIRO | GERAL
+  r.get("/snapshot/:hospitalId/variacao/pdf", ctrl.snapshotVariacaoPdf);
 
   return r;
 };

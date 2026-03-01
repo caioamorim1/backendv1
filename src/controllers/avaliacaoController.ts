@@ -79,7 +79,7 @@ export class AvaliacaoController {
   // Buscar último prontuário de um leito
   buscarUltimoProntuarioPorLeito = async (req: Request, res: Response) => {
     try {
-      const { leitoId } = req.params;
+      const leitoId = req.params.leitoId as string;
 
       console.log("\n🔍 ===== [CONTROLLER] BUSCAR ÚLTIMO PRONTUÁRIO =====");
       console.log("📋 Leito ID:", leitoId);
@@ -176,7 +176,7 @@ export class AvaliacaoController {
   // Busca avaliações por unidade
   listarPorUnidade = async (req: Request, res: Response) => {
     try {
-      const { unidadeId } = req.params;
+      const unidadeId = req.params.unidadeId as string;
 
       if (!unidadeId) {
         return res.status(400).json({ error: "ID da unidade é obrigatório" });
@@ -193,7 +193,7 @@ export class AvaliacaoController {
 
   buscarPorAutor = async (req: Request, res: Response) => {
     try {
-      const { autorId } = req.params;
+      const autorId = req.params.autorId as string;
 
       if (!autorId) {
         return res.status(400).json({ erro: "O ID do autor é obrigatório" });

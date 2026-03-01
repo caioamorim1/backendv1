@@ -1028,6 +1028,8 @@ export class SnapshotDimensionamentoService {
 
         // Buscar dados de dimensionamento (métricas de leitos e distribuição)
         let dimensionamentoData = null;
+        // Map cargoId → quantidadeCalculada (do dimensionamento puro)
+        const calculadoPorCargo: Record<string, number> = {};
         if (periodoTravado) {
           try {
             const dimensionamento =
@@ -1048,6 +1050,13 @@ export class SnapshotDimensionamentoService {
                 distribuicaoClassificacao:
                   dimensionamento.agregados.distribuicaoTotalClassificacao,
               };
+            }
+
+            // Salvar quantidadeCalculada por cargoId para os relatórios
+            for (const item of dimensionamento?.tabela || []) {
+              if (item.cargoId) {
+                calculadoPorCargo[item.cargoId] = item.quantidadeProjetada ?? 0;
+              }
             }
           } catch (error) {
             console.error(
@@ -1091,6 +1100,8 @@ export class SnapshotDimensionamentoService {
 
               return {
                 ...cargo,
+                cargoNome: cargoEntity?.nome ?? "",
+                quantidadeCalculada: calculadoPorCargo[cargo.cargoId] ?? null,
                 custoUnitario,
                 custoTotal,
               };
@@ -1136,6 +1147,11 @@ export class SnapshotDimensionamentoService {
           let totalFuncionariosUnidade = 0;
           const sitiosComCusto = await Promise.all(
             (projetado.sitios || []).map(async (sitio: any) => {
+              // Buscar nome do sítio funcional
+              const sitioEntity = await this.ds
+                .getRepository("SitioFuncional")
+                .findOne({ where: { id: sitio.sitioId }, select: ["id", "nome"] });
+
               let custoTotalSitio = 0;
               const cargosComCusto = await Promise.all(
                 (sitio.cargos || []).map(async (cargo: any) => {
@@ -1161,6 +1177,7 @@ export class SnapshotDimensionamentoService {
 
                   return {
                     ...cargo,
+                    cargoNome: cargoEntity?.nome ?? "",
                     custoUnitario,
                     custoTotal,
                   };
@@ -1171,6 +1188,7 @@ export class SnapshotDimensionamentoService {
 
               return {
                 ...sitio,
+                sitioNome: sitioEntity?.nome ?? sitio.sitioId,
                 cargos: cargosComCusto,
                 custoTotalSitio,
               };

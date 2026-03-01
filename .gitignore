@@ -21,7 +21,7 @@ logs/
 Thumbs.db
 
 # Docker
-docker-compose.override.yml
+docker-compose.yml
 .docker/
 
 # Cache
@@ -32,3 +32,6 @@ docker-compose.override.yml
 .vscode/
 .idea/
 test/
+
+#db
+dimensiona.sql

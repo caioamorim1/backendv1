@@ -673,6 +673,7 @@ export class DimensionamentoService {
         cargaHorariaTecnico,
         equipeComRestricoes,
         fatorRestricao,
+        metodoCalculo: parametros?.metodoCalculo ?? null,
       },
 
       // Constantes de Cálculo

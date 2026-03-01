@@ -51,12 +51,26 @@ function generateTable(
     width: number;
     align?: "left" | "center" | "right";
   }[],
-  rows: string[][]
+  rows: string[][],
+  options?: { headerHeight?: number; dynamicRowHeight?: boolean }
 ) {
-  const rowHeight = 20;
-  const headerHeight = 18;
+  const MIN_ROW_H = 20;
+  const headerHeight = options?.headerHeight ?? 18;
   const columnWidths = headers.map((h) => h.width);
   const startX = doc.page.margins.left;
+
+  const measureRowHeight = (rowData: string[]): number => {
+    if (!options?.dynamicRowHeight) return MIN_ROW_H;
+    let maxH = MIN_ROW_H;
+    rowData.forEach((cell, i) => {
+      const h =
+        doc.fontSize(8).heightOfString(cell, {
+          width: headers[i].width - 10,
+        }) + 10; // 5px top + 5px bottom padding
+      if (h > maxH) maxH = h;
+    });
+    return maxH;
+  };
 
   const drawHeader = () => {
     const startY = doc.y;
@@ -68,19 +82,23 @@ function generateTable(
         headerHeight
       )
       .fill(BRAND_COLOR);
-    doc.fontSize(9).fillColor("#FFFFFF").font(FONT_BOLD);
+    doc.fontSize(8).fillColor("#FFFFFF").font(FONT_BOLD);
+    const textPad = Math.max(3, Math.floor((headerHeight - 10) / 2));
     let currentX = startX;
     headers.forEach((header) => {
-      doc.text(header.text, currentX + 5, startY + 6, {
-        width: header.width - 10,
+      doc.text(header.text, currentX + 4, startY + textPad, {
+        width: header.width - 8,
         align: header.align || "left",
+        lineBreak: true,
       });
       currentX += header.width;
     });
+    // Vertically centre text within headerHeight
     doc.y = startY + headerHeight;
   };
 
   const drawRow = (rowData: string[], isEven: boolean) => {
+    const rowHeight = measureRowHeight(rowData);
     let startY = doc.y;
     if (startY + rowHeight > doc.page.height - doc.page.margins.bottom) {
       doc.addPage();
@@ -96,9 +114,11 @@ function generateTable(
     doc.fontSize(8).fillColor("#333333").font(FONT_NORMAL);
     let currentX = startX;
     rowData.forEach((cell, i) => {
-      doc.text(cell, currentX + 5, startY + 7, {
+      const vPad = Math.max(5, Math.floor((rowHeight - doc.fontSize(8).heightOfString(cell, { width: headers[i].width - 10 })) / 2));
+      doc.text(cell, currentX + 5, startY + vPad, {
         width: headers[i].width - 10,
         align: headers[i].align || "left",
+        lineBreak: !!options?.dynamicRowHeight,
       });
       currentX += headers[i].width;
     });
@@ -138,10 +158,13 @@ function generateTable(
  */
 function bufferFromDoc(
   title: string,
-  make: (doc: PDFKit.PDFDocument) => void
+  make: (doc: PDFKit.PDFDocument) => void,
+  options?: { landscape?: boolean }
 ): Promise<Buffer> {
   return new Promise((resolve) => {
-    const doc = new PDFDocument({ margin: 40, size: "A4", bufferPages: true });
+    const landscape = options?.landscape ?? false;
+    const size: [number, number] = landscape ? [841.89, 595.28] : [595.28, 841.89];
+    const doc = new PDFDocument({ margin: 40, size });
     const chunks: Buffer[] = [];
 
     doc.on("data", (c) => chunks.push(c as Buffer));
@@ -186,22 +209,641 @@ function bufferFromDoc(
 
     make(doc);
 
-    const range = doc.bufferedPageRange();
-    for (let i = range.start; i < range.start + range.count; i++) {
-      doc.switchToPage(i);
-      doc
-        .fontSize(8)
-        .fillColor("#666666")
-        .text(`Página ${i + 1} de ${range.count}`, 0, doc.page.height - 30, {
-          align: "center",
-        });
-    }
-
     doc.end();
   });
 }
 
 // --- Funções de Geração de PDF ---
+
+// Helper: renders a small labelled info card.
+// Saves and restores doc.y so parallel columns don't compound cursor drift.
+function infoCard(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  label: string,
+  value: string
+) {
+  doc.rect(x, y, w, h).strokeColor("#e0e0e0").lineWidth(0.5).stroke();
+  doc
+    .fontSize(7)
+    .font(FONT_NORMAL)
+    .fillColor("#888888")
+    .text(label, x + 6, y + 6, { width: w - 12 });
+  doc
+    .fontSize(11)
+    .font(FONT_BOLD)
+    .fillColor("#1a365d")
+    .text(value, x + 6, y + 18, { width: w - 12 });
+  // Always leave doc.y at the bottom of the card, never lower
+  if (doc.y < y + h) doc.y = y + h;
+}
+
+// Helper: section title
+function sectionTitle(doc: PDFKit.PDFDocument, title: string) {
+  doc.moveDown(0.8);
+  doc
+    .fontSize(11)
+    .font(FONT_BOLD)
+    .fillColor("#1a365d")
+    .text(title, doc.page.margins.left, doc.y);
+  doc
+    .moveTo(doc.page.margins.left, doc.y + 2)
+    .lineTo(doc.page.width - doc.page.margins.right, doc.y + 2)
+    .strokeColor(BRAND_COLOR)
+    .lineWidth(1.5)
+    .stroke();
+  doc.moveDown(0.6);
+}
+
+const COFEN: Record<string, { horas: number; percEnf: number; percTec: number }> = {
+  MINIMOS:         { horas: 4,  percEnf: 33, percTec: 67 },
+  INTERMEDIARIOS:  { horas: 6,  percEnf: 33, percTec: 67 },
+  ALTA_DEPENDENCIA:{ horas: 10, percEnf: 16, percTec: 84 },
+  SEMI_INTENSIVOS: { horas: 10, percEnf: 42, percTec: 58 },
+  INTENSIVOS:      { horas: 18, percEnf: 52, percTec: 48 },
+};
+
+const CLASSIFICACAO_LABEL: Record<string, string> = {
+  MINIMOS:          "MINIMOS",
+  INTERMEDIARIOS:   "INTERMEDIARIOS",
+  ALTA_DEPENDENCIA: "ALTA DEPENDENCIA",
+  SEMI_INTENSIVOS:  "SEMI INTENSIVOS",
+  INTENSIVOS:       "INTENSIVOS",
+};
+
+export async function pdfDimensionamentoUnidade(payload: {
+  agregados: {
+    unidadeNome: string;
+    metodoAvaliacaoSCP?: { title: string; key: string };
+    periodo: { inicio: string; fim: string; dias: number };
+    totalLeitos: number;
+    totalLeitosDia: number;
+    leitosOcupados: number;
+    leitosVagos: number;
+    leitosInativos: number;
+    leitosPendentes: number;
+    percentualLeitosAvaliados: number;
+    totalAvaliacoes: number;
+    totalPacientesMedio: number;
+    taxaOcupacaoPeriodoPercent: number;
+    taxaOcupacaoCustomizada?: { taxa: number };
+    distribuicaoTotalClassificacao: Record<string, number>;
+    mediaDiariaClassificacao: Record<string, number>;
+    totalHorasEnfermagem: number;
+    qpEnfermeiros: number;
+    qpTecnicos: number;
+    qpTotal: number;
+    percentualEnfermeiroPercent: number;
+    percentualTecnicoPercent: number;
+    nivelCuidadoPredominante: string;
+    cuidadoEnfermeiro: number;
+    segurancaEnfermeiro: number;
+    cuidadoTecnico: number;
+    segurancaTecnico: number;
+    kmEnfermeiro: number;
+    kmTecnico: number;
+    parametros: {
+      istPercent: number;
+      diasTrabalhoSemana: number;
+      cargaHorariaEnfermeiro: string | number;
+      cargaHorariaTecnico: string | number;
+      equipeComRestricoes: boolean;
+      fatorRestricao?: number;
+      metodoCalculo?: string | null;
+    };
+  };
+  tabela: Array<{
+    cargoNome: string;
+    isScpCargo: boolean;
+    salario?: number;
+    adicionais?: number;
+    cargaHoraria?: number;
+    custoPorFuncionario?: number;
+    quantidadeAtual: number;
+    quantidadeProjetada: number;
+  }>;
+}): Promise<Buffer> {
+  const { agregados: ag, tabela } = payload;
+  const title = `${ag.unidadeNome}`;
+
+  return bufferFromDoc(title, (doc) => {
+    const ML = doc.page.margins.left;
+    const MR = doc.page.margins.right;
+    const pageW = doc.page.width - ML - MR;
+
+    doc.y += 6;
+
+    // ── 1. INFORMAÇÕES DA UNIDADE ──────────────────────────────────────────
+    const infoY = doc.y;
+    doc.rect(ML, infoY, pageW, 52).strokeColor("#e0e0e0").lineWidth(0.5).stroke();
+    doc.fontSize(8).font(FONT_BOLD).fillColor("#888888")
+      .text("UNIDADE", ML + 8, infoY + 7)
+      .text("MÉTODO SCP", ML + 200, infoY + 7)
+      .text("TOTAL DE LEITOS", ML + 340, infoY + 7)
+      .text("PERÍODO", ML + 420, infoY + 7);
+    doc.fontSize(10).font(FONT_BOLD).fillColor("#1a365d")
+      .text(ag.unidadeNome, ML + 8, infoY + 19, { width: 185 })
+      .text(ag.metodoAvaliacaoSCP?.title ?? "—", ML + 200, infoY + 19, { width: 130 })
+      .text(`${ag.totalLeitos}`, ML + 340, infoY + 19, { width: 70 })
+      .text(
+        `${new Date(ag.periodo.inicio).toLocaleDateString("pt-BR")} a ${new Date(ag.periodo.fim).toLocaleDateString("pt-BR")}`,
+        ML + 420, infoY + 19, { width: pageW - 420 - 8 }
+      );
+    doc.y = infoY + 60;
+
+    // ── 2. PERÍODO DE ANÁLISE ─────────────────────────────────────────────
+    sectionTitle(doc, "Período de Análise");
+    const cw = pageW / 3;
+    if (doc.y + 52 > doc.page.height - doc.page.margins.bottom) doc.addPage();
+    const periodY = doc.y;
+    infoCard(doc, ML,          periodY, cw, 44, "Data Início",   new Date(ag.periodo.inicio).toLocaleDateString("pt-BR"));
+    infoCard(doc, ML + cw,     periodY, cw, 44, "Data Fim",      new Date(ag.periodo.fim).toLocaleDateString("pt-BR"));
+    infoCard(doc, ML + cw * 2, periodY, cw, 44, "Total de Dias", `${ag.periodo.dias}`);
+    doc.y = periodY + 52;
+
+    // ── 3. OCUPAÇÃO E AVALIAÇÕES ───────────────────────────────────────────
+    sectionTitle(doc, "Ocupação e Avaliações");
+    const cw8 = pageW / 8;
+    if (doc.y + 58 > doc.page.height - doc.page.margins.bottom) doc.addPage();
+    const ocY = doc.y;
+    const taxa = ag.taxaOcupacaoPeriodoPercent.toFixed(2);
+    const cards8 = [
+      ["Taxa Média de\nOcupação (Período)", `${taxa}%`],
+      ["Leitos\nAvaliados (%)", `${ag.percentualLeitosAvaliados.toFixed(1)}%`],
+      ["Leitos\nDia/Período",   `${ag.totalLeitosDia}`],
+      ["Total de\nAvaliações",  `${ag.totalAvaliacoes}`],
+      ["Leitos\nOcupados",      `${ag.leitosOcupados}`],
+      ["Leitos\nVagos",         `${ag.leitosVagos}`],
+      ["Leitos\nInativos",      `${ag.leitosInativos}`],
+      ["Leitos\nPendentes",     `${ag.leitosPendentes}`],
+    ];
+    cards8.forEach(([lbl, val], i) => {
+      const cx = ML + cw8 * i;
+      doc.rect(cx, ocY, cw8, 50).strokeColor("#e0e0e0").lineWidth(0.5).stroke();
+      doc.fontSize(6.5).font(FONT_NORMAL).fillColor("#888888")
+        .text(lbl, cx + 4, ocY + 6, { width: cw8 - 8, align: "center" });
+      // Restore y so the next card label starts at the same absolute y
+      doc.y = ocY + 6;
+      doc.fontSize(10).font(FONT_BOLD).fillColor("#1a365d")
+        .text(val, cx + 4, ocY + 28, { width: cw8 - 8, align: "center" });
+      doc.y = ocY + 28;
+    });
+    doc.y = ocY + 58;
+
+    // ── 4. BASE DE CÁLCULO ────────────────────────────────────────────────
+    sectionTitle(doc, "Base de Cálculo");
+    const cw3 = pageW / 3;
+    if (doc.y + 52 > doc.page.height - doc.page.margins.bottom) doc.addPage();
+    const calcY = doc.y;
+    const taxaCalc = ag.taxaOcupacaoCustomizada?.taxa ?? ag.taxaOcupacaoPeriodoPercent;
+    infoCard(doc, ML,          calcY, cw3, 44, "Taxa de Ocupação (para fins de cálculo)", `${taxaCalc}%`);
+    infoCard(doc, ML + cw3,    calcY, cw3, 44, "Leitos Ocupados",    `${ag.leitosOcupados}`);
+    infoCard(doc, ML + cw3*2,  calcY, cw3, 44, "Pacientes Médio/dia", `${ag.totalPacientesMedio.toFixed(2)}`);
+    doc.y = calcY + 52;
+
+    // ── 5. DISTRIBUIÇÃO DA CLASSIFICAÇÃO ──────────────────────────────────
+    sectionTitle(doc, "Distribuição da Classificação");
+    const classOrder = ["MINIMOS", "INTERMEDIARIOS", "ALTA_DEPENDENCIA", "SEMI_INTENSIVOS", "INTENSIVOS"];
+    const totalDist = classOrder.reduce((s, k) => s + (ag.distribuicaoTotalClassificacao[k] ?? 0), 0);
+    const distHeaders = [
+      ...classOrder.map(k => ({ text: CLASSIFICACAO_LABEL[k], width: (pageW * 0.8) / 5, align: "center" as const })),
+      { text: "(%) Período", width: pageW * 0.2, align: "center" as const },
+    ];
+    const distHeaderHeight = 30; // tall enough for two-word names
+    const distRows = [
+      classOrder.map(k => {
+        const n = ag.distribuicaoTotalClassificacao[k] ?? 0;
+        const pct = totalDist > 0 ? ((n / totalDist) * 100).toFixed(2) : "0.00";
+        // Single-line cell — avoids rowHeight overflow in generateTable
+        return `${n} (${pct}%)`;
+      }).concat(["100%"]),
+    ];
+    generateTable(doc, distHeaders, distRows, { headerHeight: distHeaderHeight });
+    doc.moveDown(0.6);
+
+    // ── 6. HORAS DE ENFERMAGEM POR CLASSIFICAÇÃO ──────────────────────────
+    sectionTitle(doc, "Horas de Enfermagem por Classificação");
+    const heHeaders = [
+      { text: "Classificação",             width: pageW * 0.22, align: "left"   as const },
+      { text: "Hora/Paciente (Art. 3°, I)", width: pageW * 0.13, align: "center" as const },
+      { text: "Enfermeiros % (Art. 3°, II)", width: pageW * 0.17, align: "center" as const },
+      { text: "Técnicos/Aux % (Art. 3°, II)", width: pageW * 0.17, align: "center" as const },
+      { text: "Média Diária de Pacientes",  width: pageW * 0.16, align: "center" as const },
+      { text: "Horas de Enfermagem (THE)",  width: pageW * 0.15, align: "center" as const },
+    ];
+    const heRows = classOrder.map(k => {
+      const c = COFEN[k];
+      const media = ag.mediaDiariaClassificacao[k] ?? 0;
+      const theParcial = media * c.horas;
+      return [
+        CLASSIFICACAO_LABEL[k],
+        `${c.horas}h`,
+        `${c.percEnf}%`,
+        `${c.percTec}%`,
+        `${media.toFixed(2)}`,
+        `${theParcial.toFixed(2)}h`,
+      ];
+    });
+    generateTable(doc, heHeaders, heRows, { headerHeight: 30 });
+
+    // Total linha
+    const totalTHE = ag.totalHorasEnfermagem;
+    doc.moveDown(0.3);
+    doc
+      .fontSize(8).font(FONT_BOLD).fillColor("#333333")
+      .text(`Total de Horas de Enfermagem: ${totalTHE.toFixed(2)}h`, ML, doc.y, {
+        width: pageW,
+        align: "right",
+      });
+    doc.moveDown(0.6);
+
+    // ── 7. CLASSIFICAÇÃO DE PACIENTE ──────────────────────────────────────
+    sectionTitle(doc, "Classificação de Paciente");
+    const cpW = pageW / 6;
+    if (doc.y + 58 > doc.page.height - doc.page.margins.bottom) doc.addPage();
+    const cpY = doc.y;
+    const cpCards = [
+      ["Total Horas\nEnfermagem (Período)", `${ag.totalHorasEnfermagem.toFixed(2)}h`],
+      ["KM\n(Enfermeiro)", `${ag.kmEnfermeiro.toFixed(3)}`],
+      ["KM\n(Técnico)",    `${ag.kmTecnico.toFixed(3)}`],
+      ["Nível de Cuidado\nPredominante",    ag.nivelCuidadoPredominante],
+      ["% Enfermeiro",     `${ag.percentualEnfermeiroPercent}%`],
+      ["% Técnico",        `${ag.percentualTecnicoPercent}%`],
+    ];
+    cpCards.forEach(([lbl, val], i) => {
+      const cx = ML + cpW * i;
+      doc.rect(cx, cpY, cpW, 50).strokeColor("#e0e0e0").lineWidth(0.5).stroke();
+      doc.fontSize(6.5).font(FONT_NORMAL).fillColor("#888888")
+        .text(lbl, cx + 4, cpY + 5, { width: cpW - 8, align: "center" });
+      // Restore y so the next card label starts at the same absolute y
+      doc.y = cpY + 5;
+      doc.fontSize(9).font(FONT_BOLD).fillColor("#1a365d")
+        .text(val, cx + 4, cpY + 28, { width: cpW - 8, align: "center" });
+      doc.y = cpY + 28;
+    });
+    doc.y = cpY + 58;
+
+    // ── 8. PARÂMETROS + 9. QUADRO DE PESSOAL ─────────────────────────────
+    // Estimate total height for both sections so we add AT MOST one page break.
+    const pW = pageW / 3;
+    const pCards = [
+      ["Valor do IST",                    `${ag.parametros.istPercent}%`],
+      ["Dias de Trabalho por Semana",     `${ag.parametros.diasTrabalhoSemana}`],
+      ["Jornada Semanal Enfermeiro",      `${ag.parametros.cargaHorariaEnfermeiro}h`],
+      ["Jornada Semanal Técnico",         `${ag.parametros.cargaHorariaTecnico}h`],
+      ["Equipe com Restrições",           ag.parametros.equipeComRestricoes ? "Sim" : "Não"],
+      ["Fator de Restrição",              ag.parametros.fatorRestricao != null ? `${ag.parametros.fatorRestricao}` : "—"],
+      ["Método de Cálculo",               ag.parametros.metodoCalculo ?? "Não informado"],
+    ];
+    const pRowCount = Math.ceil(pCards.length / 3);
+    // section 8: title(~35) + cards rows
+    // section 9: title(~35) + subtitle(~20) + header(~30) + 3 rows(~60)
+    const sectionsNeeded = 35 + pRowCount * 40 + 35 + 20 + 30 + 60;
+    if (doc.y + sectionsNeeded > doc.page.height - doc.page.margins.bottom) doc.addPage();
+
+    sectionTitle(doc, "Parâmetros");
+    const pY = doc.y;
+    pCards.forEach(([lbl, val], i) => {
+      const col = i % 3;
+      const row = Math.floor(i / 3);
+      const cx = ML + pW * col;
+      const cy = pY + row * 40;
+      infoCard(doc, cx, cy, pW, 36, lbl, val);
+      const isLastInRow = (col === 2) || (i === pCards.length - 1);
+      if (!isLastInRow) doc.y = cy;
+    });
+    doc.y = pY + pRowCount * 40 + 8;
+
+    // ── 9. QUADRO DE PESSOAL DIMENSIONADO ────────────────────────────────
+    sectionTitle(doc, "Quadro de Pessoal Dimensionado");
+    doc
+      .fontSize(9).font(FONT_BOLD).fillColor("#1a365d")
+      .text(`TOTAL de Profissionais: ${ag.qpTotal.toFixed(2)}`, ML, doc.y);
+    doc.moveDown(0.6);
+    const qpHeaders = [
+      { text: "",                          width: pageW * 0.34, align: "left"   as const },
+      { text: "THE Semanal (Enfermagem)",  width: pageW * 0.33, align: "center" as const },
+      { text: "THE Semanal (Técnicos)",    width: pageW * 0.33, align: "center" as const },
+    ];
+    const qpRows = [
+      ["Cuidado",              `${ag.cuidadoEnfermeiro.toFixed(2)}`,   `${ag.cuidadoTecnico.toFixed(2)}`],
+      ["Segurança técnica",    `${ag.segurancaEnfermeiro.toFixed(2)}`, `${ag.segurancaTecnico.toFixed(2)}`],
+      ["TOTAL de Profissionais", `${ag.qpEnfermeiros.toFixed(2)}`,     `${ag.qpTecnicos.toFixed(2)}`],
+    ];
+    generateTable(doc, qpHeaders, qpRows);
+  });
+}
+
+// ── TIPOS PARA OS 6 RELATÓRIOS DE VARIAÇÃO ───────────────────────────────────
+
+interface CargoRowPdf {
+  cargoNome: string;
+  atualQtd: number;
+  baselineQtd: number;
+  calculadoQtd: number | null;
+  ajusteQtd: number | null;
+  projetadoQtd: number;
+  variacaoQtd: number;
+  atualRs: number;
+  baselineRs: number;
+  calculadoRs: number | null;
+  ajusteRs: number | null;
+  projetadoRs: number;
+  variacaoRs: number;
+  observacao: string;
+}
+
+interface TabelaVariacaoPdf {
+  setor: string;
+  snapshotNome: string;
+  snapshotData: string;
+  variacaoPercQtd: number;
+  variacaoPercRs: number;
+  cargos: CargoRowPdf[];
+}
+
+interface SnapshotVariacaoInput {
+  hospitalNome: string;
+  snapshotData: string;
+  snapshotNome: string;
+  tabelas: TabelaVariacaoPdf[];
+}
+
+// Helpers de formatação
+const fmtRs = (n: number) =>
+  n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+// Formato compacto para tabelas com muitas colunas: sem prefixo "R$ "
+const fmtRsC = (n: number) =>
+  n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtQtd = (n: number) => n.toFixed(0);
+const fmtNull = (n: number | null, fmt: (v: number) => string) =>
+  n == null ? "—" : fmt(n);
+
+// Bloco de metadados de seção (SETOR / BASELINE / CRIADO EM / VARIAÇÃO %)
+function drawMetaHeader(
+  doc: PDFKit.PDFDocument,
+  tabela: TabelaVariacaoPdf,
+  escopo: "QUANTIDADE" | "FINANCEIRO" | "GERAL",
+  ML: number,
+  tableW: number  // deve ser a soma exata das larguras das colunas
+) {
+  const rowH = 16;
+  if (doc.y + rowH * 2 + 4 > doc.page.height - doc.page.margins.bottom)
+    doc.addPage();
+  const y0 = doc.y;
+  const col1W = tableW * 0.40;
+  const col2W = tableW * 0.35;
+  const col3W = tableW - col1W - col2W;
+
+  doc.rect(ML, y0,        tableW, rowH).fill("#e0e0e0");
+  doc.rect(ML, y0 + rowH, tableW, rowH).fill("#eeeeee");
+
+  // Linha 1
+  doc.fontSize(7).font(FONT_BOLD).fillColor("#444444")
+    .text("SETOR:", ML + 4, y0 + 5, { width: 38 });
+  doc.font(FONT_NORMAL)
+    .text(tabela.setor, ML + 42, y0 + 5, { width: col1W - 46 });
+
+  doc.font(FONT_BOLD)
+    .text("BASELINE:", ML + col1W + 4, y0 + 5, { width: 52 });
+  doc.font(FONT_NORMAL)
+    .text(tabela.snapshotNome, ML + col1W + 56, y0 + 5, { width: col2W - 60 });
+
+  doc.font(FONT_BOLD)
+    .text("CRIADO EM:", ML + col1W + col2W + 4, y0 + 5, { width: 56 });
+  doc.font(FONT_NORMAL)
+    .text(tabela.snapshotData, ML + col1W + col2W + 60, y0 + 5, { width: col3W - 64 });
+
+  // Linha 2: variação
+  const varLabel =
+    escopo === "FINANCEIRO"
+      ? "VARIAÇÃO (%) - FINANCEIRO:"
+      : "VARIAÇÃO (%) - QUANTIDADE:";
+  const varValue =
+    escopo === "FINANCEIRO"
+      ? `${tabela.variacaoPercRs.toFixed(2)}%`
+      : `${tabela.variacaoPercQtd.toFixed(2)}%`;
+
+  doc.fontSize(7).font(FONT_BOLD).fillColor("#444444")
+    .text(varLabel, ML + 4, y0 + rowH + 5, { width: 140 });
+  doc.font(FONT_NORMAL)
+    .text(varValue, ML + 144, y0 + rowH + 5, { width: 60 });
+
+  doc.y = y0 + rowH * 2 + 6;
+}
+
+// Linha de TOTAL abaixo da tabela
+function drawTotalRow(
+  doc: PDFKit.PDFDocument,
+  cargos: CargoRowPdf[],
+  headers: { text: string; width: number; align?: "left" | "center" | "right" }[],
+  escopo: "QUANTIDADE" | "FINANCEIRO" | "GERAL",
+  tipo: "MAPA" | "DETALHAMENTO",
+  ML: number
+) {
+  const rowH = 20;
+  const tableW = headers.reduce((s, h) => s + h.width, 0);
+  if (doc.y + rowH > doc.page.height - doc.page.margins.bottom) doc.addPage();
+  const y0 = doc.y;
+
+  doc.rect(ML, y0, tableW, rowH).fill("#e8e8e8");
+
+  const totAtualQtd  = cargos.reduce((s, r) => s + r.atualQtd, 0);
+  const totBaseQtd   = cargos.reduce((s, r) => s + r.baselineQtd, 0);
+  const totCalcQtd   = cargos.some((r) => r.calculadoQtd != null)
+    ? cargos.reduce((s, r) => s + (r.calculadoQtd ?? 0), 0) : null;
+  const totAjusteQtd = cargos.some((r) => r.ajusteQtd != null)
+    ? cargos.reduce((s, r) => s + (r.ajusteQtd ?? 0), 0) : null;
+  const totProjQtd   = cargos.reduce((s, r) => s + r.projetadoQtd, 0);
+  const totVarQtd    = cargos.reduce((s, r) => s + r.variacaoQtd, 0);
+  const totAtualRs   = cargos.reduce((s, r) => s + r.atualRs, 0);
+  const totBaseRs    = cargos.reduce((s, r) => s + r.baselineRs, 0);
+  const totCalcRs    = cargos.some((r) => r.calculadoRs != null)
+    ? cargos.reduce((s, r) => s + (r.calculadoRs ?? 0), 0) : null;
+  const totAjusteRs  = cargos.some((r) => r.ajusteRs != null)
+    ? cargos.reduce((s, r) => s + (r.ajusteRs ?? 0), 0) : null;
+  const totProjRs    = cargos.reduce((s, r) => s + r.projetadoRs, 0);
+  const totVarRs     = cargos.reduce((s, r) => s + r.variacaoRs, 0);
+
+  const cells = buildRowCells(
+    { cargoNome: "TOTAL", atualQtd: totAtualQtd, baselineQtd: totBaseQtd,
+      calculadoQtd: totCalcQtd, ajusteQtd: totAjusteQtd,
+      projetadoQtd: totProjQtd, variacaoQtd: totVarQtd,
+      atualRs: totAtualRs, baselineRs: totBaseRs,
+      calculadoRs: totCalcRs, ajusteRs: totAjusteRs,
+      projetadoRs: totProjRs, variacaoRs: totVarRs, observacao: "" },
+    escopo, tipo
+  );
+
+  let cx = ML;
+  doc.fontSize(7).font(FONT_BOLD).fillColor("#333333");
+  cells.forEach((cell, i) => {
+    doc.text(cell, cx + 4, y0 + 7, {
+      width: headers[i].width - 8,
+      align: headers[i].align ?? "left",
+    });
+    cx += headers[i].width;
+  });
+  doc.y = y0 + rowH;
+}
+
+// Converte um CargoRow em array de células de acordo com escopo/tipo
+function buildRowCells(
+  r: CargoRowPdf,
+  escopo: "QUANTIDADE" | "FINANCEIRO" | "GERAL",
+  tipo: "MAPA" | "DETALHAMENTO"
+): string[] {
+  const v = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+  const vRs = (n: number) => (n >= 0 ? `+${fmtRs(n)}` : fmtRs(n));
+  const vRsC = (n: number) => (n >= 0 ? `+${fmtRsC(n)}` : fmtRsC(n));
+
+  if (tipo === "MAPA") {
+    if (escopo === "QUANTIDADE")
+      return [r.cargoNome, fmtQtd(r.atualQtd), fmtQtd(r.baselineQtd), fmtQtd(r.projetadoQtd), v(r.variacaoQtd)];
+    if (escopo === "FINANCEIRO")
+      return [r.cargoNome, fmtRs(r.atualRs), fmtRs(r.baselineRs), fmtRs(r.projetadoRs), vRs(r.variacaoRs)];
+    // GERAL
+    return [r.cargoNome, fmtRs(r.atualRs), fmtQtd(r.atualQtd), fmtRs(r.baselineRs), fmtQtd(r.baselineQtd), fmtRs(r.projetadoRs), fmtQtd(r.projetadoQtd), vRs(r.variacaoRs), v(r.variacaoQtd)];
+  }
+  // DETALHAMENTO
+  if (escopo === "QUANTIDADE")
+    return [r.cargoNome, fmtQtd(r.atualQtd), fmtQtd(r.baselineQtd),
+      fmtNull(r.calculadoQtd, fmtQtd), fmtNull(r.ajusteQtd, (n) => v(Math.round(n))),
+      fmtQtd(r.projetadoQtd), v(r.variacaoQtd), r.observacao];
+  if (escopo === "FINANCEIRO")
+    return [r.cargoNome, fmtRs(r.atualRs), fmtRs(r.baselineRs),
+      fmtNull(r.calculadoRs, fmtRs), fmtNull(r.ajusteRs, vRs),
+      fmtRs(r.projetadoRs), vRs(r.variacaoRs), r.observacao];
+  // GERAL — usa formato compacto (sem "R$ ") para caber nas colunas estreitas
+  return [r.cargoNome, fmtRsC(r.atualRs), fmtQtd(r.atualQtd),
+    fmtRsC(r.baselineRs), fmtQtd(r.baselineQtd),
+    fmtNull(r.calculadoRs, fmtRsC), fmtNull(r.calculadoQtd, fmtQtd),
+    fmtNull(r.ajusteRs, vRsC), fmtNull(r.ajusteQtd, (n) => v(Math.round(n))),
+    fmtRsC(r.projetadoRs), fmtQtd(r.projetadoQtd),
+    vRsC(r.variacaoRs), v(r.variacaoQtd), r.observacao];
+}
+
+function buildHeaders(
+  escopo: "QUANTIDADE" | "FINANCEIRO" | "GERAL",
+  tipo: "MAPA" | "DETALHAMENTO",
+  pageW: number
+): { text: string; width: number; align?: "left" | "center" | "right" }[] {
+  const L = "left" as const;
+  const C = "center" as const;
+  const R = "right" as const;
+
+  if (tipo === "MAPA") {
+    if (escopo === "QUANTIDADE") return [
+      { text: "CARGO",           width: pageW * 0.32, align: L },
+      { text: "ATUAL (QTD)",     width: pageW * 0.17, align: C },
+      { text: "BASELINE (QTD)", width: pageW * 0.17, align: C },
+      { text: "PROJETADO (QTD)",width: pageW * 0.17, align: C },
+      { text: "VARIAÇÃO (QTD)", width: pageW * 0.17, align: C },
+    ];
+    if (escopo === "FINANCEIRO") return [
+      { text: "CARGO",          width: pageW * 0.32, align: L },
+      { text: "ATUAL (R$)",     width: pageW * 0.17, align: R },
+      { text: "BASELINE (R$)", width: pageW * 0.17, align: R },
+      { text: "PROJETADO (R$)",width: pageW * 0.17, align: R },
+      { text: "VARIAÇÃO (R$)", width: pageW * 0.17, align: R },
+    ];
+    // GERAL
+    return [
+      { text: "CARGO",         width: pageW * 0.18, align: L },
+      { text: "ATUAL (R$)",    width: pageW * 0.10, align: R },
+      { text: "ATUAL (QTD)",   width: pageW * 0.09, align: C },
+      { text: "BASE. (R$)",    width: pageW * 0.10, align: R },
+      { text: "BASE. (QTD)",   width: pageW * 0.09, align: C },
+      { text: "PROJ. (R$)",    width: pageW * 0.11, align: R },
+      { text: "PROJ. (QTD)",   width: pageW * 0.09, align: C },
+      { text: "VAR. (R$)",     width: pageW * 0.12, align: R },
+      { text: "VAR. (QTD)",    width: pageW * 0.12, align: C },
+    ];
+  }
+  // DETALHAMENTO — todos em landscape (~762px disponível)
+  if (escopo === "QUANTIDADE") return [
+    { text: "CARGO",            width: pageW * 0.22, align: L },
+    { text: "ATUAL (QTD)",      width: pageW * 0.09, align: C },
+    { text: "BASELINE (QTD)",   width: pageW * 0.10, align: C },
+    { text: "CALCULADO (QTD)",  width: pageW * 0.10, align: C },
+    { text: "AJUSTE QUALIT.",   width: pageW * 0.10, align: C },
+    { text: "PROJETADO (QTD)",  width: pageW * 0.10, align: C },
+    { text: "VARIAÇÃO (QTD)",   width: pageW * 0.10, align: C },
+    { text: "OBSERVAÇÃO",       width: pageW * 0.19, align: L },
+  ];
+  if (escopo === "FINANCEIRO") return [
+    { text: "CARGO",            width: pageW * 0.16, align: L },
+    { text: "ATUAL (R$)",       width: pageW * 0.11, align: R },
+    { text: "BASELINE (R$)",    width: pageW * 0.11, align: R },
+    { text: "CALCULADO (R$)",   width: pageW * 0.11, align: R },
+    { text: "AJUSTE (R$)",      width: pageW * 0.11, align: R },
+    { text: "PROJETADO (R$)",   width: pageW * 0.11, align: R },
+    { text: "VARIAÇÃO (R$)",    width: pageW * 0.11, align: R },
+    { text: "OBSERVAÇÃO",       width: pageW * 0.18, align: L },
+  ];
+  // DETALHAMENTO GERAL landscape — células R$ usam formato compacto (sem prefixo R$)
+  return [
+    { text: "CARGO",          width: pageW * 0.15, align: L },
+    { text: "ATUAL (R$)",     width: pageW * 0.09, align: R },
+    { text: "AT. QTD",        width: pageW * 0.04, align: C },
+    { text: "BASE. (R$)",     width: pageW * 0.09, align: R },
+    { text: "BASE. QTD",      width: pageW * 0.04, align: C },
+    { text: "CALC. (R$)",     width: pageW * 0.09, align: R },
+    { text: "CALC. QTD",      width: pageW * 0.04, align: C },
+    { text: "AJ. (R$)",       width: pageW * 0.075, align: R },
+    { text: "AJ. QTD",        width: pageW * 0.035, align: C },
+    { text: "PROJ. (R$)",     width: pageW * 0.09, align: R },
+    { text: "PROJ. QTD",      width: pageW * 0.04, align: C },
+    { text: "VAR. (R$)",      width: pageW * 0.09, align: R },
+    { text: "VAR. QTD",       width: pageW * 0.04, align: C },
+    { text: "OBS",            width: pageW * 0.09, align: L },
+  ];
+}
+
+const RELATORIO_NOMES: Record<string, string> = {
+  "MAPA-QUANTIDADE":       "Mapa de Variação — Quantidade",
+  "MAPA-FINANCEIRO":       "Mapa de Variação — Financeiro",
+  "MAPA-GERAL":            "Mapa de Variação — Geral",
+  "DETALHAMENTO-QUANTIDADE": "Detalhamento de Variação — Quantidade",
+  "DETALHAMENTO-FINANCEIRO": "Detalhamento de Variação — Financeiro",
+  "DETALHAMENTO-GERAL":      "Detalhamento de Variação — Geral",
+};
+
+export async function pdfVariacaoSnapshot(
+  data: SnapshotVariacaoInput,
+  tipo: "MAPA" | "DETALHAMENTO",
+  escopo: "QUANTIDADE" | "FINANCEIRO" | "GERAL"
+): Promise<Buffer> {
+  // Todos os DETALHAMENTO usam landscape — muitas colunas não cabem em retrato
+  const landscape = tipo === "DETALHAMENTO" || escopo === "GERAL";
+  const relNome = RELATORIO_NOMES[`${tipo}-${escopo}`] ?? `${tipo} ${escopo}`;
+  const title = `${relNome} — ${data.hospitalNome}`;
+
+  return bufferFromDoc(title, (doc) => {
+    const ML = doc.page.margins.left;
+    const pageW = doc.page.width - ML - doc.page.margins.right;
+    const headers = buildHeaders(escopo, tipo, pageW);
+
+    for (const tabela of data.tabelas) {
+      // Estimate space needed: metaHeader (~38) + tableHeader (~30) + rows (20 each) + total (20)
+      const estimatedH = 38 + 30 + tabela.cargos.length * 20 + 20;
+      if (doc.y + estimatedH > doc.page.height - doc.page.margins.bottom) {
+        doc.addPage();
+      }
+
+      drawMetaHeader(doc, tabela, escopo, ML, headers.reduce((s, h) => s + h.width, 0));
+
+      const rows = tabela.cargos.map((c) => buildRowCells(c, escopo, tipo));
+      generateTable(doc, headers, rows, { headerHeight: 24, dynamicRowHeight: tipo === "DETALHAMENTO" });
+
+      drawTotalRow(doc, tabela.cargos, headers, escopo, tipo, ML);
+      doc.moveDown(1.2);
+    }
+  }, { landscape });
+}
 
 export async function pdfResumoDiario(payload: {
   data: string;
@@ -733,7 +1375,7 @@ export async function pdfDimensionamento(payload: {
     quadroPessoalTecnico: number;
   };
 }): Promise<Buffer> {
-  const title = `Dimensionamento de Enfermagem - ${payload.unidade.nome}`;
+  const title = `${payload.unidade.nome}`;
   return bufferFromDoc(title, (doc) => {
     doc.y += 10;
 
