@@ -261,7 +261,7 @@ function sectionTitle(doc: PDFKit.PDFDocument, title: string) {
 const COFEN: Record<string, { horas: number; percEnf: number; percTec: number }> = {
   MINIMOS:         { horas: 4,  percEnf: 33, percTec: 67 },
   INTERMEDIARIOS:  { horas: 6,  percEnf: 33, percTec: 67 },
-  ALTA_DEPENDENCIA:{ horas: 10, percEnf: 16, percTec: 84 },
+  ALTA_DEPENDENCIA:{ horas: 10, percEnf: 38, percTec: 62 },
   SEMI_INTENSIVOS: { horas: 10, percEnf: 42, percTec: 58 },
   INTENSIVOS:      { horas: 18, percEnf: 52, percTec: 48 },
 };
