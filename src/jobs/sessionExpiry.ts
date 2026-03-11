@@ -249,6 +249,9 @@ export function scheduleSessionExpiry(ds: DataSource) {
     }
   };
 
+  // Referência mutável para o handle atual — necessário para cleanup correto em qualquer iteração
+  let currentHandle: ReturnType<typeof setTimeout>;
+
   // Função que agenda o próximo disparo baseado em meia-noite (DST-safe)
   const scheduleNext = () => {
     const msUntilMidnight = getMillisecondsUntilMidnight();
@@ -262,19 +265,17 @@ export function scheduleSessionExpiry(ds: DataSource) {
       )} minutos (${nextRun.toLocaleString(DateTime.DATETIME_FULL)})`
     );
 
-    const timeoutHandle = setTimeout(async () => {
+    currentHandle = setTimeout(async () => {
       await runForYesterday();
       scheduleNext(); // Re-agenda para a próxima meia-noite (recalcula para lidar com DST)
     }, msUntilMidnight);
-
-    return timeoutHandle;
   };
 
-  const firstHandle = scheduleNext();
+  scheduleNext();
 
-  // Retorna função de cleanup
+  // Retorna função de cleanup — cancela o próximo disparo pendente, seja qual for a iteração
   return () => {
-    clearTimeout(firstHandle);
+    clearTimeout(currentHandle);
   };
 }
 
@@ -310,6 +311,14 @@ export async function processPendingSessionExpiries(ds: DataSource) {
       console.log(
         "[SessionExpiry] Nenhuma sessão ativa pendente de dias anteriores."
       );
+
+      // Mesmo sem sessões pendentes, resetar leitos para PENDENTE
+      // (garante estado limpo se o servidor reiniciou no meio do dia)
+      await leitoRepo
+        .createQueryBuilder()
+        .update(Leito)
+        .set({ status: StatusLeito.PENDENTE })
+        .execute();
 
       return;
     }

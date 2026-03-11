@@ -38,7 +38,7 @@ export class Baseline {
 
   @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
   custo_total!: string;
-  // armazenar arrays de strings no Postgres como text[] (ou use 'simple-array' se preferir uma CSV)
+
   @Column({ type: "text", array: true, nullable: true })
   setores!: SetorBaseline[];
 

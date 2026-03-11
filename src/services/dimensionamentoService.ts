@@ -14,7 +14,6 @@ import {
   LinhaAnaliseFinanceira,
   GrupoCargosNaoInternacao,
 } from "../dto/dimensionamento.dto";
-import { HistoricoOcupacao } from "../entities/HistoricoOcupacao";
 import { StatusLeito } from "../entities/Leito";
 import { LeitosStatus } from "../entities/LeitosStatus";
 import { HistoricoLeitosStatus } from "../entities/HistoricoLeitosStatus";
@@ -34,8 +33,6 @@ export class DimensionamentoService {
   ): Promise<AnaliseInternacaoResponse> {
     const unidadeRepo = this.ds.getRepository(UnidadeInternacao);
     const parametrosRepo = this.ds.getRepository(ParametrosUnidade);
-
-    const historicoRepo = this.ds.getRepository(HistoricoOcupacao);
 
     const unidade = await unidadeRepo.findOne({
       where: { id: unidadeId },
@@ -98,124 +95,21 @@ export class DimensionamentoService {
     const diasNoPeriodo =
       Math.floor(fimPeriodo.diff(inicioPeriodo, "days").days) + 1;
 
-    // Converter para Date para queries do TypeORM
-    const inicioPeriodoDate = inicioPeriodo.toJSDate();
-    const fimPeriodoDate = fimPeriodo.toJSDate();
-
     let totalPacientesMedio = 0;
     let mediaDiariaClassificacao: { [key: string]: number } = {};
-    let somaTotalClassificacao: { [key: string]: number } = {};
+    let somaTotalClassificacao: { [key: string]: number } = {
+      MINIMOS: 0,
+      INTERMEDIARIOS: 0,
+      ALTA_DEPENDENCIA: 0,
+      SEMI_INTENSIVOS: 0,
+      INTENSIVOS: 0,
+    };
     let taxaOcupacaoPeriodo = 0;
 
-    // PRIMEIRO: verificar se existem históricos para essa unidade (em qualquer período)
-    const totalHistoricos = await historicoRepo
-      .createQueryBuilder("h")
-      .where("h.unidadeId = :unidadeId", { unidadeId })
-      .getCount();
-
-    // Busca todos os registros de histórico que se sobrepõem ao período
-    const historicosDoMes = await historicoRepo
-      .createQueryBuilder("h")
-      .leftJoinAndSelect("h.leito", "leito")
-      .where("h.unidadeId = :unidadeId", { unidadeId })
-      .andWhere(
-        "(h.inicio <= :fimPeriodo AND (h.fim IS NULL OR h.fim >= :inicioPeriodo))",
-        {
-          inicioPeriodo: inicioPeriodoDate,
-          fimPeriodo: fimPeriodoDate,
-        }
-      )
-      .getMany();
-
-    // BUSCAR AVALIAÇÕES ATIVAS DO ÚLTIMO DIA DO PERÍODO
-    const dataUltimoDia = fimPeriodo.toISODate(); // YYYY-MM-DD
-    const avaliacoesHoje = await this.avaliacaoRepo.listarPorDia({
-      data: dataUltimoDia!,
-      unidadeId: unidadeId,
-    });
-
-    // Construir conjunto de leitos que já possuem histórico no período para evitar double-count
-    const leitosComHistorico = new Set(
-      historicosDoMes.map((h) => h.leito?.id).filter(Boolean) as string[]
-    );
-
-    if (diasNoPeriodo > 0) {
-      if (historicosDoMes.length === 0 && avaliacoesHoje.length === 0) {
-        console.warn(
-          "Nenhum histórico ou avaliação ativa encontrada para o período"
-        );
-      }
-
-      let totalSomaDiariaPacientes = 0;
-      let diasComDados = 0;
-
-      // Itera por cada dia do período
-      for (let i = 0; i < diasNoPeriodo; i++) {
-        const diaAtual = inicioPeriodo.plus({ days: i });
-        const inicioDia = diaAtual.startOf("day").toJSDate();
-        const fimDia = diaAtual.endOf("day").toJSDate();
-        const isUltimoDia = i === diasNoPeriodo - 1;
-
-        let pacientesNesteDia = 0;
-
-        // Conta quantos registros de histórico estavam ativos neste dia
-        for (const hist of historicosDoMes) {
-          const inicioHist = new Date(hist.inicio).getTime();
-          const fimHist = hist.fim ? new Date(hist.fim).getTime() : Infinity;
-
-          if (
-            inicioHist <= fimDia.getTime() &&
-            fimHist >= inicioDia.getTime()
-          ) {
-            pacientesNesteDia += 1;
-            totalSomaDiariaPacientes += 1;
-            if (hist.classificacao) {
-              somaTotalClassificacao[hist.classificacao] =
-                (somaTotalClassificacao[hist.classificacao] || 0) + 1;
-            }
-          }
-        }
-
-        // Se for o último dia, adicionar as avaliações ativas
-        if (isUltimoDia && avaliacoesHoje.length > 0) {
-          for (const aval of avaliacoesHoje) {
-            const leitoIdAval = aval.leito?.id ?? null;
-            if (leitoIdAval && leitosComHistorico.has(leitoIdAval)) {
-              continue;
-            }
-
-            pacientesNesteDia += 1;
-            totalSomaDiariaPacientes += 1;
-            if (aval.classificacao) {
-              somaTotalClassificacao[aval.classificacao] =
-                (somaTotalClassificacao[aval.classificacao] || 0) + 1;
-            }
-          }
-        }
-
-        if (pacientesNesteDia > 0) {
-          diasComDados += 1;
-        }
-      }
-
-      // Calcula a média dividindo a soma total pelo número de dias
-      totalPacientesMedio = totalSomaDiariaPacientes / diasNoPeriodo;
-
-      // IMPORTANTE: mediaDiariaClassificacao é a MÉDIA diária de cada tipo
-      // mas distribuicaoTotalClassificacao é o TOTAL do mês (soma)
-      for (const key in somaTotalClassificacao) {
-        mediaDiariaClassificacao[key] =
-          somaTotalClassificacao[key] / diasNoPeriodo;
-      }
-
-      const numeroLeitos = unidade.leitos.length;
-      taxaOcupacaoPeriodo =
-        numeroLeitos > 0 ? totalPacientesMedio / numeroLeitos : 0;
-    } else {
-      console.error("Erro: diasNoPeriodo inválido:", diasNoPeriodo);
-    }
-
-    // === MÉTRICA: % LEITOS AVALIADOS (OCUPADOS) NO PERÍODO ===
+    // === FONTE DE DADOS: historicos_leitos_status ===
+    // Cada registro representa o snapshot do final do dia para a unidade.
+    // O job noturno reseta os leitos para PENDENTE toda noite, forçando reavaliação diária,
+    // o que garante 1 registro por dia — sem gaps no período.
 
     const totalLeitos = unidade.leitos.length;
     let leitosOcupados = 0;
@@ -223,19 +117,16 @@ export class DimensionamentoService {
     let leitosPendentes = 0;
     let leitosInativos = 0;
 
-    // Verificar se estamos analisando APENAS o dia de hoje
     const isApenasHoje =
       diasNoPeriodo === 1 && fimPeriodo.hasSame(dataAtual, "day");
 
     if (isApenasHoje) {
-      // Período de 1 dia apenas (hoje) - usar dados da tabela leitos_status
-
+      // Hoje: usa leitos_status (snapshot ao vivo atualizado a cada evento)
       const leitosStatusRepo = this.ds.getRepository(LeitosStatus);
       const leitosStatus = await leitosStatusRepo.findOne({
         where: { unidade: { id: unidadeId } },
       });
 
-      // leitosPendentes sempre vem do status real dos leitos
       for (const leito of unidade.leitos) {
         if (leito.status === StatusLeito.PENDENTE) leitosPendentes++;
         if (leito.status === StatusLeito.INATIVO) leitosInativos++;
@@ -245,31 +136,33 @@ export class DimensionamentoService {
         leitosOcupados = leitosStatus.evaluated;
         leitosInativos = leitosStatus.inactive;
         leitosVagos = leitosStatus.vacant;
+
+        somaTotalClassificacao.MINIMOS = leitosStatus.minimumCare;
+        somaTotalClassificacao.INTERMEDIARIOS = leitosStatus.intermediateCare;
+        somaTotalClassificacao.ALTA_DEPENDENCIA = leitosStatus.highDependency;
+        somaTotalClassificacao.SEMI_INTENSIVOS = leitosStatus.semiIntensive;
+        somaTotalClassificacao.INTENSIVOS = leitosStatus.intensive;
       } else {
+        // Fallback: sem registro ainda hoje, tudo zero
         leitosOcupados = 0;
-
-        // Contar ocupados do histórico atual
-        const leitosOcupadosSet = new Set<string>();
-        for (const hist of historicosDoMes) {
-          if (hist.leito?.id) leitosOcupadosSet.add(hist.leito.id);
-        }
-        for (const aval of avaliacoesHoje) {
-          if (aval.leito?.id) leitosOcupadosSet.add(aval.leito.id);
-        }
-        leitosOcupados = leitosOcupadosSet.size;
-
-        // Vagos = Total - Pendentes - Inativos - Ocupados
-        leitosVagos =
-          totalLeitos - leitosPendentes - leitosInativos - leitosOcupados;
+        leitosVagos = totalLeitos - leitosPendentes - leitosInativos;
       }
-    } else {
-      // Período passado - buscar dados históricos salvos
 
+      const totalPacientesHoje = leitosOcupados;
+      totalPacientesMedio = totalPacientesHoje;
+      for (const key in somaTotalClassificacao) {
+        mediaDiariaClassificacao[key] = somaTotalClassificacao[key];
+      }
+      taxaOcupacaoPeriodo =
+        totalLeitos > 0 ? totalPacientesMedio / totalLeitos : 0;
+    } else {
+      // Período passado: usa historicos_leitos_status como fonte única.
+      // Cada campo (evaluated, vacant, inactive, minimumCare, etc.) representa
+      // os valores reais do final daquele dia — sem necessidade de loop ou média manual.
       const historicoLeitosStatusRepo = this.ds.getRepository(
         HistoricoLeitosStatus
       );
 
-      // Query timezone-aware para buscar registros do período
       const inicioStr = inicioPeriodo.toISODate()!;
       const fimStr = fimPeriodo.toISODate()!;
 
@@ -285,39 +178,48 @@ export class DimensionamentoService {
           "(hls.data AT TIME ZONE 'America/Sao_Paulo')::DATE <= :fim::DATE",
           { fim: fimStr }
         )
-        .orderBy("hls.data", "DESC")
+        .orderBy("hls.data", "ASC")
         .getMany();
 
-      // Log detalhado dos registros encontrados
       if (historicosStatus.length > 0) {
-        historicosStatus.forEach((h, index) => {
-          const dataSP = DateTime.fromJSDate(h.data, { zone: "UTC" })
-            .setZone("America/Sao_Paulo")
-            .toFormat("dd/MM/yyyy HH:mm:ss");
-        });
-      }
-
-      // leitosOcupados vem da MESMA fonte de historicos_ocupacao usada em totalAvaliacoes
-      // para garantir consistência (leitosOcupados === totalAvaliacoes)
-      leitosOcupados = Math.round(totalPacientesMedio * diasNoPeriodo);
-
-      if (historicosStatus.length > 0) {
-        // leitosInativos usa historicos_leitos_status (leitos inativos não dependem de avaliações)
+        let somaEvaluated = 0;
+        let somaVagos = 0;
         let somaInativos = 0;
+
         historicosStatus.forEach((h) => {
+          somaEvaluated += h.evaluated;
+          somaVagos += h.vacant;
           somaInativos += h.inactive;
+          somaTotalClassificacao.MINIMOS += h.minimumCare;
+          somaTotalClassificacao.INTERMEDIARIOS += h.intermediateCare;
+          somaTotalClassificacao.ALTA_DEPENDENCIA += h.highDependency;
+          somaTotalClassificacao.SEMI_INTENSIVOS += h.semiIntensive;
+          somaTotalClassificacao.INTENSIVOS += h.intensive;
         });
+
+        leitosOcupados = somaEvaluated;
+        leitosVagos = somaVagos;
         leitosInativos = somaInativos;
+
+        // Leito-dias sem nenhum snapshot (dias sem registro em historicos_leitos_status)
+        // = dias em que o job não rodou, unidade não existia, ou nurses não avaliaram nada
+        // A conta fecha: ocupados + vagos + inativos + pendentes = totalLeitosDia
+        const totalLeitosDiaCalculado = totalLeitos * diasNoPeriodo;
+        const contabilizados = leitosOcupados + leitosVagos + leitosInativos;
+        leitosPendentes = Math.max(0, totalLeitosDiaCalculado - contabilizados);
+
+        totalPacientesMedio = somaEvaluated / diasNoPeriodo;
+        for (const key in somaTotalClassificacao) {
+          mediaDiariaClassificacao[key] =
+            somaTotalClassificacao[key] / diasNoPeriodo;
+        }
       } else {
-        leitosInativos = 0;
-        leitosPendentes = 0;
+        // Nenhum snapshot para o período inteiro — todos os leito-dias ficam sem dados
+        leitosPendentes = totalLeitos * diasNoPeriodo;
       }
 
-      // leitosVagos = total leitos-dia - ocupados - inativos (fecha o total de forma consistente)
-      leitosVagos = Math.max(
-        0,
-        totalLeitos * diasNoPeriodo - leitosOcupados - leitosInativos
-      );
+      taxaOcupacaoPeriodo =
+        totalLeitos > 0 ? totalPacientesMedio / totalLeitos : 0;
     }
 
     // Calcular total de leitos-dia (total de leitos × dias no período)
@@ -338,6 +240,25 @@ export class DimensionamentoService {
 
     // taxaOcupacaoPeriodo já foi calculado antes como fração (0..1)
     // Não precisa recalcular
+
+    // --- AJUSTE PELA TAXA DE OCUPAÇÃO CUSTOMIZADA ---
+    // Se o gestor salvou uma taxa customizada, re-escala mediaDiariaClassificacao e
+    // somaTotalClassificacao para que o THE (e consequentemente o QP) reflita a ocupação
+    // projetada pelo gestor e não apenas a taxa histórica do período.
+    // taxaOcupacaoPeriodo, totalPacientesMedio e leitosOcupados NÃO são alterados —
+    // continuam refletindo os dados reais do histórico.
+    if (taxaCustomizada && taxaOcupacaoPeriodo > 0) {
+      const fatorEscala =
+        Number(taxaCustomizada.taxa) / 100 / taxaOcupacaoPeriodo;
+      for (const key in mediaDiariaClassificacao) {
+        mediaDiariaClassificacao[key] *= fatorEscala;
+      }
+      for (const key in somaTotalClassificacao) {
+        somaTotalClassificacao[key] = Math.round(
+          somaTotalClassificacao[key] * fatorEscala
+        );
+      }
+    }
 
     // --- ETAPA 3: CALCULAR TOTAL DE HORAS DE ENFERMAGEM (THE) ---
     // Mapeamento de classificações do banco para horas de enfermagem
@@ -382,40 +303,46 @@ export class DimensionamentoService {
     const S = hMinimos + hIntermediarios;
 
     let percentualEnfermeiro = 0.52;
-    let criterioAplicado = "Intensivos / padrão";
+    let criterioAplicado = "Intensivos ";
 
     // Critério 1 (agora com HORAS): if (S >= PADC and S >= PCSI and S >= PCIt) then f = 0.33
-
-    if (S >= hAltaDependencia && S >= hSemiIntensivos && S >= hIntensivos) {
+    // Guarda especial: se não há pacientes (todas as horas = 0), não aplicar critério algum —
+    // o resultado final do THE será 0 de qualquer forma, mas o criterioAplicado ficaria enganoso.
+    // Resolução COFEN 543/2017, art. 5 §2:
+    // "Em caso de igualdade de quantitativos entre categorias, deverá prevalecer
+    //  aquela que exigir maior percentual de enfermeiros."
+    // → avalia do MAIS para o MENOS especializado; >= garante que empate vai ao critério mais exigente.
+    if (totalHorasEnfermagem === 0) {
+      percentualEnfermeiro = 0.33;
+      criterioAplicado = "Sem dados (padrão)";
+    } else if (
+      hIntensivos >= S &&
+      hIntensivos >= hAltaDependencia &&
+      hIntensivos >= hSemiIntensivos
+    ) {
+      // Critério 4: PCIt domina ou empata com todos
+      percentualEnfermeiro = 0.52;
+      criterioAplicado = "Intensivos";
+    } else if (
+      hSemiIntensivos >= S &&
+      hSemiIntensivos >= hAltaDependencia &&
+      hSemiIntensivos >= hIntensivos
+    ) {
+      // Critério 3: PCSI domina ou empata com todos exceto PCIt
+      percentualEnfermeiro = 0.42;
+      criterioAplicado = "Semi-Intensivos";
+    } else if (
+      hAltaDependencia >= S &&
+      hAltaDependencia >= hSemiIntensivos &&
+      hAltaDependencia >= hIntensivos
+    ) {
+      // Critério 2: PADC domina ou empata
+      percentualEnfermeiro = 0.38;
+      criterioAplicado = "Alta Dependência";
+    } else {
+      // Critério 1: PCM + PCI dominam estritamente
       percentualEnfermeiro = 0.33;
       criterioAplicado = "Mínimos + Intermediários";
-    } else {
-      // Critério 2 (HORAS): else if (PADC > S and PADC >= PCSI and PADC >= PCIt) then f = 0.37
-
-      if (
-        hAltaDependencia > S &&
-        hAltaDependencia >= hSemiIntensivos &&
-        hAltaDependencia >= hIntensivos
-      ) {
-        percentualEnfermeiro = 0.37;
-        criterioAplicado = "Alta Dependência";
-      } else {
-        // Critério 3 (HORAS): else if (PCSI > S and PCSI > PADC and PCSI >= PCIt) then f = 0.42
-
-        if (
-          hSemiIntensivos > S &&
-          hSemiIntensivos > hAltaDependencia &&
-          hSemiIntensivos >= hIntensivos
-        ) {
-          percentualEnfermeiro = 0.42;
-          criterioAplicado = "Semi-Intensivos";
-        } else {
-          // Critério 4: else f = 0.52 (Intensivos / padrão)
-
-          percentualEnfermeiro = 0.52;
-          criterioAplicado = "Intensivos / padrão";
-        }
-      }
     }
 
     const percentualTecnico = 1 - percentualEnfermeiro;
@@ -598,8 +525,8 @@ export class DimensionamentoService {
 
       // Período
       periodo: {
-        inicio: inicioPeriodo.toISO()!,
-        fim: fimPeriodo.toISO()!,
+        inicio: inicioPeriodo.toISODate()!,
+        fim: fimPeriodo.toISODate()!,
         dias: diasNoPeriodo,
         origem: (inicio || fim ? "intervalo_customizado" : "mes_corrente") as
           | "intervalo_customizado"
@@ -626,6 +553,12 @@ export class DimensionamentoService {
       taxaOcupacaoCustomizada: taxaCustomizada
         ? {
             taxa: Number(taxaCustomizada.taxa),
+            leitosOcupados: Math.round(
+              totalLeitosDia * (Number(taxaCustomizada.taxa) / 100)
+            ),
+            totalPacientesMedio: Number(
+              (totalLeitos * (Number(taxaCustomizada.taxa) / 100)).toFixed(2)
+            ),
             createdAt: taxaCustomizada.createdAt,
             updatedAt: taxaCustomizada.updatedAt,
           }
