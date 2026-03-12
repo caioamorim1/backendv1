@@ -337,7 +337,7 @@ export class DimensionamentoService {
       hAltaDependencia >= hIntensivos
     ) {
       // Critério 2: PADC domina ou empata
-      percentualEnfermeiro = 0.38;
+      percentualEnfermeiro = 0.36;
       criterioAplicado = "Alta Dependência";
     } else {
       // Critério 1: PCM + PCI dominam estritamente
