@@ -54,7 +54,10 @@ export class SnapshotVariacaoReportService {
     this.snapshotSvc = new SnapshotDimensionamentoService(ds);
   }
 
-  async buildReportData(hospitalId: string): Promise<SnapshotVariacaoData> {
+  async buildReportData(
+    hospitalId: string,
+    unidadeId?: string
+  ): Promise<SnapshotVariacaoData> {
     // 1. Buscar snapshot selecionado
     const snapshot = await this.ds
       .getRepository(SnapshotDimensionamento)
@@ -128,7 +131,8 @@ export class SnapshotVariacaoReportService {
       situacaoAtual,
       snapshotNome,
       snapshotData,
-      cargoNomeMap
+      cargoNomeMap,
+      unidadeId
     );
 
     // 5. Montar tabelas de não-internação (por sítio)
@@ -139,8 +143,15 @@ export class SnapshotVariacaoReportService {
       snapshotData,
       cargoNomeMap,
       sitioNomeMap,
-      sitioAtualMap
+      sitioAtualMap,
+      unidadeId
     );
+
+    const tabelas = [...tabelasInternacao, ...tabelasNaoInternacao];
+
+    if (unidadeId && tabelas.length === 0) {
+      throw new Error("Unidade não encontrada no snapshot selecionado");
+    }
 
     const hospitalNome =
       (await this.ds
@@ -148,11 +159,16 @@ export class SnapshotVariacaoReportService {
         .findOne({ where: { id: hospitalId }, select: ["id", "nome"] }))
         ?.nome ?? dados?.hospital?.nome ?? "";
 
+    const nomeCabecalho =
+      unidadeId && tabelas.length > 0
+        ? `${hospitalNome} — ${tabelas[0].setor.split(" /")[0]}`
+        : hospitalNome;
+
     return {
-      hospitalNome,
+      hospitalNome: nomeCabecalho,
       snapshotData,
       snapshotNome,
-      tabelas: [...tabelasInternacao, ...tabelasNaoInternacao],
+      tabelas,
     };
   }
 
@@ -164,11 +180,16 @@ export class SnapshotVariacaoReportService {
     situacaoAtual: any | null,
     snapshotNome: string,
     snapshotData: string,
-    cargoNomeMap: Record<string, string> = {}
+    cargoNomeMap: Record<string, string> = {},
+    unidadeIdFiltro?: string
   ): Promise<TabelaVariacao[]> {
     const tabelas: TabelaVariacao[] = [];
 
-    for (const pfUnidade of pfList) {
+    const listaFiltrada = unidadeIdFiltro
+      ? pfList.filter((u: any) => u.unidadeId === unidadeIdFiltro)
+      : pfList;
+
+    for (const pfUnidade of listaFiltrada) {
       const { unidadeId, unidadeNome, cargos: pfCargos = [], periodoTravado } = pfUnidade;
 
       // Baseline: staff do snapshot na época de criação
@@ -275,13 +296,18 @@ export class SnapshotVariacaoReportService {
     snapshotData: string,
     cargoNomeMap: Record<string, string> = {},
     sitioNomeMap: Record<string, string> = {},
-    sitioAtualMap: Record<string, Record<string, { qty: number; custoUnitario: number }>> = {}
+    sitioAtualMap: Record<string, Record<string, { qty: number; custoUnitario: number }>> = {},
+    unidadeIdFiltro?: string
   ): Promise<TabelaVariacao[]> {
     const tabelas: TabelaVariacao[] = [];
     // Fallback cache: unidadeId → sitioId → cargoId → quantidadeCalculada
     const calculadoNaoIntFallback: Record<string, Record<string, Record<string, number>>> = {};
 
-    for (const pfUnidade of pfList) {
+    const listaFiltrada = unidadeIdFiltro
+      ? pfList.filter((u: any) => u.unidadeId === unidadeIdFiltro)
+      : pfList;
+
+    for (const pfUnidade of listaFiltrada) {
       const { unidadeId, unidadeNome, sitios = [] } = pfUnidade;
 
       // Baseline staff para a unidade toda (agregado por cargoId)

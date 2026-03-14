@@ -201,13 +201,17 @@ export class ExportController {
   };
 
   /**
-   * GET /export/snapshot/:hospitalId/variacao/pdf?tipo=MAPA&escopo=QUANTIDADE
+   * GET /export/snapshot/:hospitalId/variacao/pdf?tipo=MAPA&escopo=QUANTIDADE&unidadeId=<uuid>
    * tipo: MAPA | DETALHAMENTO
    * escopo: QUANTIDADE | FINANCEIRO | GERAL
+   * unidadeId (opcional): quando informado, gera o relatório apenas da unidade.
+   * - internação: 1 tabela da unidade
+   * - não internação: todas as tabelas de sítios da unidade
    */
   snapshotVariacaoPdf = async (req: Request, res: Response) => {
     try {
       const { hospitalId } = req.params;
+      const unidadeId = req.query.unidadeId as string | undefined;
       const tipo = ((req.query.tipo as string) || "MAPA").toUpperCase() as
         | "MAPA"
         | "DETALHAMENTO";
@@ -217,16 +221,21 @@ export class ExportController {
         | "GERAL";
 
       const svc = new SnapshotVariacaoReportService(this.ds);
-      const data = await svc.buildReportData(hospitalId);
+      const data = await svc.buildReportData(hospitalId, unidadeId);
       const pdf = await pdfVariacaoSnapshot(data as any, tipo, escopo);
 
-      const fname = `variacao_${tipo}_${escopo}_${hospitalId}.pdf`;
+      const fname = unidadeId
+        ? `variacao_${tipo}_${escopo}_${hospitalId}_${unidadeId}.pdf`
+        : `variacao_${tipo}_${escopo}_${hospitalId}.pdf`;
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `inline; filename="${fname}"`);
       return res.send(pdf);
     } catch (err) {
       const details = err instanceof Error ? err.message : String(err);
-      if (details.includes("Nenhum snapshot selecionado")) {
+      if (
+        details.includes("Nenhum snapshot selecionado") ||
+        details.includes("Unidade não encontrada no snapshot")
+      ) {
         return res.status(404).json({ error: "Snapshot não encontrado", details });
       }
       return res.status(500).json({ error: "Erro ao gerar PDF de variação", details });
