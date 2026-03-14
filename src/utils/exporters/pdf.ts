@@ -159,11 +159,12 @@ function generateTable(
 function bufferFromDoc(
   title: string,
   make: (doc: PDFKit.PDFDocument) => void,
-  options?: { landscape?: boolean }
+  options?: { landscape?: boolean; pageSize?: [number, number] }
 ): Promise<Buffer> {
   return new Promise((resolve) => {
     const landscape = options?.landscape ?? false;
-    const size: [number, number] = landscape ? [841.89, 595.28] : [595.28, 841.89];
+    const defaultSize: [number, number] = landscape ? [841.89, 595.28] : [595.28, 841.89];
+    const size = options?.pageSize ?? defaultSize;
     const doc = new PDFDocument({ margin: 40, size });
     const chunks: Buffer[] = [];
 
@@ -174,11 +175,14 @@ function bufferFromDoc(
       if (logo) {
         doc.image(logo, 40, 25, { width: 90 });
       }
+      // Title must avoid the logo (right edge ~130) and emission date (left edge ~page.width-150)
+      const titleX = logo ? 140 : doc.page.margins.left;
+      const titleW = doc.page.width - titleX - 120;
       doc
         .fontSize(14)
         .font(FONT_BOLD)
         .fillColor("#333333")
-        .text(title, { align: "center" });
+        .text(title, titleX, 32, { align: "center", width: titleW });
       doc
         .fontSize(8)
         .font(FONT_NORMAL)
@@ -241,6 +245,14 @@ function infoCard(
   if (doc.y < y + h) doc.y = y + h;
 }
 
+// Helper: formata string YYYY-MM-DD → DD/MM/YYYY sem passar por new Date()
+// (new Date("YYYY-MM-DD") interpreta como UTC meia-noite e pode deslocar um dia
+// em servidores com timezone negativa como America/Sao_Paulo)
+function isoDateToBR(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
 // Helper: section title
 function sectionTitle(doc: PDFKit.PDFDocument, title: string) {
   doc.moveDown(0.8);
@@ -289,7 +301,13 @@ export async function pdfDimensionamentoUnidade(payload: {
     totalAvaliacoes: number;
     totalPacientesMedio: number;
     taxaOcupacaoPeriodoPercent: number;
-    taxaOcupacaoCustomizada?: { taxa: number };
+    taxaOcupacaoCustomizada?: {
+      taxa: number;
+      leitosOcupados: number;
+      totalPacientesMedio: number;
+      createdAt?: string;
+      updatedAt?: string;
+    };
     distribuicaoTotalClassificacao: Record<string, number>;
     mediaDiariaClassificacao: Record<string, number>;
     totalHorasEnfermagem: number;
@@ -306,6 +324,8 @@ export async function pdfDimensionamentoUnidade(payload: {
     kmEnfermeiro: number;
     kmTecnico: number;
     parametros: {
+      nomeEnfermeiro?: string | null;
+      numeroCoren?: string | null;
       istPercent: number;
       diasTrabalhoSemana: number;
       cargaHorariaEnfermeiro: string | number;
@@ -342,29 +362,51 @@ export async function pdfDimensionamentoUnidade(payload: {
     doc.fontSize(8).font(FONT_BOLD).fillColor("#888888")
       .text("UNIDADE", ML + 8, infoY + 7)
       .text("MÉTODO SCP", ML + 200, infoY + 7)
-      .text("TOTAL DE LEITOS", ML + 340, infoY + 7)
-      .text("PERÍODO", ML + 420, infoY + 7);
+      .text("TOTAL DE LEITOS", ML + 340, infoY + 7);
     doc.fontSize(10).font(FONT_BOLD).fillColor("#1a365d")
       .text(ag.unidadeNome, ML + 8, infoY + 19, { width: 185 })
       .text(ag.metodoAvaliacaoSCP?.title ?? "—", ML + 200, infoY + 19, { width: 130 })
-      .text(`${ag.totalLeitos}`, ML + 340, infoY + 19, { width: 70 })
-      .text(
-        `${new Date(ag.periodo.inicio).toLocaleDateString("pt-BR")} a ${new Date(ag.periodo.fim).toLocaleDateString("pt-BR")}`,
-        ML + 420, infoY + 19, { width: pageW - 420 - 8 }
-      );
+      .text(`${ag.totalLeitos}`, ML + 340, infoY + 19, { width: 70 });
     doc.y = infoY + 60;
 
-    // ── 2. PERÍODO DE ANÁLISE ─────────────────────────────────────────────
+    // ── 2. PARÂMETROS ─────────────────────────────────────────────────────
+    sectionTitle(doc, "Parâmetros");
+    const pW = pageW / 3;
+    const pCards = [
+      ["Enfermeiro Responsável",          ag.parametros.nomeEnfermeiro ?? "Não informado"],
+      ["COREN",                            ag.parametros.numeroCoren ?? "Não informado"],
+      ["Valor do IST",                    `${ag.parametros.istPercent}%`],
+      ["Dias de Trabalho por Semana",     `${ag.parametros.diasTrabalhoSemana}`],
+      ["Jornada Semanal Enfermeiro",      `${ag.parametros.cargaHorariaEnfermeiro}h`],
+      ["Jornada Semanal Técnico",         `${ag.parametros.cargaHorariaTecnico}h`],
+      ["Equipe com Restrições",           ag.parametros.equipeComRestricoes ? "Sim" : "Não"],
+      ["Método de Cálculo",               ag.parametros.metodoCalculo ?? "Não informado"],
+    ];
+    const pRowCount = Math.ceil(pCards.length / 3);
+    if (doc.y + pRowCount * 40 + 12 > doc.page.height - doc.page.margins.bottom) doc.addPage();
+    const pY = doc.y;
+    pCards.forEach(([lbl, val], i) => {
+      const col = i % 3;
+      const row = Math.floor(i / 3);
+      const cx = ML + pW * col;
+      const cy = pY + row * 40;
+      infoCard(doc, cx, cy, pW, 36, lbl, val);
+      const isLastInRow = (col === 2) || (i === pCards.length - 1);
+      if (!isLastInRow) doc.y = cy;
+    });
+    doc.y = pY + pRowCount * 40 + 8;
+
+    // ── 3. PERÍODO DE ANÁLISE ─────────────────────────────────────────────
     sectionTitle(doc, "Período de Análise");
     const cw = pageW / 3;
     if (doc.y + 52 > doc.page.height - doc.page.margins.bottom) doc.addPage();
     const periodY = doc.y;
-    infoCard(doc, ML,          periodY, cw, 44, "Data Início",   new Date(ag.periodo.inicio).toLocaleDateString("pt-BR"));
-    infoCard(doc, ML + cw,     periodY, cw, 44, "Data Fim",      new Date(ag.periodo.fim).toLocaleDateString("pt-BR"));
+    infoCard(doc, ML,          periodY, cw, 44, "Data Início",   isoDateToBR(ag.periodo.inicio));
+    infoCard(doc, ML + cw,     periodY, cw, 44, "Data Fim",      isoDateToBR(ag.periodo.fim));
     infoCard(doc, ML + cw * 2, periodY, cw, 44, "Total de Dias", `${ag.periodo.dias}`);
     doc.y = periodY + 52;
 
-    // ── 3. OCUPAÇÃO E AVALIAÇÕES ───────────────────────────────────────────
+    // ── 4. OCUPAÇÃO E AVALIAÇÕES ───────────────────────────────────────────
     sectionTitle(doc, "Ocupação e Avaliações");
     const cw8 = pageW / 8;
     if (doc.y + 58 > doc.page.height - doc.page.margins.bottom) doc.addPage();
@@ -393,25 +435,30 @@ export async function pdfDimensionamentoUnidade(payload: {
     });
     doc.y = ocY + 58;
 
-    // ── 4. BASE DE CÁLCULO ────────────────────────────────────────────────
+    // ── 5. BASE DE CÁLCULO ────────────────────────────────────────────────
     sectionTitle(doc, "Base de Cálculo");
     const cw3 = pageW / 3;
     if (doc.y + 52 > doc.page.height - doc.page.margins.bottom) doc.addPage();
     const calcY = doc.y;
     const taxaCalc = ag.taxaOcupacaoCustomizada?.taxa ?? ag.taxaOcupacaoPeriodoPercent;
+    const leitosOcupadosCalc =
+      ag.taxaOcupacaoCustomizada?.leitosOcupados ?? ag.leitosOcupados;
+    const totalPacientesMedioCalc =
+      ag.taxaOcupacaoCustomizada?.totalPacientesMedio ?? ag.totalPacientesMedio;
     infoCard(doc, ML,          calcY, cw3, 44, "Taxa de Ocupação (para fins de cálculo)", `${taxaCalc}%`);
-    infoCard(doc, ML + cw3,    calcY, cw3, 44, "Leitos Ocupados",    `${ag.leitosOcupados}`);
-    infoCard(doc, ML + cw3*2,  calcY, cw3, 44, "Pacientes Médio/dia", `${ag.totalPacientesMedio.toFixed(2)}`);
+    infoCard(doc, ML + cw3,    calcY, cw3, 44, "Leitos Ocupados",    `${leitosOcupadosCalc}`);
+    infoCard(doc, ML + cw3*2,  calcY, cw3, 44, "Pacientes Médio/dia", `${Number(totalPacientesMedioCalc).toFixed(2)}`);
     doc.y = calcY + 52;
 
-    // ── 5. DISTRIBUIÇÃO DA CLASSIFICAÇÃO ──────────────────────────────────
+    // ── 6. DISTRIBUIÇÃO DA CLASSIFICAÇÃO ──────────────────────────────────
     sectionTitle(doc, "Distribuição da Classificação");
     const classOrder = ["MINIMOS", "INTERMEDIARIOS", "ALTA_DEPENDENCIA", "SEMI_INTENSIVOS", "INTENSIVOS"];
     const totalDist = classOrder.reduce((s, k) => s + (ag.distribuicaoTotalClassificacao[k] ?? 0), 0);
-    const distHeaders = [
-      ...classOrder.map(k => ({ text: CLASSIFICACAO_LABEL[k], width: (pageW * 0.8) / 5, align: "center" as const })),
-      { text: "(%) Período", width: pageW * 0.2, align: "center" as const },
-    ];
+    const distHeaders = classOrder.map(k => ({
+      text: CLASSIFICACAO_LABEL[k],
+      width: pageW / 5,
+      align: "center" as const,
+    }));
     const distHeaderHeight = 30; // tall enough for two-word names
     const distRows = [
       classOrder.map(k => {
@@ -419,12 +466,21 @@ export async function pdfDimensionamentoUnidade(payload: {
         const pct = totalDist > 0 ? ((n / totalDist) * 100).toFixed(2) : "0.00";
         // Single-line cell — avoids rowHeight overflow in generateTable
         return `${n} (${pct}%)`;
-      }).concat(["100%"]),
+      }),
     ];
     generateTable(doc, distHeaders, distRows, { headerHeight: distHeaderHeight });
     doc.moveDown(0.6);
 
-    // ── 6. HORAS DE ENFERMAGEM POR CLASSIFICAÇÃO ──────────────────────────
+    // ── 7. HORAS DE ENFERMAGEM POR CLASSIFICAÇÃO ──────────────────────────
+    // Evita quebra da tabela no meio: se não houver espaço para a seção inteira,
+    // inicia em uma nova página.
+    const heSectionEstimatedHeight = 200; // título + tabela (header + 5 linhas) + total
+    if (
+      doc.y + heSectionEstimatedHeight >
+      doc.page.height - doc.page.margins.bottom
+    ) {
+      doc.addPage();
+    }
     sectionTitle(doc, "Horas de Enfermagem por Classificação");
     const heHeaders = [
       { text: "Classificação",             width: pageW * 0.22, align: "left"   as const },
@@ -460,7 +516,7 @@ export async function pdfDimensionamentoUnidade(payload: {
       });
     doc.moveDown(0.6);
 
-    // ── 7. CLASSIFICAÇÃO DE PACIENTE ──────────────────────────────────────
+    // ── 8. CLASSIFICAÇÃO DE PACIENTE ──────────────────────────────────────
     sectionTitle(doc, "Classificação de Paciente");
     const cpW = pageW / 6;
     if (doc.y + 58 > doc.page.height - doc.page.margins.bottom) doc.addPage();
@@ -486,38 +542,8 @@ export async function pdfDimensionamentoUnidade(payload: {
     });
     doc.y = cpY + 58;
 
-    // ── 8. PARÂMETROS + 9. QUADRO DE PESSOAL ─────────────────────────────
-    // Estimate total height for both sections so we add AT MOST one page break.
-    const pW = pageW / 3;
-    const pCards = [
-      ["Valor do IST",                    `${ag.parametros.istPercent}%`],
-      ["Dias de Trabalho por Semana",     `${ag.parametros.diasTrabalhoSemana}`],
-      ["Jornada Semanal Enfermeiro",      `${ag.parametros.cargaHorariaEnfermeiro}h`],
-      ["Jornada Semanal Técnico",         `${ag.parametros.cargaHorariaTecnico}h`],
-      ["Equipe com Restrições",           ag.parametros.equipeComRestricoes ? "Sim" : "Não"],
-      ["Fator de Restrição",              ag.parametros.fatorRestricao != null ? `${ag.parametros.fatorRestricao}` : "—"],
-      ["Método de Cálculo",               ag.parametros.metodoCalculo ?? "Não informado"],
-    ];
-    const pRowCount = Math.ceil(pCards.length / 3);
-    // section 8: title(~35) + cards rows
-    // section 9: title(~35) + subtitle(~20) + header(~30) + 3 rows(~60)
-    const sectionsNeeded = 35 + pRowCount * 40 + 35 + 20 + 30 + 60;
-    if (doc.y + sectionsNeeded > doc.page.height - doc.page.margins.bottom) doc.addPage();
-
-    sectionTitle(doc, "Parâmetros");
-    const pY = doc.y;
-    pCards.forEach(([lbl, val], i) => {
-      const col = i % 3;
-      const row = Math.floor(i / 3);
-      const cx = ML + pW * col;
-      const cy = pY + row * 40;
-      infoCard(doc, cx, cy, pW, 36, lbl, val);
-      const isLastInRow = (col === 2) || (i === pCards.length - 1);
-      if (!isLastInRow) doc.y = cy;
-    });
-    doc.y = pY + pRowCount * 40 + 8;
-
     // ── 9. QUADRO DE PESSOAL DIMENSIONADO ────────────────────────────────
+    if (doc.y + 150 > doc.page.height - doc.page.margins.bottom) doc.addPage();
     sectionTitle(doc, "Quadro de Pessoal Dimensionado");
     doc
       .fontSize(9).font(FONT_BOLD).fillColor("#1a365d")
@@ -525,13 +551,13 @@ export async function pdfDimensionamentoUnidade(payload: {
     doc.moveDown(0.6);
     const qpHeaders = [
       { text: "",                          width: pageW * 0.34, align: "left"   as const },
-      { text: "THE Semanal (Enfermagem)",  width: pageW * 0.33, align: "center" as const },
-      { text: "THE Semanal (Técnicos)",    width: pageW * 0.33, align: "center" as const },
+      { text: "Enfermeiros",  width: pageW * 0.33, align: "center" as const },
+      { text: "Técnicos",    width: pageW * 0.33, align: "center" as const },
     ];
     const qpRows = [
       ["Cuidado",              `${ag.cuidadoEnfermeiro.toFixed(2)}`,   `${ag.cuidadoTecnico.toFixed(2)}`],
       ["Segurança técnica",    `${ag.segurancaEnfermeiro.toFixed(2)}`, `${ag.segurancaTecnico.toFixed(2)}`],
-      ["TOTAL de Profissionais", `${ag.qpEnfermeiros.toFixed(2)}`,     `${ag.qpTecnicos.toFixed(2)}`],
+      ["Total de Profissionais", `${ag.qpEnfermeiros.toFixed(2)}`,     `${ag.qpTecnicos.toFixed(2)}`],
     ];
     generateTable(doc, qpHeaders, qpRows);
   });
@@ -786,21 +812,22 @@ function buildHeaders(
     { text: "VARIAÇÃO (R$)",    width: pageW * 0.11, align: R },
     { text: "OBSERVAÇÃO",       width: pageW * 0.18, align: L },
   ];
-  // DETALHAMENTO GERAL landscape — células R$ usam formato compacto (sem prefixo R$)
+  // DETALHAMENTO GERAL — renderizado em A3 landscape (~1110pt úteis)
+  // Proporções ajustadas para evitar quebra de linha nos cabeçalhos QTD
   return [
-    { text: "CARGO",          width: pageW * 0.15, align: L },
-    { text: "ATUAL (R$)",     width: pageW * 0.09, align: R },
-    { text: "AT. QTD",        width: pageW * 0.04, align: C },
-    { text: "BASE. (R$)",     width: pageW * 0.09, align: R },
-    { text: "BASE. QTD",      width: pageW * 0.04, align: C },
-    { text: "CALC. (R$)",     width: pageW * 0.09, align: R },
-    { text: "CALC. QTD",      width: pageW * 0.04, align: C },
-    { text: "AJ. (R$)",       width: pageW * 0.075, align: R },
-    { text: "AJ. QTD",        width: pageW * 0.035, align: C },
-    { text: "PROJ. (R$)",     width: pageW * 0.09, align: R },
-    { text: "PROJ. QTD",      width: pageW * 0.04, align: C },
-    { text: "VAR. (R$)",      width: pageW * 0.09, align: R },
-    { text: "VAR. QTD",       width: pageW * 0.04, align: C },
+    { text: "CARGO",          width: pageW * 0.14, align: L },
+    { text: "ATUAL (R$)",     width: pageW * 0.07, align: R },
+    { text: "AT. QTD",        width: pageW * 0.06, align: C },
+    { text: "BASE. (R$)",     width: pageW * 0.07, align: R },
+    { text: "BASE. QTD",      width: pageW * 0.06, align: C },
+    { text: "CALC. (R$)",     width: pageW * 0.07, align: R },
+    { text: "CALC. QTD",      width: pageW * 0.06, align: C },
+    { text: "AJ. (R$)",       width: pageW * 0.07, align: R },
+    { text: "AJ. QTD",        width: pageW * 0.05, align: C },
+    { text: "PROJ. (R$)",     width: pageW * 0.07, align: R },
+    { text: "PROJ. QTD",      width: pageW * 0.06, align: C },
+    { text: "VAR. (R$)",      width: pageW * 0.07, align: R },
+    { text: "VAR. QTD",       width: pageW * 0.06, align: C },
     { text: "OBS",            width: pageW * 0.09, align: L },
   ];
 }
@@ -821,6 +848,9 @@ export async function pdfVariacaoSnapshot(
 ): Promise<Buffer> {
   // Todos os DETALHAMENTO usam landscape — muitas colunas não cabem em retrato
   const landscape = tipo === "DETALHAMENTO" || escopo === "GERAL";
+  // DETALHAMENTO-GERAL tem 14 colunas; usa A3 landscape para evitar cabeçalhos cortados
+  const isGeralDetalhamento = tipo === "DETALHAMENTO" && escopo === "GERAL";
+  const pageSize: [number, number] | undefined = isGeralDetalhamento ? [1190.55, 841.89] : undefined;
   const relNome = RELATORIO_NOMES[`${tipo}-${escopo}`] ?? `${tipo} ${escopo}`;
   const title = `${relNome} — ${data.hospitalNome}`;
 
@@ -844,7 +874,7 @@ export async function pdfVariacaoSnapshot(
       drawTotalRow(doc, tabela.cargos, headers, escopo, tipo, ML);
       doc.moveDown(1.2);
     }
-  }, { landscape });
+  }, { landscape, pageSize });
 }
 
 export async function pdfResumoDiario(payload: {

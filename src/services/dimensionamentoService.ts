@@ -600,6 +600,8 @@ export class DimensionamentoService {
 
       // Parâmetros
       parametros: {
+        nomeEnfermeiro: parametros?.nome_enfermeiro ?? null,
+        numeroCoren: parametros?.numero_coren ?? null,
         ist,
         istPercent: Number((ist * 100).toFixed(0)),
         diasTrabalhoSemana,

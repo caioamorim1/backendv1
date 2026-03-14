@@ -14,9 +14,10 @@ export const ExportRoutes = (ds: DataSource): Router => {
   r.get("/dimensionamento/:unidadeId/pdf", ctrl.dimensionamentoUnidadePdf);
 
   // PDF de variação de snapshot
-  // GET /export/snapshot/:hospitalId/variacao/pdf?tipo=MAPA&escopo=QUANTIDADE
+  // GET /export/snapshot/:hospitalId/variacao/pdf?tipo=MAPA&escopo=QUANTIDADE&unidadeId=<uuid>
   // tipo: MAPA | DETALHAMENTO
   // escopo: QUANTIDADE | FINANCEIRO | GERAL
+  // unidadeId (opcional): filtra relatório para uma unidade específica
   r.get("/snapshot/:hospitalId/variacao/pdf", ctrl.snapshotVariacaoPdf);
 
   return r;
