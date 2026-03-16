@@ -96,6 +96,8 @@ export class SnapshotNetworkDashboardService {
         grupoId: string;
         grupoNome: string;
         hospitais: HospitalComputed[];
+        // hospitais sem região vinculados diretamente ao grupo
+        hospitaisDiretos: HospitalComputed[];
         regioesMap: Map<
           string,
           {
@@ -108,8 +110,8 @@ export class SnapshotNetworkDashboardService {
     >();
 
     for (const hc of hospitaisComputados) {
-      if (!hc.grupoId || !hc.regiaoId) {
-        // Sem vínculo suficiente para o dashboard hierárquico. Mantemos simples: ignorar.
+      if (!hc.grupoId) {
+        // Hospital sem grupo: omitir (não é possível posicioná-lo na hierarquia)
         continue;
       }
 
@@ -118,12 +120,19 @@ export class SnapshotNetworkDashboardService {
           grupoId: hc.grupoId,
           grupoNome: hc.grupoNome || "Grupo",
           hospitais: [],
+          hospitaisDiretos: [],
           regioesMap: new Map(),
         });
       }
 
       const grupo = gruposMap.get(hc.grupoId)!;
       grupo.hospitais.push(hc);
+
+      if (!hc.regiaoId) {
+        // Hospital vinculado diretamente ao grupo (sem região)
+        grupo.hospitaisDiretos.push(hc);
+        continue;
+      }
 
       if (!grupo.regioesMap.has(hc.regiaoId)) {
         grupo.regioesMap.set(hc.regiaoId, {
@@ -154,6 +163,10 @@ export class SnapshotNetworkDashboardService {
         grupoId: g.grupoId,
         grupoNome: g.grupoNome,
         global: buildGlobal(g.hospitais, { includeRankings: true }),
+        // Hospitais sem região aparecem diretamente sob o grupo
+        hospitais: g.hospitaisDiretos
+          .map((h) => hospitalPayload(h))
+          .sort((a, b) => a.hospitalNome.localeCompare(b.hospitalNome)),
         regioes,
       };
     });
@@ -218,10 +231,14 @@ export class SnapshotNetworkDashboardService {
       .leftJoinAndSelect("regiao.grupo", "grupo")
       .leftJoinAndSelect("grupo.rede", "rede")
       .leftJoinAndSelect("hospital.grupo", "grupoDirect")
+      .leftJoinAndSelect("grupoDirect.rede", "grupoDiretaRede")
       .leftJoinAndSelect("hospital.rede", "redeDirect");
 
     if (tipo === "rede") {
-      qb.where("rede.id = :id", { id }).orWhere("redeDirect.id = :id", { id });
+      // Incluir hospitais vinculados via: regiao→grupo→rede, grupoDireto→rede ou diretamente à rede
+      qb.where("rede.id = :id", { id })
+        .orWhere("grupoDiretaRede.id = :id", { id })
+        .orWhere("redeDirect.id = :id", { id });
     } else if (tipo === "grupo") {
       qb.where("grupo.id = :id", { id }).orWhere("grupoDirect.id = :id", {
         id,
