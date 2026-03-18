@@ -78,9 +78,9 @@ export class HospitalSectorsAggregateRepository {
         uni.descricao AS "descr",
         SUM(
           (
-            (COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) + 
-             COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-             COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0))
+            (COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) + 
+             COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+             COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), ''), 'null')::numeric, 0))
             * COALESCE(cuni.quantidade_funcionarios, 0)
           )
         ) AS "costAmount",
@@ -135,9 +135,9 @@ export class HospitalSectorsAggregateRepository {
         uni.descricao AS "descr",
         SUM(
           (
-            (COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) + 
-             COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-             COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0))
+            (COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) + 
+             COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+             COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), ''), 'null')::numeric, 0))
             * COALESCE(cuni.quantidade_funcionarios, 0)
           )
         ) AS "costAmount",
@@ -188,9 +188,9 @@ export class HospitalSectorsAggregateRepository {
         uni.descricao AS "descr",
         SUM(
           (
-            (COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) + 
-             COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-             COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0))
+            (COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) + 
+             COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+             COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), ''), 'null')::numeric, 0))
             * COALESCE(cuni.quantidade_funcionarios, 0)
           )
         ) AS "costAmount",
@@ -223,9 +223,9 @@ export class HospitalSectorsAggregateRepository {
         uni.descricao AS "descr",
         SUM(
           (
-            (COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) + 
-             COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-             COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0))
+            (COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) + 
+             COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+             COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), ''), 'null')::numeric, 0))
             * COALESCE(cuni.quantidade_funcionarios, 0)
           )
         ) AS "costAmount",
@@ -262,9 +262,9 @@ export class HospitalSectorsAggregateRepository {
         uni.descricao AS "descr",
         SUM(
           (
-            (COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) + 
-             COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-             COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0))
+            (COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) + 
+             COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+             COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), ''), 'null')::numeric, 0))
             // Incluir outros cargos NÃO dimensionados usando a quantidade ATUAL (row.staff)
             try {
               const current: any[] = row.staff || [];
@@ -326,9 +326,9 @@ export class HospitalSectorsAggregateRepository {
         uni.descricao AS "descr",
         SUM(
           (
-            (COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) + 
-             COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-             COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0))
+            (COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) + 
+             COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+             COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), ''), 'null')::numeric, 0))
             * COALESCE(cuni.quantidade_funcionarios, 0)
           )
         ) AS "costAmount",
@@ -364,9 +364,9 @@ export class HospitalSectorsAggregateRepository {
         uni.descricao AS "descr",
         SUM(
           (
-            (COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) + 
-             COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-             COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0))
+            (COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) + 
+             COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+             COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), ''), 'null')::numeric, 0))
             * COALESCE(cuni.quantidade_funcionarios, 0)
           )
         ) AS "costAmount",
@@ -419,9 +419,9 @@ export class HospitalSectorsAggregateRepository {
         uni.descricao AS "descr",
         SUM(
           (
-            (COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) + 
-             COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-             COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0))
+            (COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) + 
+             COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+             COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), ''), 'null')::numeric, 0))
             * COALESCE(cuni.quantidade_funcionarios, 0)
           )
         ) AS "costAmount",
@@ -518,8 +518,8 @@ export class HospitalSectorsAggregateRepository {
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0) as "custoTotal",
         
@@ -527,8 +527,8 @@ export class HospitalSectorsAggregateRepository {
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0) as "custoTotalProjetado"
         
@@ -595,15 +595,15 @@ export class HospitalSectorsAggregateRepository {
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0) as "custoTotal",
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0) as "custoTotalProjetado"
         
@@ -669,15 +669,15 @@ export class HospitalSectorsAggregateRepository {
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0) as "custoTotal",
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0) as "custoTotalProjetado"
         
@@ -742,15 +742,15 @@ export class HospitalSectorsAggregateRepository {
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0) as "custoTotal",
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0) as "custoTotalProjetado"
         
@@ -813,9 +813,9 @@ export class HospitalSectorsAggregateRepository {
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0)::text as cost_amount,
         
@@ -823,9 +823,9 @@ export class HospitalSectorsAggregateRepository {
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0)::text as projected_cost_amount,
         
@@ -892,9 +892,9 @@ export class HospitalSectorsAggregateRepository {
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0)::text as cost_amount,
         
@@ -902,9 +902,9 @@ export class HospitalSectorsAggregateRepository {
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0)::text as projected_cost_amount,
         
@@ -1045,18 +1045,18 @@ export class HospitalSectorsAggregateRepository {
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0)::text as cost_amount,
         
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0)::text as projected_cost_amount,
         
@@ -1107,18 +1107,18 @@ export class HospitalSectorsAggregateRepository {
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0)::text as cost_amount,
         
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0)::text as projected_cost_amount,
         
@@ -1246,18 +1246,18 @@ export class HospitalSectorsAggregateRepository {
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0)::text as cost_amount,
         
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0)::text as projected_cost_amount,
         
@@ -1307,18 +1307,18 @@ export class HospitalSectorsAggregateRepository {
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0)::text as cost_amount,
         
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0)::text as projected_cost_amount,
         
@@ -1445,18 +1445,18 @@ export class HospitalSectorsAggregateRepository {
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0)::text as cost_amount,
         
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0)::text as projected_cost_amount,
         
@@ -1505,18 +1505,18 @@ export class HospitalSectorsAggregateRepository {
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0)::text as cost_amount,
         
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0)::text as projected_cost_amount,
         
@@ -1690,17 +1690,17 @@ export class HospitalSectorsAggregateRepository {
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0)::text as projected_cost_amount,
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0)::text as cost_amount,
         COALESCE(SUM(ls.bed_count), 0) as bed_count,
@@ -1744,17 +1744,17 @@ export class HospitalSectorsAggregateRepository {
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_projetadas, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0)::text as projected_cost_amount,
         COALESCE(SUM(
           cu.quantidade_funcionarios * 
           (
-            COALESCE(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0) +
-            COALESCE(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), '')::numeric, 0)
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0) +
+            COALESCE(NULLIF(NULLIF(REPLACE(REPLACE(uni.horas_extra_reais, '%', ''), ',', '.'), ''), 'null')::numeric, 0)
           )
         ), 0)::text as cost_amount,
         COALESCE(
@@ -1862,9 +1862,9 @@ export class HospitalSectorsAggregateRepository {
         .select([
           "c.id as id",
           `COALESCE(
-            NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), '')::numeric, 0
+            NULLIF(NULLIF(REPLACE(REPLACE(c.salario, '%', ''), ',', '.'), ''), 'null')::numeric, 0
           ) + COALESCE(
-            NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), '')::numeric, 0
+            NULLIF(NULLIF(REPLACE(REPLACE(c.adicionais_tributos, '%', ''), ',', '.'), ''), 'null')::numeric, 0
           ) as custoTotal`,
         ])
         .getRawMany();

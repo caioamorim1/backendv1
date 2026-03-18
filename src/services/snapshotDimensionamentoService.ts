@@ -12,6 +12,14 @@ import { UnidadeNaoInternacao } from "../entities/UnidadeNaoInternacao";
 import { DimensionamentoNaoInternacao } from "../entities/DimensionamentoNaoInternacao";
 import { createHash } from "crypto";
 
+// Parse de campos string do banco que podem conter 'null', '' ou formato BR (vírgula decimal)
+// JSON.stringify(NaN) === 'null', entao qualquer NaN precisa ser tratado como 0
+function sp(val: string | null | undefined, fallback = 0): number {
+  if (!val || val === "null") return fallback;
+  const n = parseFloat(val.replace(",", "."));
+  return isNaN(n) ? fallback : n;
+}
+
 export class SnapshotDimensionamentoService {
   private snapshotRepo: SnapshotDimensionamentoRepository;
   private hospitalSectorsRepo: HospitalSectorsRepository;
@@ -529,13 +537,9 @@ export class SnapshotDimensionamentoService {
     // Processar unidades de internação
     for (const unidade of unidadesInternacao) {
       const cargos = (unidade.cargosUnidade || []).map((cu: any) => {
-        const salario = parseFloat((cu.cargo.salario || "0").replace(",", "."));
-        const adicionais = parseFloat(
-          (cu.cargo.adicionais_tributos || "0").replace(",", ".")
-        );
-        const horasExtra = parseFloat(
-          (unidade.horas_extra_reais || "0").replace(",", ".")
-        );
+        const salario = sp(cu.cargo.salario);
+        const adicionais = sp(cu.cargo.adicionais_tributos);
+        const horasExtra = sp(unidade.horas_extra_reais);
         const custoUnitario = salario + adicionais + horasExtra;
         const custoTotal = custoUnitario * cu.quantidade_funcionarios;
 
@@ -587,13 +591,9 @@ export class SnapshotDimensionamentoService {
           const cargo = cargoSitio.cargoUnidade?.cargo;
           if (!cargo) continue;
 
-          const salario = parseFloat((cargo.salario || "0").replace(",", "."));
-          const adicionais = parseFloat(
-            (cargo.adicionais_tributos || "0").replace(",", ".")
-          );
-          const horasExtra = parseFloat(
-            (unidade.horas_extra_reais || "0").replace(",", ".")
-          );
+          const salario = sp(cargo.salario);
+          const adicionais = sp(cargo.adicionais_tributos);
+          const horasExtra = sp(unidade.horas_extra_reais);
           const custoUnitario = salario + adicionais + horasExtra;
 
           if (cargosMap.has(cargo.id)) {
@@ -1073,9 +1073,7 @@ export class SnapshotDimensionamentoService {
             .getRepository(UnidadeInternacao)
             .findOne({ where: { id: unidade.id } });
 
-          const horasExtraUnidade = parseFloat(
-            (unidadeEntity?.horas_extra_reais || "0").replace(",", ".")
-          );
+          const horasExtraUnidade = sp(unidadeEntity?.horas_extra_reais);
 
           // Adicionar custos aos cargos de internação
           let custoTotalUnidade = 0;
@@ -1087,12 +1085,8 @@ export class SnapshotDimensionamentoService {
 
               let custoUnitario = 0;
               if (cargoEntity) {
-                const salario = parseFloat(
-                  (cargoEntity.salario || "0").replace(",", ".")
-                );
-                const adicionais = parseFloat(
-                  (cargoEntity.adicionais_tributos || "0").replace(",", ".")
-                );
+                const salario = sp(cargoEntity.salario);
+                const adicionais = sp(cargoEntity.adicionais_tributos);
                 custoUnitario = salario + adicionais + horasExtraUnidade;
               }
 
@@ -1139,9 +1133,7 @@ export class SnapshotDimensionamentoService {
             .getRepository(UnidadeNaoInternacao)
             .findOne({ where: { id: unidade.id } });
 
-          const horasExtraUnidade = parseFloat(
-            (unidadeEntity?.horas_extra_reais || "0").replace(",", ".")
-          );
+          const horasExtraUnidade = sp(unidadeEntity?.horas_extra_reais);
 
           // Calcular dimensionamento puro para salvar quantidadeCalculada por sítio/cargo
           // Tenta ler da tabela persistida primeiro; recalcula se não encontrar
@@ -1196,12 +1188,8 @@ export class SnapshotDimensionamentoService {
 
                   let custoUnitario = 0;
                   if (cargoEntity) {
-                    const salario = parseFloat(
-                      (cargoEntity.salario || "0").replace(",", ".")
-                    );
-                    const adicionais = parseFloat(
-                      (cargoEntity.adicionais_tributos || "0").replace(",", ".")
-                    );
+                    const salario = sp(cargoEntity.salario);
+                    const adicionais = sp(cargoEntity.adicionais_tributos);
                     custoUnitario = salario + adicionais + horasExtraUnidade;
                   }
 
