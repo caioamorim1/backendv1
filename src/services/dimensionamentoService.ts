@@ -25,6 +25,14 @@ export class DimensionamentoService {
     this.avaliacaoRepo = new AvaliacaoRepository(ds);
   }
 
+  // Parse de campos string do banco que podem conter 'null', '', ou formato BR (vírgula decimal)
+  // JSON.stringify(NaN) === 'null', por isso qualquer NaN precisa ser tratado como 0
+  private sp(val: string | null | undefined, fallback = 0): number {
+    if (!val || val === "null") return fallback;
+    const n = parseFloat(val.replace(",", "."));
+    return isNaN(n) ? fallback : n;
+  }
+
   // Lógica para Unidades de INTERNAÇÃO
   async calcularParaInternacao(
     unidadeId: string,
@@ -617,9 +625,7 @@ export class DimensionamentoService {
       kmTecnico: Number(kmTecnico.toFixed(4)),
     };
 
-    const valorHorasExtras = parseFloat(
-      unidade.horas_extra_reais?.replace(",", ".") || "0"
-    );
+    const valorHorasExtras = this.sp(unidade.horas_extra_reais);
 
     const tabela = (unidade.cargosUnidade || []).map(
       (cu): LinhaAnaliseFinanceira => {
@@ -642,11 +648,9 @@ export class DimensionamentoService {
           quantidadeProjetada = qpTecnicos;
         }
 
-        const salario = parseFloat(cu.cargo.salario?.replace(",", ".") || "0");
-        const adicionais = parseFloat(
-          cu.cargo.adicionais_tributos?.replace(",", ".") || "0"
-        );
-        const cargaHoraria = parseFloat(cu.cargo.carga_horaria || "0");
+        const salario = this.sp(cu.cargo.salario);
+        const adicionais = this.sp(cu.cargo.adicionais_tributos);
+        const cargaHoraria = this.sp(cu.cargo.carga_horaria);
 
         return {
           cargoId: cu.cargo.id,
@@ -702,9 +706,7 @@ export class DimensionamentoService {
       throw new Error("Unidade de não internação não encontrada");
     }
 
-    const valorHorasExtras = parseFloat(
-      unidade.horas_extra_reais?.replace(",", ".") || "0"
-    );
+    const valorHorasExtras = this.sp(unidade.horas_extra_reais);
 
     // === ETAPA 1: PARÂMETROS DA UNIDADE ===
     const parametrosRepo = this.ds.getRepository(ParametrosNaoInternacao);
@@ -813,11 +815,9 @@ export class DimensionamentoService {
           cargoNomeLower.includes("tec. em enfermagem") ||
           cargoNomeLower.includes("técnico de enfermagem");
 
-        const salario = parseFloat(cargo.salario?.replace(",", ".") || "0");
-        const adicionais = parseFloat(
-          cargo.adicionais_tributos?.replace(",", ".") || "0"
-        );
-        const cargaHoraria = parseFloat(cargo.carga_horaria || "0");
+        const salario = this.sp(cargo.salario);
+        const adicionais = this.sp(cargo.adicionais_tributos);
+        const cargaHoraria = this.sp(cargo.carga_horaria);
         const custoPorFuncionario = salario + adicionais + valorHorasExtras;
         const quantidadeAtual = cs.quantidade_funcionarios ?? 0;
 
