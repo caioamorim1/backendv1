@@ -552,7 +552,8 @@ export class DimensionamentoService {
       percentualLeitosAvaliados,
 
       // Ocupação e Avaliações
-      totalAvaliacoes: Math.round(totalPacientesMedio * diasNoPeriodo),
+      // totalAvaliacoes = leitos-dia efetivamente avaliados (exclui dias pendentes)
+      totalAvaliacoes: Math.max(0, totalLeitosDia - leitosPendentes),
       totalPacientesMedio: Number(totalPacientesMedio.toFixed(2)),
       taxaOcupacaoPeriodo,
       taxaOcupacaoPeriodoPercent: Number(
