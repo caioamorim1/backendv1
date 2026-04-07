@@ -20,5 +20,13 @@ export const ExportRoutes = (ds: DataSource): Router => {
   // unidadeId (opcional): filtra relatório para uma unidade específica
   r.get("/snapshot/:hospitalId/variacao/pdf", ctrl.snapshotVariacaoPdf);
 
+  // PDF diário de avaliações
+  // GET /export/diario-avaliacoes/:unidadeId/pdf?data=YYYY-MM-DD
+  r.get("/diario-avaliacoes/:unidadeId/pdf", ctrl.diarioAvaliacoesPdf);
+
+  // PDF grau de complexidade (mensal agrupado)
+  // GET /export/grau-complexidade/:unidadeId/pdf?inicio=YYYY-MM-DD&fim=YYYY-MM-DD
+  r.get("/grau-complexidade/:unidadeId/pdf", ctrl.grauComplexidadePdf);
+
   return r;
 };

@@ -14,22 +14,30 @@ const JWT_SECRET = process.env.JWT_SECRET || "secreto";
 
 type ColaboradorTipo =
   | "ADMIN"
+  | "AVALIADOR"
+  | "GESTOR_TATICO_TEC_ADM"
+  | "GESTOR_TATICO_TECNICO"
+  | "GESTOR_TATICO_ADM"
+  | "GESTOR_ESTRATEGICO_HOSPITAL"
+  | "GESTOR_ESTRATEGICO_REDE"
+  // Legado (pode existir no banco)
   | "ADMIN_GLOBAL"
   | "GESTOR_ESTRATEGICO"
   | "GESTOR_TATICO"
-  | "AVALIADOR"
+  | "GESTOR"
   | "CONSULTOR"
   | "COMUM";
 
 function mapLegacyPermissao(permissao: string | undefined): ColaboradorTipo {
-  // Compatibilidade com payloads antigos (ADMIN/GESTOR/COMUM)
-  if (!permissao) return "COMUM";
+  if (!permissao) return "AVALIADOR";
   const p = permissao.toUpperCase();
-  if (p === "ADMIN") return "ADMIN";
   if (p === "ADMIN_GLOBAL") return "ADMIN";
-  if (p === "GESTOR") return "GESTOR_TATICO";
-  if (p === "COMUM") return "COMUM";
-  // Se já veio um tipo novo, tenta passar direto
+  if (p === "GESTOR_ESTRATEGICO") return "GESTOR_ESTRATEGICO_HOSPITAL";
+  if (p === "GESTOR_TATICO") return "GESTOR_TATICO_TEC_ADM";
+  if (p === "GESTOR") return "GESTOR_TATICO_TEC_ADM";
+  if (p === "CONSULTOR") return "GESTOR_TATICO_ADM";
+  if (p === "COMUM") return "AVALIADOR";
+  // Tipo já está no novo formato — passa direto
   return permissao as ColaboradorTipo;
 }
 

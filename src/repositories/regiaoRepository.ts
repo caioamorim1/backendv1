@@ -27,13 +27,13 @@ export class RegiaoRepository {
   }
 
   buscarTodos() {
-    return this.repo.find({ relations: ["hospitais", "grupo"] });
+    return this.repo.find({ relations: ["hospitais", "grupo", "grupo.rede"] });
   }
 
   buscarPorId(id: string) {
     return this.repo.findOne({
       where: { id },
-      relations: ["hospitais", "grupo"],
+      relations: ["hospitais", "grupo", "grupo.rede"],
     });
   }
 

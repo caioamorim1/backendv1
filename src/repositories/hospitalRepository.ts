@@ -324,4 +324,27 @@ export class HospitalRepository {
       // Não faz throw para não bloquear a criação do hospital
     }
   }
+
+  buscarPorRegiaoOuGrupo(regiaoIds: string[], grupoIds: string[]): Promise<Hospital[]> {
+    if (!regiaoIds.length && !grupoIds.length) return Promise.resolve([]);
+
+    const qb = this.repo
+      .createQueryBuilder("h")
+      .leftJoinAndSelect("h.regiao", "regiao")
+      .leftJoinAndSelect("regiao.grupo", "regiaoGrupo")
+      .leftJoinAndSelect("h.grupo", "grupoDireto");
+
+    if (regiaoIds.length > 0 && grupoIds.length > 0) {
+      qb.where(
+        "(regiao.id IN (:...regiaoIds) OR grupoDireto.id IN (:...grupoIds))",
+        { regiaoIds, grupoIds }
+      );
+    } else if (regiaoIds.length > 0) {
+      qb.where("regiao.id IN (:...regiaoIds)", { regiaoIds });
+    } else {
+      qb.where("grupoDireto.id IN (:...grupoIds)", { grupoIds });
+    }
+
+    return qb.getMany();
+  }
 }

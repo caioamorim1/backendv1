@@ -94,4 +94,18 @@ export class RedeController {
       });
     }
   };
+
+  /**
+   * GET /redes/:redeId/hospitais
+   * Retorna id e nome de todos os hospitais da rede (diretos + via regiao.grupo.rede)
+   */
+  listarHospitais = async (req: Request, res: Response) => {
+    try {
+      const { redeId } = req.params;
+      const hospitais = await this.repo.buscarHospitais(redeId);
+      res.json(hospitais);
+    } catch (error) {
+      res.status(500).json({ error: "Erro ao buscar hospitais da rede" });
+    }
+  };
 }

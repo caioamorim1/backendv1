@@ -75,4 +75,8 @@ export class GrupoRepository {
     const r = await this.repo.delete(id);
     return (r.affected ?? 0) > 0;
   }
+
+  buscarPorRedeId(redeId: string): Promise<Grupo[]> {
+    return this.repo.find({ where: { rede: { id: redeId } } });
+  }
 }

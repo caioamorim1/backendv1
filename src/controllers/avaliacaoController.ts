@@ -66,7 +66,7 @@ export class AvaliacaoController {
 
   listarSessoesAtivas = async (req: Request, res: Response) => {
     const { unidadeId } = req.query as { unidadeId: string };
-    const lista = await this.repo.listarSessoesAtivasPorUnidade(unidadeId);
+    const lista = await this.repo.listarSessoesAtivasComIntervalo(unidadeId);
     return res.json(lista);
   };
 

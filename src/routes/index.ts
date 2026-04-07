@@ -39,6 +39,7 @@ import { HospitalSectorsAggregateRoutes } from "./hospitalSectorsAggregateRoutes
 import { HospitalSectorsNetworkRoutes } from "./hospitalSectorsNetworkRoutes";
 import { QualitativeRoutes } from "./QualitativeRoutes";
 import { OccupationAnalysisRoutes } from "./occupationAnalysisRoutes";
+import { TermometroRoutes } from "./termometroRoutes";
 import { OccupationAnalysisNetworkRoutes } from "./occupationAnalysisNetworkRoutes";
 import { ControlePeriodoRoutes } from "./controlePeriodoRoutes";
 import { TaxaOcupacaoRoutes } from "./taxaOcupacaoRoutes";
@@ -132,6 +133,8 @@ export const createIndexRouter = (dataSource: DataSource): Router => {
   );
   // Occupation Analysis (Taxa de Ocupação)
   router.use("/hospital-sectors", OccupationAnalysisRoutes(dataSource));
+  // Dashboard Termômetro
+  router.use("/termometro", TermometroRoutes(dataSource));
   // Occupation Analysis Network (Aggregated by Rede/Grupo/Regiao)
   router.use(
     "/occupation-analysis-network",

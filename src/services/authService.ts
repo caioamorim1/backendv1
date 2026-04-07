@@ -15,6 +15,7 @@ export type AuthResult = {
   tipo?: string;
   role?: string;
   mustChangePassword?: boolean;
+  redeId?: string;
 };
 
 function roleFromTipo(tipo: string | undefined): "ADMIN" | "GESTOR" | "COMUM" {
@@ -43,7 +44,7 @@ export class AuthService {
   async login(email: string, senha: string): Promise<AuthResult | null> {
     const user = (await this.colaboradorRepo.findOne({
       where: { email },
-      relations: ["hospital"],
+      relations: ["hospital", "hospital.rede", "hospital.regiao", "hospital.regiao.grupo", "hospital.regiao.grupo.rede"],
     })) as Colaborador;
     if (!user) return null;
     if (!user.senha) return null;
@@ -53,6 +54,14 @@ export class AuthService {
     const tipoRaw = (user as any).permissao as string | undefined;
     const tipo = normalizeTipo(tipoRaw);
     const role = roleFromTipo(tipo);
+
+    // Resolve redeId para GESTOR_ESTRATEGICO_REDE
+    let redeId: string | undefined;
+    if (tipo === "GESTOR_ESTRATEGICO_REDE") {
+      redeId =
+        (user.hospital as any)?.rede?.id ??
+        (user.hospital as any)?.regiao?.grupo?.rede?.id;
+    }
 
     const token = jwt.sign(
       {
@@ -65,6 +74,7 @@ export class AuthService {
         hospital: user.hospital
           ? { id: user.hospital.id, nome: user.hospital.nome }
           : undefined,
+        redeId,
       },
       JWT_SECRET,
       { expiresIn: "8h" }
@@ -80,6 +90,7 @@ export class AuthService {
       tipo,
       role,
       mustChangePassword: user.mustChangePassword,
+      redeId,
     };
   }
 

@@ -23,6 +23,7 @@ export enum LeitoEventoTipo {
   // reservado para próximos passos (alta/transferência)
   ALTA = "ALTA",
   TRANSFERENCIA = "TRANSFERENCIA",
+  STATUS_ALTERADO = "STATUS_ALTERADO",
 }
 
 @Entity("leito_eventos")

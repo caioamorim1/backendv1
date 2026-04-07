@@ -174,6 +174,63 @@ export class SnapshotNetworkDashboardService {
     const staffRange = computeStaffRange(hospitaisComputados);
     const snapshotInfo = pickRedeSnapshotInfo(hospitaisComputados);
 
+    // ── Filtros: hierarquia completa de todos os hospitais da rede (com ou sem snapshot) ──
+    const filtrosGruposMap = new Map<string, {
+      id: string; nome: string;
+      regioes: Map<string, { id: string; nome: string; hospitais: { id: string; nome: string }[] }>;
+      hospitaisDiretos: { id: string; nome: string; grupoId: string; grupoNome: string; regiaoId: string | null; regiaoNome: string | null }[];
+    }>();
+
+    for (const h of hospitaisComSnapshot) {
+      const grupo  = (h as any).grupo || (h as any).regiao?.grupo;
+      const regiao = (h as any).regiao;
+      if (!grupo) continue;
+
+      if (!filtrosGruposMap.has(grupo.id)) {
+        filtrosGruposMap.set(grupo.id, {
+          id: grupo.id, nome: grupo.nome,
+          regioes: new Map(),
+          hospitaisDiretos: [],
+        });
+      }
+      const fg = filtrosGruposMap.get(grupo.id)!;
+
+      if (regiao) {
+        if (!fg.regioes.has(regiao.id)) {
+          fg.regioes.set(regiao.id, { id: regiao.id, nome: regiao.nome, hospitais: [] });
+        }
+        fg.regioes.get(regiao.id)!.hospitais.push({ id: h.id, nome: h.nome });
+      } else {
+        fg.hospitaisDiretos.push({
+          id: h.id,
+          nome: h.nome,
+          grupoId: grupo.id,
+          grupoNome: grupo.nome,
+          regiaoId: null,
+          regiaoNome: null,
+        });
+      }
+    }
+
+    const filtros = {
+      redeId: rede.id,
+      redeNome: rede.nome,
+      grupos: Array.from(filtrosGruposMap.values())
+        .sort((a, b) => a.nome.localeCompare(b.nome))
+        .map((g) => ({
+          id: g.id,
+          nome: g.nome,
+          regioes: Array.from(g.regioes.values())
+            .sort((a, b) => a.nome.localeCompare(b.nome))
+            .map((r) => ({
+              id: r.id,
+              nome: r.nome,
+              hospitais: r.hospitais.sort((a, b) => a.nome.localeCompare(b.nome)),
+            })),
+          hospitaisDiretos: g.hospitaisDiretos.sort((a, b) => a.nome.localeCompare(b.nome)),
+        })),
+    };
+
     return {
       rede: {
         redeId: rede.id,
@@ -194,6 +251,7 @@ export class SnapshotNetworkDashboardService {
         global: buildGlobal(hospitaisComputados, { includeRankings: true }),
         grupos: grupos.sort((a, b) => a.grupoNome.localeCompare(b.grupoNome)),
       },
+      filtros,
     };
   }
 

@@ -57,16 +57,63 @@ export async function runSessionExpiryForDate(
         relations: ["leito", "unidade"],
       });
 
+      // Timestamp canônico do reset: início de D+1 em São Paulo, salvo em UTC.
+      const inicioProximoDiaUTC = DateTime.fromISO(dateStr, { zone: ZONE })
+        .plus({ days: 1 })
+        .startOf("day")
+        .toUTC()
+        .toJSDate();
+
       if (avals.length === 0) {
         console.log(
           "✅ [SessionExpiry] Nenhuma avaliação ativa para processar."
         );
-        // Mesmo sem avaliações, resetar todos os leitos para PENDENTE
+        const leitosParaReset = await leitoRepo.find({
+          where: [
+            { status: StatusLeito.ATIVO },
+            { status: StatusLeito.VAGO },
+            { status: StatusLeito.INATIVO },
+          ],
+          relations: ["unidade", "unidade.hospital"],
+        });
+
+        // Resetar todos os leitos operáveis para PENDENTE no início do novo dia
         await leitoRepo
           .createQueryBuilder()
           .update(Leito)
           .set({ status: StatusLeito.PENDENTE })
+          .where("status IN (:...statuses)", {
+            statuses: [StatusLeito.ATIVO, StatusLeito.VAGO, StatusLeito.INATIVO],
+          })
           .execute();
+
+        for (const l of leitosParaReset) {
+          try {
+            await evRepo.save(
+              evRepo.create({
+                leito: l,
+                tipo: LeitoEventoTipo.STATUS_ALTERADO,
+                dataHora: inicioProximoDiaUTC,
+                unidadeId: (l as any).unidade?.id ?? null,
+                hospitalId: (l as any).unidade?.hospital?.id ?? null,
+                leitoNumero: l.numero,
+                avaliacaoId: null,
+                historicoOcupacaoId: null,
+                autorId: null,
+                autorNome: null,
+                motivo: "Reset diário automático",
+                payload: {
+                  statusAnterior: l.status,
+                  statusNovo: StatusLeito.PENDENTE,
+                  via: "sessionExpiry",
+                  origemDia: dateStr,
+                },
+              })
+            );
+          } catch (e) {
+            console.warn("⚠️  Falha ao registrar STATUS_ALTERADO (sessionExpiry sem avaliações):", e);
+          }
+        }
         return;
       }
 
@@ -132,14 +179,54 @@ export async function runSessionExpiryForDate(
         }
       }
 
-      // 3. Resetar TODOS os leitos para PENDENTE (novo dia)
+      // 3. Resetar todos os leitos operáveis para PENDENTE no início do novo dia
+      const leitosParaReset = await leitoRepo.find({
+        where: [
+          { status: StatusLeito.ATIVO },
+          { status: StatusLeito.VAGO },
+          { status: StatusLeito.INATIVO },
+        ],
+        relations: ["unidade", "unidade.hospital"],
+      });
+
       await leitoRepo
         .createQueryBuilder()
         .update(Leito)
         .set({ status: StatusLeito.PENDENTE })
+        .where("status IN (:...statuses)", {
+          statuses: [StatusLeito.ATIVO, StatusLeito.VAGO, StatusLeito.INATIVO],
+        })
         .execute();
 
-      console.log("🔄 [SessionExpiry] Todos os leitos resetados para PENDENTE");
+      for (const l of leitosParaReset) {
+        try {
+          await evRepo.save(
+            evRepo.create({
+              leito: l,
+              tipo: LeitoEventoTipo.STATUS_ALTERADO,
+              dataHora: inicioProximoDiaUTC,
+              unidadeId: (l as any).unidade?.id ?? null,
+              hospitalId: (l as any).unidade?.hospital?.id ?? null,
+              leitoNumero: l.numero,
+              avaliacaoId: null,
+              historicoOcupacaoId: null,
+              autorId: null,
+              autorNome: null,
+              motivo: "Reset diário automático",
+              payload: {
+                statusAnterior: l.status,
+                statusNovo: StatusLeito.PENDENTE,
+                via: "sessionExpiry",
+                origemDia: dateStr,
+              },
+            })
+          );
+        } catch (e) {
+          console.warn("⚠️  Falha ao registrar STATUS_ALTERADO (sessionExpiry):", e);
+        }
+      }
+
+      console.log("🔄 [SessionExpiry] Todos os leitos resetados para PENDENTE (ATIVO + VAGO + INATIVO)");
 
       // 4. Marcar avaliações como EXPIRADA
       await avalRepo
@@ -312,12 +399,12 @@ export async function processPendingSessionExpiries(ds: DataSource) {
         "[SessionExpiry] Nenhuma sessão ativa pendente de dias anteriores."
       );
 
-      // Mesmo sem sessões pendentes, resetar leitos para PENDENTE
-      // (garante estado limpo se o servidor reiniciou no meio do dia)
+      // Resetar apenas leitos ATIVO para PENDENTE (preserva VAGO e INATIVO)
       await leitoRepo
         .createQueryBuilder()
         .update(Leito)
         .set({ status: StatusLeito.PENDENTE })
+        .where("status = :s", { s: StatusLeito.ATIVO })
         .execute();
 
       return;

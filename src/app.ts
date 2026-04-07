@@ -4,6 +4,7 @@ import type { DataSource } from "typeorm";
 import { createIndexRouter } from "./routes";
 import cors from "cors";
 import { authMiddleware } from "./middlewares/authMiddleware";
+import { buildAuthorizationMiddleware } from "./middlewares/authorizationMiddleware";
 import path from "path"; // Importe o 'path'
 
 // Cria e configura o app SEM efeitos colaterais (sem iniciar DB/servidor)
@@ -25,7 +26,6 @@ export function createApp(dataSource: DataSource) {
     const openPaths = [
       "/",
       "/login",
-      "/admin/criar",
       "/scp-metodos/seed/builtin",
     ];
     // Se o caminho começar com /uploads, /password-reset ou /debug, permite sem autenticação
@@ -45,6 +45,9 @@ export function createApp(dataSource: DataSource) {
 
     return (authMiddleware as any)(req, res, next);
   });
+
+  // Autorização por rota + escopo (hospital/rede)
+  app.use(buildAuthorizationMiddleware(dataSource));
 
   app.use("/", createIndexRouter(dataSource));
 

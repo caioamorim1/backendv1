@@ -10,6 +10,9 @@ export interface CreateUnidadeDTO {
   numeroLeitos: number;
   horas_extra_reais?: string;
   horas_extra_projetadas?: string;
+  pontuacao_max?: number | null;
+  pontuacao_min?: number | null;
+  gatilho?: number | null;
   cargos_unidade?: CreateCargoUnidadeDTO[];
 }
 
@@ -19,6 +22,9 @@ export interface UpdateUnidadeDTO {
   scpMetodoId?: string;
   horas_extra_reais?: string;
   horas_extra_projetadas?: string;
+  pontuacao_max?: number | null;
+  pontuacao_min?: number | null;
+  gatilho?: number | null;
   cargos_unidade?: CreateCargoUnidadeDTO[];
 }
 
@@ -30,6 +36,9 @@ export interface UnidadeListDTO {
   scpMetodoId: string | null;
   horas_extra_reais?: string;
   horas_extra_projetadas?: string;
+  pontuacao_max?: number | null;
+  pontuacao_min?: number | null;
+  gatilho?: number | null;
   leitos: any[];
   cargos_unidade?: CargoUnidadeResponseDTO[];
   created_at: Date;
