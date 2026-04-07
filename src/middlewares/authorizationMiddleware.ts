@@ -174,9 +174,12 @@ const RULES: Rule[] = [
 
   // Hospital Sectors Aggregate
   { methods: ["GET"], pattern: /^\/hospital-sectors-aggregate\/rede\/[^/]+(?:\/.*)?$/, roles: ["ADM", "GER"], scope: "rede" },
+  { methods: ["GET"], pattern: /^\/hospital-sectors-aggregate\/hospitals\/[^/]+(?:\/.*)?$/, roles: ["ADM"], scope: "hospital" },
 
   // Hospital Sectors (por rede)
   { methods: ["GET"], pattern: /^\/hospital-sectors\/rede\/[^/]+(?:\/.*)?$/, roles: ["ADM", "GER"], scope: "rede" },
+  // Hospital Sectors (por hospital)
+  { methods: ["GET"], pattern: /^\/hospital-sectors\/[^/]+(?:\/.*)?$/, roles: ["ADM"], scope: "hospital" },
 ];
 
 function firstPathMatch(path: string, patterns: RegExp[]): string | null {
