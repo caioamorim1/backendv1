@@ -243,8 +243,31 @@ export class AvaliacaoRepository {
           try {
             const leitoRepo = manager.getRepository(Leito);
             if (existing.leito) {
+              const statusAnterior = existing.leito.status;
               existing.leito.status = StatusLeito.ATIVO;
-              await leitoRepo.save(existing.leito);
+              const leitoAtualizado = await leitoRepo.save(existing.leito);
+              if (statusAnterior !== StatusLeito.ATIVO) {
+                const evRepo = manager.getRepository(LeitoEvento);
+                await evRepo.save(
+                  evRepo.create({
+                    leito: leitoAtualizado,
+                    tipo: LeitoEventoTipo.STATUS_ALTERADO,
+                    dataHora: new Date(),
+                    unidadeId: unidade.id,
+                    hospitalId: unidade.hospital?.id || null,
+                    leitoNumero: leitoAtualizado.numero,
+                    avaliacaoId: existing.id,
+                    historicoOcupacaoId: null,
+                    autorId: autor.id,
+                    autorNome: autor.nome,
+                    motivo: "Sessão ativa (overwrite)",
+                    payload: {
+                      statusAnterior,
+                      statusNovo: StatusLeito.ATIVO,
+                    },
+                  })
+                );
+              }
             }
           } catch (e) {
             console.warn("Não foi possível atualizar status do leito:", e);
@@ -335,8 +358,31 @@ export class AvaliacaoRepository {
       // garante que o leito esteja marcado como ATIVO (usando o mesmo manager)
       try {
         const leitoRepo = manager.getRepository(Leito);
+        const statusAnterior = leito.status;
         leito.status = StatusLeito.ATIVO;
-        await leitoRepo.save(leito);
+        const leitoAtualizado = await leitoRepo.save(leito);
+        if (statusAnterior !== StatusLeito.ATIVO) {
+          const evRepo = manager.getRepository(LeitoEvento);
+          await evRepo.save(
+            evRepo.create({
+              leito: leitoAtualizado,
+              tipo: LeitoEventoTipo.STATUS_ALTERADO,
+              dataHora: new Date(),
+              unidadeId: unidade.id,
+              hospitalId: unidade.hospital?.id || null,
+              leitoNumero: leitoAtualizado.numero,
+              avaliacaoId: null,
+              historicoOcupacaoId: null,
+              autorId: autor.id,
+              autorNome: autor.nome,
+              motivo: "Sessão iniciada",
+              payload: {
+                statusAnterior,
+                statusNovo: StatusLeito.ATIVO,
+              },
+            })
+          );
+        }
       } catch (e) {
         console.warn("Não foi possível atualizar status do leito:", e);
       }
@@ -503,8 +549,31 @@ export class AvaliacaoRepository {
       try {
         const leitoRepo = manager.getRepository(Leito);
         if (av.leito) {
+          const statusAnterior = av.leito.status;
           av.leito.status = StatusLeito.PENDENTE;
-          await leitoRepo.save(av.leito);
+          const leitoAtualizado = await leitoRepo.save(av.leito);
+          if (statusAnterior !== StatusLeito.PENDENTE) {
+            const evRepo = manager.getRepository(LeitoEvento);
+            await evRepo.save(
+              evRepo.create({
+                leito: leitoAtualizado,
+                tipo: LeitoEventoTipo.STATUS_ALTERADO,
+                dataHora: new Date(),
+                unidadeId: av.unidade?.id || null,
+                hospitalId: null,
+                leitoNumero: leitoAtualizado.numero,
+                avaliacaoId: av.id,
+                historicoOcupacaoId: null,
+                autorId: null,
+                autorNome: null,
+                motivo: "Sessão liberada",
+                payload: {
+                  statusAnterior,
+                  statusNovo: StatusLeito.PENDENTE,
+                },
+              })
+            );
+          }
         }
       } catch (e) {
         console.warn(
@@ -653,8 +722,31 @@ export class AvaliacaoRepository {
     try {
       const leitoRepo = this.repo.manager.getRepository(Leito);
       if (av.leito) {
+        const statusAnterior = av.leito.status;
         av.leito.status = StatusLeito.ATIVO;
-        await leitoRepo.save(av.leito);
+        const leitoAtualizado = await leitoRepo.save(av.leito);
+        if (statusAnterior !== StatusLeito.ATIVO) {
+          const evRepo = this.repo.manager.getRepository(LeitoEvento);
+          await evRepo.save(
+            evRepo.create({
+              leito: leitoAtualizado,
+              tipo: LeitoEventoTipo.STATUS_ALTERADO,
+              dataHora: new Date(),
+              unidadeId: av.unidade?.id || null,
+              hospitalId: null,
+              leitoNumero: leitoAtualizado.numero,
+              avaliacaoId: av.id,
+              historicoOcupacaoId: null,
+              autorId: av.autor?.id || null,
+              autorNome: av.autor?.nome || null,
+              motivo: "Sessão atualizada",
+              payload: {
+                statusAnterior,
+                statusNovo: StatusLeito.ATIVO,
+              },
+            })
+          );
+        }
       }
     } catch (e) {
       console.warn(
@@ -760,6 +852,27 @@ export class AvaliacaoRepository {
         statusSessao: StatusSessaoAvaliacao.ATIVA,
       },
       relations: ["leito", "autor"],
+    });
+  }
+
+  async listarSessoesAtivasComIntervalo(unidadeId: string) {
+    const [sessoes, unidade] = await Promise.all([
+      this.listarSessoesAtivasPorUnidade(unidadeId),
+      this.unidadeRepo.findOne({ where: { id: unidadeId } }),
+    ]);
+
+    const pontuacaoMin =
+      unidade?.pontuacao_min != null ? Number(unidade.pontuacao_min) : null;
+    const pontuacaoMax =
+      unidade?.pontuacao_max != null ? Number(unidade.pontuacao_max) : null;
+
+    return sessoes.map((s) => {
+      let pontuacaoDentroIntervalo: boolean | null = null;
+      if (pontuacaoMin !== null && pontuacaoMax !== null) {
+        pontuacaoDentroIntervalo =
+          s.totalPontos >= pontuacaoMin && s.totalPontos <= pontuacaoMax;
+      }
+      return { ...s, pontuacaoDentroIntervalo };
     });
   }
 

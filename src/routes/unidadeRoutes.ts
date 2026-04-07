@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { UnidadeRepository } from "../repositories/unidadeRepository";
 import { UnidadeController } from "../controllers/unidadeController";
+import { ComentarioUnidadeRepository } from "../repositories/comentarioUnidadeRepository";
+import { ComentarioUnidadeController } from "../controllers/comentarioUnidadeController";
 
 import { DataSource } from "typeorm";
 import { post } from "axios";
@@ -9,6 +11,10 @@ export const UnidadeRoutes = (ds: DataSource): Router => {
   const r = Router();
   const repo = new UnidadeRepository(ds);
   const ctrl = new UnidadeController(repo, ds);
+
+  const comentarioCtrl = new ComentarioUnidadeController(
+    new ComentarioUnidadeRepository(ds)
+  );
 
   // Route: POST /unidades
   r.post("/", ctrl.criar);
@@ -27,6 +33,11 @@ export const UnidadeRoutes = (ds: DataSource): Router => {
   r.get("/:id/resumo-mensal", ctrl.resumoMensal);
   // Route: GET /unidades/:id/historico-mensal
   r.get("/:id/historico-mensal", ctrl.historicoMensal);
+
+  // Comentários por unidade/dia
+  r.post("/:unidadeId/comentarios", comentarioCtrl.criar);
+  r.get("/:unidadeId/comentarios", comentarioCtrl.listarPorDia);
+  r.delete("/:unidadeId/comentarios/:comentarioId", comentarioCtrl.deletar);
 
   // Rotas de dimensionamento
 

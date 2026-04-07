@@ -27,6 +27,10 @@ try {
   }
 }
 
+// --- Fonte Unicode (setas e símbolos) ---
+const FONT_UNICODE_PATH = path.join(process.cwd(), "src", "utils", "exporters", "seguisym.ttf");
+const FONT_UNICODE = "SegoeUISymbol";
+
 // --- Funções Auxiliares de Formatação ---
 const FONT_NORMAL = "Helvetica";
 const FONT_BOLD = "Helvetica-Bold";
@@ -50,6 +54,7 @@ function generateTable(
     text: string;
     width: number;
     align?: "left" | "center" | "right";
+    font?: string;
   }[],
   rows: string[][],
   options?: { headerHeight?: number; dynamicRowHeight?: boolean }
@@ -111,9 +116,10 @@ function generateTable(
       .rect(startX, startY, tableWidth, rowHeight)
       .fill(isEven ? "#f7f7f7" : "#ffffff");
 
-    doc.fontSize(8).fillColor("#333333").font(FONT_NORMAL);
+    doc.fontSize(8).fillColor("#333333");
     let currentX = startX;
     rowData.forEach((cell, i) => {
+      doc.font(headers[i].font ?? FONT_NORMAL);
       const vPad = Math.max(5, Math.floor((rowHeight - doc.fontSize(8).heightOfString(cell, { width: headers[i].width - 10 })) / 2));
       doc.text(cell, currentX + 5, startY + vPad, {
         width: headers[i].width - 10,
@@ -166,6 +172,8 @@ function bufferFromDoc(
     const defaultSize: [number, number] = landscape ? [841.89, 595.28] : [595.28, 841.89];
     const size = options?.pageSize ?? defaultSize;
     const doc = new PDFDocument({ margin: 40, size });
+    // Register Unicode font for symbols (arrows etc.)
+    try { doc.registerFont(FONT_UNICODE, FONT_UNICODE_PATH); } catch (_) {}
     const chunks: Buffer[] = [];
 
     doc.on("data", (c) => chunks.push(c as Buffer));
@@ -1610,4 +1618,307 @@ export async function pdfDimensionamento(payload: {
       .text("• IST = Índice de Segurança Técnica", { align: "left" })
       .text("• CHS = Carga Horária Semanal", { align: "left" });
   });
+}
+
+// ─── Diário de Avaliações (Termômetro) ───
+
+export interface DiarioAvaliacaoPayload {
+  data: string; // YYYY-MM-DD
+  hora: string; // HH:mm
+  unidade: string;
+  numeroLeitos: number;
+  scpUtilizado: string;
+  nivelMaximoCuidado: string;
+  // quadro resumo
+  taxaOcupacaoDia: number; // %
+  leitosAvaliadosPerc: number; // %
+  leitosAvaliadosQtd: number;
+  leitosOcupados: number;
+  leitosPendentes: number;
+  leitosInativos: number;
+  leitosVagos: number;
+  desvioPerfil: { qtd: number; perc: number };
+  niveisPct: {
+    minimos: number;
+    intermediarios: number;
+    altaDependencia: number;
+    semiIntensivos: number;
+    intensivos: number;
+  };
+  // comentários do dia
+  comentarios: Array<{ texto: string; autor: string; hora: string }>;
+  // tabela de leitos
+  leitos: Array<{
+    numero: string;
+    dataHoraAvaliacao: string;
+    prontuario: string;
+    statusLeito: string;
+    tipoCuidado: string;
+    evolucao: string; // "→" manteve, "↑" subiu, "↓" desceu, "" sem avaliação anterior
+    pontos: string;
+    avaliador: string;
+    justificativa: string;
+  }>;
+}
+
+export async function pdfDiarioAvaliacoes(
+  payload: DiarioAvaliacaoPayload
+): Promise<Buffer> {
+  return bufferFromDoc(
+    "DIÁRIO DE AVALIAÇÕES",
+    (doc) => {
+      const ML = doc.page.margins.left;
+      const pageW = doc.page.width - ML - doc.page.margins.right;
+
+      // ── Info da unidade ──
+      const infoY = doc.y;
+      const boxH = 44;
+      doc.rect(ML, infoY, pageW, boxH).strokeColor("#d9d9d9").lineWidth(0.5).stroke();
+
+      const col1 = ML + 6;
+      const col2 = ML + pageW * 0.42;
+
+      doc.fontSize(7.5).fillColor("#333333");
+      doc.font(FONT_BOLD).text("UNIDADE DE INTERNAÇÃO:", col1, infoY + 5, { continued: true })
+        .font(FONT_NORMAL).text(` ${payload.unidade}`);
+      doc.font(FONT_BOLD).text("NÚMERO DE LEITOS:", col2, infoY + 5, { continued: true })
+        .font(FONT_NORMAL).text(` ${payload.numeroLeitos}`);
+
+      doc.font(FONT_BOLD).text("DATA:", col1, infoY + 17, { continued: true })
+        .font(FONT_NORMAL).text(` ${isoDateToBR(payload.data)}`);
+      doc.font(FONT_BOLD).text("HORA:", col2, infoY + 17, { continued: true })
+        .font(FONT_NORMAL).text(` ${payload.hora}`);
+
+      doc.font(FONT_BOLD).text("SCP UTILIZADO:", col1, infoY + 29, { continued: true })
+        .font(FONT_NORMAL).text(` ${payload.scpUtilizado}`);
+      doc.font(FONT_BOLD).text("NÍVEL MÁXIMO DE CUIDADO:", col2, infoY + 29, { continued: true })
+        .font(FONT_NORMAL).text(` ${payload.nivelMaximoCuidado}`);
+
+      doc.y = infoY + boxH + 6;
+
+      // ── QUADRO RESUMO ──
+      sectionTitle(doc, "QUADRO RESUMO");
+      const qY = doc.y;
+      const colW = pageW / 3;
+
+      // Helper: label + value in a line
+      const kvLine = (label: string, val: string, x: number, y: number, valX?: number) => {
+        doc.font(FONT_NORMAL).fontSize(7.5).fillColor("#333333")
+          .text(label, x, y, { width: (valX ?? x + colW * 0.68) - x });
+        doc.font(FONT_BOLD).text(val, valX ?? x + colW * 0.68, y);
+      };
+
+      // Coluna esquerda
+      kvLine("Taxa de Ocupação do dia (%)", `${payload.taxaOcupacaoDia.toFixed(1)}%`, col1, qY);
+      kvLine("Leitos Avaliados (%)", `${payload.leitosAvaliadosPerc.toFixed(0)}%`, col1, qY + 13);
+      kvLine("Leitos Avaliados (Qtd)", `${payload.leitosAvaliadosQtd}`, col1, qY + 26);
+
+      // Coluna central
+      const midX = ML + colW + 6;
+      const midVX = ML + colW + colW * 0.72;
+      kvLine("Leitos Ocupados (Qtd)", `${payload.leitosOcupados}`, midX, qY, midVX);
+      kvLine("Leitos Pendentes (Qtd)", `${payload.leitosPendentes}`, midX, qY + 13, midVX);
+      kvLine("Leitos Inativos (Qtd)", `${payload.leitosInativos}`, midX, qY + 26, midVX);
+      kvLine("Leitos Vagos (Qtd)", `${payload.leitosVagos}`, midX, qY + 39, midVX);
+
+      // Coluna direita: desvio + níveis
+      const rX = ML + colW * 2 + 6;
+      const rVX = rX + colW * 0.72;
+
+      doc.font(FONT_BOLD).fontSize(7.5).fillColor("#e53e3e")
+        .text("DESVIO DO PERFIL", rX, qY)
+        .text(`${payload.desvioPerfil.qtd}`, rVX - 30, qY)
+        .text(`(${payload.desvioPerfil.perc.toFixed(0)}%)`, rVX, qY);
+
+      doc.fillColor("#333333");
+      const nivEntries: [string, number][] = [
+        ["Cuidados Mínimos (%)", payload.niveisPct.minimos],
+        ["Cuidados Intermediários (%)", payload.niveisPct.intermediarios],
+        ["Alta Dependência (%)", payload.niveisPct.altaDependencia],
+        ["Semi-Intensivo (%)", payload.niveisPct.semiIntensivos],
+        ["Intensivos (%)", payload.niveisPct.intensivos],
+      ];
+      nivEntries.forEach(([label, val], i) => {
+        kvLine(label, `${val.toFixed(0)}%`, rX, qY + 13 + i * 13, rVX);
+      });
+
+      doc.y = qY + 13 * 6 + 8;
+
+      // ── FEED DE COMENTÁRIOS ──
+      sectionTitle(doc, "FEED DE COMENTÁRIOS");
+      if (payload.comentarios.length === 0) {
+        doc.fontSize(7.5).font(FONT_NORMAL).fillColor("#888888")
+          .text("Nenhum comentário registrado para este dia.", ML);
+      } else {
+        payload.comentarios.forEach((c) => {
+          if (doc.y + 18 > doc.page.height - doc.page.margins.bottom) doc.addPage();
+          doc.fontSize(7.5).font(FONT_BOLD).fillColor("#333333")
+            .text(`${c.hora} — ${c.autor}:`, ML, doc.y, { continued: true })
+            .font(FONT_NORMAL).text(` ${c.texto}`);
+          doc.moveDown(0.15);
+        });
+      }
+      doc.moveDown(0.4);
+
+      // ── TABELA DE LEITOS ──
+      sectionTitle(doc, "LEITOS");
+
+      if (payload.leitos.length === 0) {
+        doc.fontSize(9).font(FONT_NORMAL).fillColor("#888888")
+          .text("Nenhuma avaliação registrada para este dia.", doc.page.margins.left);
+        return;
+      }
+
+      const headers = [
+        { text: "LEITO", width: 48, align: "center" as const },
+        { text: "DATA / HORA\nAVALIAÇÃO", width: 78, align: "center" as const },
+        { text: "PRONTUÁRIO", width: 70, align: "center" as const },
+        { text: "STATUS\nLEITO", width: 62, align: "center" as const },
+        { text: "TIPO DE\nCUIDADO", width: 88, align: "center" as const },
+        { text: "EVOLUÇÃO", width: 52, align: "center" as const, font: FONT_UNICODE },
+        { text: "PONTOS", width: 46, align: "center" as const },
+        { text: "AVALIADOR", width: 100, align: "left" as const },
+        { text: "JUSTIFICATIVA", width: pageW - 48 - 78 - 70 - 62 - 88 - 52 - 46 - 100, align: "left" as const },
+      ];
+
+      const rows = payload.leitos.map((l) => [
+        l.numero,
+        l.dataHoraAvaliacao,
+        l.prontuario,
+        l.statusLeito,
+        l.tipoCuidado,
+        l.evolucao,
+        l.pontos,
+        l.avaliador,
+        l.justificativa,
+      ]);
+
+      generateTable(doc, headers, rows, { headerHeight: 22, dynamicRowHeight: true });
+    },
+    { landscape: true }
+  );
+}
+
+// ─── Grau de Complexidade ───────────────────────────────────────────────────
+
+export interface GrauComplexidadePayload {
+  unidade: string;
+  periodo: string;      // e.g. "01/06/2025 a 31/10/2025"
+  scpUtilizado: string;
+  meses: string[];      // e.g. ["jun/25", "jul/25", ...]
+  dados: Array<{
+    totalLeitos: number;
+    ocupados: number;
+    pendentes: number;
+    inativos: number;
+    vagos: number;
+    minimumCare: number;     // percentage of evaluated
+    intermediateCare: number;
+    highDependency: number;
+    semiIntensive: number;
+    intensive: number;
+    taxaOcupacao: number;    // percentage of bedCount
+  }>;
+  medias: {
+    totalLeitos: number;
+    ocupados: number;
+    pendentes: number;
+    inativos: number;
+    vagos: number;
+    minimumCare: number;
+    intermediateCare: number;
+    highDependency: number;
+    semiIntensive: number;
+    intensive: number;
+    taxaOcupacao: number;
+  };
+}
+
+export async function pdfGrauComplexidade(
+  payload: GrauComplexidadePayload
+): Promise<Buffer> {
+  const nMeses = payload.meses.length;
+  // Use A3 landscape when there are many months to avoid column overflow
+  const useA3 = nMeses > 12;
+  const pageSize: [number, number] | undefined = useA3 ? [1190.55, 841.89] : undefined;
+
+  return bufferFromDoc(
+    "GRAU DE COMPLEXIDADE",
+    (doc) => {
+      const ML = doc.page.margins.left;
+      const pageW = doc.page.width - ML - doc.page.margins.right;
+
+      // ── Info box ──
+      const infoY = doc.y;
+      const boxH = 44;
+      doc.rect(ML, infoY, pageW, boxH).strokeColor("#d9d9d9").lineWidth(0.5).stroke();
+
+      const col1 = ML + 6;
+      const col2 = ML + pageW * 0.36;
+      const col3 = ML + pageW * 0.70;
+
+      doc.fontSize(7.5).fillColor("#333333");
+      doc.font(FONT_BOLD).text("UNIDADE DE INTERNAÇÃO:", col1, infoY + 14, { continued: true })
+        .font(FONT_NORMAL).text(` ${payload.unidade}`);
+      doc.font(FONT_BOLD).text("PERÍODO:", col2, infoY + 14, { continued: true })
+        .font(FONT_NORMAL).text(` ${payload.periodo}`);
+      doc.font(FONT_BOLD).text("SCP UTILIZADO:", col3, infoY + 14, { continued: true })
+        .font(FONT_NORMAL).text(` ${payload.scpUtilizado}`);
+
+      doc.y = infoY + boxH + 6;
+
+      // Column widths
+      const firstColW = useA3 ? 180 : 155;
+      const mediaColW = useA3 ? 75 : 62;
+      const remainingW = pageW - firstColW - mediaColW;
+      const monthColW = nMeses > 0 ? remainingW / nMeses : remainingW;
+
+      const mkHeaders = (firstLabel: string, lastLabel: string) => [
+        { text: firstLabel, width: firstColW, align: "left" as const },
+        ...payload.meses.map((m) => ({ text: m, width: monthColW, align: "center" as const })),
+        { text: lastLabel, width: mediaColW, align: "center" as const },
+      ];
+
+      const pct = (v: number) => `${v.toFixed(1)}%`;
+      const qtd = (v: number) => Math.round(v).toString();
+
+      // ── GRAU DE COMPLEXIDADE ──────────────────────────────────────────
+      sectionTitle(doc, "GRAU DE COMPLEXIDADE");
+
+      const complexRows: string[][] = [
+        ["Cuidados Mínimos (%)",       ...payload.dados.map((d) => pct(d.minimumCare)),      pct(payload.medias.minimumCare)],
+        ["Cuidados Intermediários (%)", ...payload.dados.map((d) => pct(d.intermediateCare)), pct(payload.medias.intermediateCare)],
+        ["Alta Dependência (%)",        ...payload.dados.map((d) => pct(d.highDependency)),   pct(payload.medias.highDependency)],
+        ["Semi-Intensivos (%)",         ...payload.dados.map((d) => pct(d.semiIntensive)),    pct(payload.medias.semiIntensive)],
+        ["Intensivos (%)",              ...payload.dados.map((d) => pct(d.intensive)),        pct(payload.medias.intensive)],
+      ];
+
+      generateTable(doc, mkHeaders("TIPO DE CUIDADOS", "Média (%)"), complexRows, { headerHeight: 22 });
+      doc.moveDown(0.5);
+
+      // ── LEITOS DIA ────────────────────────────────────────────────────
+      sectionTitle(doc, "LEITOS DIA");
+
+      const leitosRows: string[][] = [
+        ["Total leitos dia (Qtd)", ...payload.dados.map((d) => qtd(d.totalLeitos)), qtd(payload.medias.totalLeitos)],
+        ["Ocupados",               ...payload.dados.map((d) => qtd(d.ocupados)),   qtd(payload.medias.ocupados)],
+        ["Pendentes",              ...payload.dados.map((d) => qtd(d.pendentes)),  qtd(payload.medias.pendentes)],
+        ["Inativos",               ...payload.dados.map((d) => qtd(d.inativos)),   qtd(payload.medias.inativos)],
+        ["Vagos",                  ...payload.dados.map((d) => qtd(d.vagos)),      qtd(payload.medias.vagos)],
+      ];
+
+      generateTable(doc, mkHeaders("LEITOS DIA", "Média"), leitosRows, { headerHeight: 22 });
+      doc.moveDown(0.5);
+
+      // ── TAXA DE OCUPAÇÃO ──────────────────────────────────────────────
+      sectionTitle(doc, "TAXA DE OCUPAÇÃO");
+
+      const taxaRows: string[][] = [
+        ["Taxa de Ocupação (%)", ...payload.dados.map((d) => pct(d.taxaOcupacao)), pct(payload.medias.taxaOcupacao)],
+      ];
+
+      generateTable(doc, mkHeaders("TAXA DE OCUPAÇÃO (%)", "Média (%)"), taxaRows, { headerHeight: 22 });
+    },
+    { landscape: true, pageSize }
+  );
 }

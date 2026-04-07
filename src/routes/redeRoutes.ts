@@ -11,6 +11,7 @@ export const RedeRoutes = (ds: DataSource): Router => {
   r.post("/", ctrl.criar);
   r.get("/", ctrl.listar);
   r.get("/:id", ctrl.buscarPorId);
+  r.get("/:redeId/hospitais", ctrl.listarHospitais);
   r.get("/:id/ultima-atualizacao-cargo", ctrl.ultimaAtualizacaoCargo);
   r.put("/:id", ctrl.atualizar);
   r.delete("/:id", ctrl.deletar);

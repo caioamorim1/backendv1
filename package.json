@@ -11,7 +11,8 @@
     "seed": "ts-node-dev --transpile-only --exit-child --no-notify src/scripts/seedDatabase.ts",
     "seed:fresh": "ts-node-dev --transpile-only --exit-child --no-notify src/scripts/seedFresh.ts",
     "seed:avaliacoes": "ts-node-dev --transpile-only --exit-child --no-notify src/scripts/migrateLegacyAvaliacoes.ts",
-    "import:avaliacoes": "ts-node-dev --transpile-only --exit-child --no-notify src/scripts/importAvaliacoesFromExcel.ts"
+    "import:avaliacoes": "ts-node-dev --transpile-only --exit-child --no-notify src/scripts/importAvaliacoesFromExcel.ts",
+    "job:expiry": "ts-node-dev --transpile-only --exit-child --no-notify src/scripts/run-session-expiry.ts"
   },
   "keywords": [],
   "author": "",

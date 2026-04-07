@@ -118,15 +118,19 @@ export class LeitoController {
 
   atualizarStatus = async (req: Request, res: Response) => {
     const id = req.params.id;
-    const { status, justificativa } = req.body as {
+    const { status, justificativa, autorId, autorNome } = req.body as {
       status: string;
       justificativa?: string | null;
+      autorId?: string | null;
+      autorNome?: string | null;
     };
     try {
       const updated = await this.repo.atualizarStatus(
         id,
         status,
-        justificativa
+        justificativa,
+        autorId,
+        autorNome
       );
       if (!updated)
         return res.status(404).json({ mensagem: "Leito não encontrado" });

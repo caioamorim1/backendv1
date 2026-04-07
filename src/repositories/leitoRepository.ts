@@ -7,6 +7,7 @@ import { Hospital } from "../entities/Hospital";
 import { Grupo } from "../entities/Grupo";
 import { Regiao } from "../entities/Regiao";
 import { Rede } from "../entities/Rede";
+import { LeitoEvento, LeitoEventoTipo } from "../entities/LeitoEvento";
 
 export class LeitoRepository {
   private repo: Repository<Leito>;
@@ -78,7 +79,9 @@ export class LeitoRepository {
   async atualizarStatus(
     id: string,
     status: string,
-    justificativa?: string | null
+    justificativa?: string | null,
+    autorId?: string | null,
+    autorNome?: string | null
   ) {
     // Busca a entidade
     const ent = await this.repo.findOne({
@@ -98,12 +101,34 @@ export class LeitoRepository {
     console.log("Status : ", status);
 
     try {
+      const statusAnterior = ent.status;
       // tipo é enum StatusLeito — atribuição direta (validação básica)
       (ent as any).status = status;
       if (justificativa !== undefined) {
         (ent as any).justificativa = justificativa;
       }
       const saved = await this.repo.save(ent);
+
+      // Registrar evento de alteração de status
+      try {
+        const evRepo = this.ds.getRepository(LeitoEvento);
+        await evRepo.save(
+          evRepo.create({
+            leito: saved,
+            tipo: LeitoEventoTipo.STATUS_ALTERADO,
+            dataHora: new Date(),
+            unidadeId: ent.unidade?.id ?? null,
+            hospitalId: null,
+            leitoNumero: saved.numero,
+            autorId: autorId ?? null,
+            autorNome: autorNome ?? null,
+            motivo: justificativa ?? null,
+            payload: { statusAnterior, statusNovo: status },
+          })
+        );
+      } catch (e) {
+        console.warn("Não foi possível registrar evento STATUS_ALTERADO:", e);
+      }
 
       // Atualiza leitos_status da unidade após mudar status do leito
       if (ent.unidade?.id) {

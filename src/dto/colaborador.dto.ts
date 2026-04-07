@@ -8,11 +8,17 @@ export interface CreateColaboradorDTO {
   // Valores granulares (tipo). Mantido o nome do campo por compatibilidade.
   permissao:
     | "ADMIN"
-    | "ADMIN_GLOBAL" // legado
+    | "AVALIADOR"
+    | "GESTOR_TATICO_TEC_ADM"
+    | "GESTOR_TATICO_TECNICO"
+    | "GESTOR_TATICO_ADM"
+    | "GESTOR_ESTRATEGICO_HOSPITAL"
+    | "GESTOR_ESTRATEGICO_REDE"
+    // Legado
+    | "ADMIN_GLOBAL"
     | "GESTOR_ESTRATEGICO"
     | "GESTOR_TATICO"
-    | "GESTOR" // legado
-    | "AVALIADOR"
+    | "GESTOR"
     | "CONSULTOR"
     | "COMUM";
 }
@@ -24,11 +30,17 @@ export interface UpdateColaboradorDTO {
   coren?: string;
   permissao?:
     | "ADMIN"
-    | "ADMIN_GLOBAL" // legado
+    | "AVALIADOR"
+    | "GESTOR_TATICO_TEC_ADM"
+    | "GESTOR_TATICO_TECNICO"
+    | "GESTOR_TATICO_ADM"
+    | "GESTOR_ESTRATEGICO_HOSPITAL"
+    | "GESTOR_ESTRATEGICO_REDE"
+    // Legado
+    | "ADMIN_GLOBAL"
     | "GESTOR_ESTRATEGICO"
     | "GESTOR_TATICO"
-    | "GESTOR" // legado
-    | "AVALIADOR"
+    | "GESTOR"
     | "CONSULTOR"
     | "COMUM";
 }

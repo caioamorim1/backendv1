@@ -14,6 +14,18 @@ export class ColaboradorController {
   };
 
   listar = async (req: Request, res: Response) => {
+    const user = (req as any).user as { id?: string; tipo?: string } | undefined;
+    const isAvaliador =
+      user?.tipo === "AVALIADOR" ||
+      user?.tipo === "COMUM" ||
+      user?.tipo === "CONSULTOR";
+
+    if (isAvaliador) {
+      if (!user?.id) return res.status(401).json({ message: "Não autenticado" });
+      const colaborador = await this.repo.obter(user.id);
+      return res.json(colaborador ? [colaborador] : []);
+    }
+
     const { hospitalId, unidadeId } = req.query as {
       hospitalId?: string;
       unidadeId?: string;

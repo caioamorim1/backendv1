@@ -4,6 +4,7 @@ import { CreateUnidadeDTO, UpdateUnidadeDTO } from "../dto/unidade.dto";
 import { Hospital } from "../entities/Hospital";
 import { ScpMetodo } from "../entities/ScpMetodo";
 import { CargoUnidadeRepository } from "./cargoUnidadeRepository";
+import { AvaliacaoSCP, StatusSessaoAvaliacao } from "../entities/AvaliacaoSCP";
 
 export class UnidadeRepository {
   private repo: Repository<UnidadeInternacao>;
@@ -56,6 +57,9 @@ export class UnidadeRepository {
           nome: data.nome,
           horas_extra_reais: data.horas_extra_reais,
           horas_extra_projetadas: data.horas_extra_projetadas,
+          pontuacao_max: data.pontuacao_max ?? null,
+          pontuacao_min: data.pontuacao_min ?? null,
+          gatilho: data.gatilho ?? null,
           scpMetodo: metodo ?? null,
         });
         const unidade = await uRepo.save(ent);
@@ -126,34 +130,82 @@ export class UnidadeRepository {
       ],
     });
 
+    // Fetch all active sessions for the queried units in one shot
+    const unidadeIds = itens.map((u) => u.id);
+    const sessoesAtivas = unidadeIds.length
+      ? await this.repo.manager.getRepository(AvaliacaoSCP).find({
+          where: unidadeIds.map((id) => ({
+            unidade: { id },
+            statusSessao: StatusSessaoAvaliacao.ATIVA,
+          })),
+          relations: ["leito", "unidade"],
+        })
+      : [];
+
+    // Group sessions by unidadeId → leitoId
+    const sessoesPorUnidade = new Map<string, Map<string, { totalPontos: number; classificacao: any }>>();
+    for (const s of sessoesAtivas) {
+      if (!s.leito?.id || !s.unidade?.id) continue;
+      if (!sessoesPorUnidade.has(s.unidade.id)) {
+        sessoesPorUnidade.set(s.unidade.id, new Map());
+      }
+      sessoesPorUnidade.get(s.unidade.id)!.set(s.leito.id, {
+        totalPontos: s.totalPontos,
+        classificacao: s.classificacao,
+      });
+    }
+
     // Map items to include scpMetodoId and hospitalId explicitly
-    return itens.map((u: any) => ({
-      id: u.id,
-      nome: u.nome,
-      hospitalId: u.hospital?.id ?? null,
-      horas_extra_reais: u.horas_extra_reais,
-      horas_extra_projetadas: u.horas_extra_projetadas,
-      leitos: u.leitos ?? [],
-      cargos_unidade:
-        u.cargosUnidade?.map((cu: any) => ({
-          id: cu.id,
-          cargoId: cu.cargoId,
-          quantidade_funcionarios: cu.quantidade_funcionarios,
-          quantidade_atualizada_em: cu.quantidade_atualizada_em ?? null,
-          cargo: {
-            id: cu.cargo.id,
-            nome: cu.cargo.nome,
-            salario: cu.cargo.salario,
-            carga_horaria: cu.cargo.carga_horaria,
-            descricao: cu.cargo.descricao,
-            adicionais_tributos: cu.cargo.adicionais_tributos,
-          },
-        })) ?? [],
-      scpMetodoKey: u.scpMetodo ? u.scpMetodo.key : null,
-      scpMetodoId: u.scpMetodo ? u.scpMetodo.id : null,
-      created_at: u.created_at,
-      updated_at: u.updated_at,
-    }));
+    return itens.map((u: any) => {
+      const pontuacaoMin = u.pontuacao_min != null ? Number(u.pontuacao_min) : null;
+      const pontuacaoMax = u.pontuacao_max != null ? Number(u.pontuacao_max) : null;
+      const intervaloDefinido = pontuacaoMin !== null && pontuacaoMax !== null;
+      const sessaoByLeito = sessoesPorUnidade.get(u.id) ?? new Map();
+
+      return {
+        id: u.id,
+        nome: u.nome,
+        hospitalId: u.hospital?.id ?? null,
+        horas_extra_reais: u.horas_extra_reais,
+        horas_extra_projetadas: u.horas_extra_projetadas,
+        pontuacao_max: u.pontuacao_max ?? null,
+        pontuacao_min: u.pontuacao_min ?? null,
+        gatilho: u.gatilho ?? null,
+        leitos: (u.leitos ?? []).map((l: any) => {
+          const sessao = sessaoByLeito.get(l.id);
+          const totalPontos = sessao?.totalPontos;
+          let pontuacaoDentroIntervalo: boolean | null = null;
+          if (totalPontos !== undefined && intervaloDefinido) {
+            pontuacaoDentroIntervalo =
+              totalPontos >= pontuacaoMin! && totalPontos <= pontuacaoMax!;
+          }
+          return {
+            ...l,
+            pontuacaoDentroIntervalo,
+            classificacaoScp: sessao?.classificacao ?? null,
+          };
+        }),
+        cargos_unidade:
+          u.cargosUnidade?.map((cu: any) => ({
+            id: cu.id,
+            cargoId: cu.cargoId,
+            quantidade_funcionarios: cu.quantidade_funcionarios,
+            quantidade_atualizada_em: cu.quantidade_atualizada_em ?? null,
+            cargo: {
+              id: cu.cargo.id,
+              nome: cu.cargo.nome,
+              salario: cu.cargo.salario,
+              carga_horaria: cu.cargo.carga_horaria,
+              descricao: cu.cargo.descricao,
+              adicionais_tributos: cu.cargo.adicionais_tributos,
+            },
+          })) ?? [],
+        scpMetodoKey: u.scpMetodo ? u.scpMetodo.key : null,
+        scpMetodoId: u.scpMetodo ? u.scpMetodo.id : null,
+        created_at: u.created_at,
+        updated_at: u.updated_at,
+      };
+    });
   }
 
   // retorna unidades (entidades completas) de um hospital — utilitário para estatísticas
@@ -182,13 +234,46 @@ export class UnidadeRepository {
       ],
     });
     if (!u) return null;
+
+    // Fetch active sessions to compute pontuacaoDentroIntervalo per leito
+    const sessoesAtivas = await this.repo.manager
+      .getRepository(AvaliacaoSCP)
+      .find({
+        where: { unidade: { id }, statusSessao: StatusSessaoAvaliacao.ATIVA },
+        relations: ["leito"],
+      });
+    const pontuacaoMin = u.pontuacao_min != null ? Number(u.pontuacao_min) : null;
+    const pontuacaoMax = u.pontuacao_max != null ? Number(u.pontuacao_max) : null;
+    const intervaloDefinido = pontuacaoMin !== null && pontuacaoMax !== null;
+    const sessaoByLeito = new Map(
+      sessoesAtivas
+        .filter((s) => s.leito?.id)
+        .map((s) => [s.leito!.id, { totalPontos: s.totalPontos, classificacao: s.classificacao }])
+    );
+
     return {
       id: u.id,
       nome: u.nome,
       hospitalId: u.hospital?.id ?? null,
       horas_extra_reais: u.horas_extra_reais,
       horas_extra_projetadas: u.horas_extra_projetadas,
-      leitos: u.leitos ?? [],
+      pontuacao_max: u.pontuacao_max ?? null,
+      pontuacao_min: u.pontuacao_min ?? null,
+      gatilho: u.gatilho ?? null,
+      leitos: (u.leitos ?? []).map((l) => {
+        const sessao = sessaoByLeito.get(l.id);
+        const totalPontos = sessao?.totalPontos;
+        let pontuacaoDentroIntervalo: boolean | null = null;
+        if (totalPontos !== undefined && intervaloDefinido) {
+          pontuacaoDentroIntervalo =
+            totalPontos >= pontuacaoMin! && totalPontos <= pontuacaoMax!;
+        }
+        return {
+          ...l,
+          pontuacaoDentroIntervalo,
+          classificacaoScp: sessao?.classificacao ?? null,
+        };
+      }),
       cargos_unidade:
         u.cargosUnidade?.map((cu: any) => ({
           id: cu.id,
@@ -234,6 +319,9 @@ export class UnidadeRepository {
         nome: data.nome,
         horas_extra_reais: data.horas_extra_reais,
         horas_extra_projetadas: data.horas_extra_projetadas,
+        ...(data.pontuacao_max !== undefined && { pontuacao_max: data.pontuacao_max }),
+        ...(data.pontuacao_min !== undefined && { pontuacao_min: data.pontuacao_min }),
+        ...(data.gatilho !== undefined && { gatilho: data.gatilho }),
       };
 
       // Atualizar SCP método se fornecido

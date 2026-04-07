@@ -67,8 +67,11 @@ export class HospitalController {
     try {
       console.log("Listando hospitais...");
       const hospitais = await this.repo.buscarTodos();
-      console.log("Hospitais encontrados:", hospitais);
-      res.json(hospitais);
+      const normalized = hospitais.map((h: any) => ({
+        ...h,
+        rede: h.rede ?? h.regiao?.grupo?.rede ?? null,
+      }));
+      res.json(normalized);
     } catch (error) {
       res.status(500).json({ error: "Erro ao buscar hospitais" });
     }
@@ -84,7 +87,19 @@ export class HospitalController {
         return res.status(404).json({ error: "Hospital não encontrado" });
       }
 
-      res.json(hospital);
+      const user = (req as any).user as { tipo?: string } | undefined;
+      const isAvaliador =
+        user?.tipo === "AVALIADOR" ||
+        user?.tipo === "COMUM" ||
+        user?.tipo === "CONSULTOR";
+
+      if (isAvaliador) {
+        const h = hospital as any;
+        return res.json({ id: h.id, nome: h.nome, foto: h.foto ?? null });
+      }
+
+      const h = hospital as any;
+      res.json({ ...h, rede: h.rede ?? h.regiao?.grupo?.rede ?? null });
     } catch (error) {
       res.status(500).json({ error: "Erro ao buscar hospital" });
     }

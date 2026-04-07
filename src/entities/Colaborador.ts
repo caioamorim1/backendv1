@@ -28,25 +28,35 @@ export class Colaborador {
     type: "enum",
     enum: [
       "ADMIN",
+      "AVALIADOR",
+      "GESTOR_TATICO_TEC_ADM",
+      "GESTOR_TATICO_TECNICO",
+      "GESTOR_TATICO_ADM",
+      "GESTOR_ESTRATEGICO_HOSPITAL",
+      "GESTOR_ESTRATEGICO_REDE",
       // Legado (pode existir no banco; mantido para compatibilidade)
       "ADMIN_GLOBAL",
       "GESTOR_ESTRATEGICO",
       "GESTOR_TATICO",
-      // Legado (pode existir no banco; mantido para compatibilidade)
       "GESTOR",
-      "AVALIADOR",
       "CONSULTOR",
       "COMUM",
     ],
-    default: "COMUM",
+    default: "AVALIADOR",
   })
   permissao!:
     | "ADMIN"
+    | "AVALIADOR"
+    | "GESTOR_TATICO_TEC_ADM"
+    | "GESTOR_TATICO_TECNICO"
+    | "GESTOR_TATICO_ADM"
+    | "GESTOR_ESTRATEGICO_HOSPITAL"
+    | "GESTOR_ESTRATEGICO_REDE"
+    // Legado
     | "ADMIN_GLOBAL"
     | "GESTOR_ESTRATEGICO"
     | "GESTOR_TATICO"
     | "GESTOR"
-    | "AVALIADOR"
     | "CONSULTOR"
     | "COMUM";
 

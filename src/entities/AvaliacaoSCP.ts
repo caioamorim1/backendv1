@@ -66,10 +66,10 @@ export class AvaliacaoSCP {
   @Column({ type: "enum", enum: ClassificacaoCuidado })
   classificacao!: ClassificacaoCuidado;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: "timestamptz" })
   created_at!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: "timestamptz" })
   updated_at!: Date;
 
   // Expiração da sessão (ex.: 24h após criação)
