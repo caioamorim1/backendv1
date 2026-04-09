@@ -168,6 +168,8 @@ const RULES: Rule[] = [
   // ============================================================
   { methods: ["GET"], pattern: /^\/snapshot\/dashboard\/?$/, roles: ["ADM", "GER"], scope: "none" },
   { methods: ["GET"], pattern: /^\/snapshot\/hospital\/[^/]+(?:\/.*)?$/, roles: ["ADM", "AV", "GTT", "GTC", "GTA", "GEH","GER"], scope: "hospital" },
+  { methods: ["POST"], pattern: /^\/snapshot\/hospital\/[^/]+\/?$/, roles: ["ADM"], scope: "hospital" },
+  { methods: ["PATCH"], pattern: /^\/snapshot\/[^/]+\/selecionado\/?$/, roles: ["ADM"], scope: "none" },
 
   // Hospital Sectors Network
   { methods: ["GET"], pattern: /^\/hospital-sectors-network\/rede\/[^/]+\/?$/, roles: ["ADM", "GER"], scope: "rede" },
