@@ -249,13 +249,43 @@ export class DimensionamentoService {
     // taxaOcupacaoPeriodo já foi calculado antes como fração (0..1)
     // Não precisa recalcular
 
+    // Guardar distribuições reais ANTES de qualquer ajuste customizado
+    const mediaDiariaClassificacaoReal = { ...mediaDiariaClassificacao };
+    const somaTotalClassificacaoReal = { ...somaTotalClassificacao };
+
     // --- AJUSTE PELA TAXA DE OCUPAÇÃO CUSTOMIZADA ---
     // Se o gestor salvou uma taxa customizada, re-escala mediaDiariaClassificacao e
     // somaTotalClassificacao para que o THE (e consequentemente o QP) reflita a ocupação
     // projetada pelo gestor e não apenas a taxa histórica do período.
     // taxaOcupacaoPeriodo, totalPacientesMedio e leitosOcupados NÃO são alterados —
     // continuam refletindo os dados reais do histórico.
-    if (taxaCustomizada && taxaOcupacaoPeriodo > 0) {
+    if (
+      taxaCustomizada &&
+      taxaCustomizada.utilizarComoBaseCalculo &&
+      taxaCustomizada.distribuicaoClassificacao
+    ) {
+      // MODO SIMULADO: taxa define o total de leitos ocupados projetados;
+      // distribuicaoClassificacao distribui esse total pelos níveis de cuidado.
+      // percentualLeitosAvaliados é armazenado mas não interfere no cálculo do THE.
+      const leitosSimulados = totalLeitos * (Number(taxaCustomizada.taxa) / 100);
+      const distSim = taxaCustomizada.distribuicaoClassificacao;
+      const somaPerc = Object.values(distSim).reduce((a, b) => a + b, 0);
+
+      // Substitui a distribuição histórica pela simulada
+      for (const key in mediaDiariaClassificacao) {
+        mediaDiariaClassificacao[key] = 0;
+      }
+      for (const key in somaTotalClassificacao) {
+        somaTotalClassificacao[key] = 0;
+      }
+
+      for (const key in distSim) {
+        const frac = somaPerc > 0 ? distSim[key] / somaPerc : 0;
+        mediaDiariaClassificacao[key] = leitosSimulados * frac;
+        somaTotalClassificacao[key] = Math.round(mediaDiariaClassificacao[key] * diasNoPeriodo);
+      }
+    } else if (taxaCustomizada && taxaOcupacaoPeriodo > 0) {
+      // MODO ESCALA: apenas re-escala pela taxa customizada
       const fatorEscala =
         Number(taxaCustomizada.taxa) / 100 / taxaOcupacaoPeriodo;
       for (const key in mediaDiariaClassificacao) {
@@ -562,11 +592,25 @@ export class DimensionamentoService {
       taxaOcupacaoCustomizada: taxaCustomizada
         ? {
             taxa: Number(taxaCustomizada.taxa),
+            percentualLeitosAvaliados: taxaCustomizada.percentualLeitosAvaliados != null
+              ? Number(taxaCustomizada.percentualLeitosAvaliados)
+              : null,
+            distribuicaoClassificacao: taxaCustomizada.distribuicaoClassificacao ?? null,
+            utilizarComoBaseCalculo: taxaCustomizada.utilizarComoBaseCalculo ?? false,
             leitosOcupados: Math.round(
               totalLeitosDia * (Number(taxaCustomizada.taxa) / 100)
             ),
             totalPacientesMedio: Number(
               (totalLeitos * (Number(taxaCustomizada.taxa) / 100)).toFixed(2)
+            ),
+            // Distribuição histórica real (antes de qualquer ajuste simulado)
+            distribuicaoTotalClassificacaoReal: { ...somaTotalClassificacaoReal },
+            mediaDiariaClassificacaoReal: Object.keys(mediaDiariaClassificacaoReal).reduce(
+              (acc, key) => {
+                acc[key] = Number(mediaDiariaClassificacaoReal[key].toFixed(2));
+                return acc;
+              },
+              {} as { [key: string]: number }
             ),
             createdAt: taxaCustomizada.createdAt,
             updatedAt: taxaCustomizada.updatedAt,

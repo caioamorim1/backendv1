@@ -10,7 +10,7 @@ export class TaxaOcupacaoCustomizadaController {
    */
   salvar = async (req: Request, res: Response) => {
     try {
-      const { unidadeId, taxa } = req.body;
+      const { unidadeId, taxa, percentualLeitosAvaliados, distribuicaoClassificacao, utilizarComoBaseCalculo } = req.body;
 
       if (!unidadeId) {
         return res.status(400).json({ error: "unidadeId é obrigatório" });
@@ -23,6 +23,9 @@ export class TaxaOcupacaoCustomizadaController {
       const resultado = await this.service.salvar({
         unidadeId,
         taxa: Number(taxa),
+        percentualLeitosAvaliados: percentualLeitosAvaliados !== undefined ? percentualLeitosAvaliados : null,
+        distribuicaoClassificacao: distribuicaoClassificacao !== undefined ? distribuicaoClassificacao : null,
+        utilizarComoBaseCalculo: utilizarComoBaseCalculo !== undefined ? utilizarComoBaseCalculo : null,
       });
 
       res.json(resultado);
