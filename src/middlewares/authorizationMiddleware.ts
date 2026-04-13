@@ -75,6 +75,7 @@ const RULES: Rule[] = [
   { methods: ["PUT", "DELETE"], pattern: /^\/hospitais\/[^/]+\/?$/, roles: ["ADM"], scope: "none" },
   { methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], pattern: /^\/(grupos|regioes|questionarios|cargos)(?:\/.*)?$/, roles: ["ADM"], scope: "none" },
   { methods: ["POST", "PUT", "PATCH", "DELETE"], pattern: /^\/redes(?:\/.*)?$/, roles: ["ADM"], scope: "none" },
+  
   // Redes — leitura para GER (só a sua própria rede)
   { methods: ["GET"], pattern: /^\/redes\/?$/, roles: ["ADM", "GER"], scope: "none" },
   { methods: ["GET"], pattern: /^\/redes\/[^/]+(?:\/.*)?$/, roles: ["ADM", "GER"], scope: "rede" },
