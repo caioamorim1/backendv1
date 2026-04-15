@@ -259,6 +259,7 @@ export class DimensionamentoService {
     // projetada pelo gestor e não apenas a taxa histórica do período.
     // taxaOcupacaoPeriodo, totalPacientesMedio e leitosOcupados NÃO são alterados —
     // continuam refletindo os dados reais do histórico.
+    let leitosSimulados: any = undefined;
     if (
       taxaCustomizada &&
       taxaCustomizada.utilizarComoBaseCalculo &&
@@ -267,7 +268,7 @@ export class DimensionamentoService {
       // MODO SIMULADO: taxa define o total de leitos ocupados projetados;
       // distribuicaoClassificacao distribui esse total pelos níveis de cuidado.
       // percentualLeitosAvaliados é armazenado mas não interfere no cálculo do THE.
-      const leitosSimulados = totalLeitos * (Number(taxaCustomizada.taxa) / 100);
+      const totalLeitosSimulados = totalLeitos * (Number(taxaCustomizada.taxa) / 100);
       const distSim = taxaCustomizada.distribuicaoClassificacao;
       const somaPerc = Object.values(distSim).reduce((a, b) => a + b, 0);
 
@@ -281,22 +282,44 @@ export class DimensionamentoService {
 
       for (const key in distSim) {
         const frac = somaPerc > 0 ? distSim[key] / somaPerc : 0;
-        mediaDiariaClassificacao[key] = leitosSimulados * frac;
+        mediaDiariaClassificacao[key] = totalLeitosSimulados * frac;
         somaTotalClassificacao[key] = Math.round(mediaDiariaClassificacao[key] * diasNoPeriodo);
       }
-    } else if (taxaCustomizada && taxaOcupacaoPeriodo > 0) {
-      // MODO ESCALA: apenas re-escala pela taxa customizada
-      const fatorEscala =
-        Number(taxaCustomizada.taxa) / 100 / taxaOcupacaoPeriodo;
-      for (const key in mediaDiariaClassificacao) {
-        mediaDiariaClassificacao[key] *= fatorEscala;
+
+      // --- ESCALA DE LEITOS OCUPADOS, VAGOS, INATIVOS, PENDENTES ---
+      // totalLeitosDia = L
+      // leitosSimulados = O (ocupados)
+      // percentualLeitosAvaliados = %A (customizado)
+      // leitosAvaliados = A = L * (%A/100)
+      // leitosPendentes = P = L - A
+      // leitosVagos + leitosInativos = V + I = A - O
+      // Mantém proporção real entre vagos/inativos
+      let leitosAvaliadosSimulados = totalLeitosDia;
+      if (taxaCustomizada.percentualLeitosAvaliados != null && taxaCustomizada.percentualLeitosAvaliados > 0) {
+        leitosAvaliadosSimulados = Math.round(totalLeitosDia * (Number(taxaCustomizada.percentualLeitosAvaliados) / 100));
       }
-      for (const key in somaTotalClassificacao) {
-        somaTotalClassificacao[key] = Math.round(
-          somaTotalClassificacao[key] * fatorEscala
-        );
+      const leitosOcupadosSimulado = Math.round(totalLeitosSimulados * diasNoPeriodo); // leito-dias ocupados no período
+      const leitosPendentesSimulado = totalLeitosDia - leitosAvaliadosSimulados;
+      const leitosNaoOcupadosAvaliadosSimulado = leitosAvaliadosSimulados - leitosOcupadosSimulado;
+      // Proporção real entre vagos/inativos
+      const totalVagosInativosReal = leitosVagos + leitosInativos;
+      let propVagos = 0.5, propInativos = 0.5;
+      if (totalVagosInativosReal > 0) {
+        propVagos = leitosVagos / totalVagosInativosReal;
+        propInativos = leitosInativos / totalVagosInativosReal;
       }
-    }
+      const leitosVagosSimulado = Math.round(leitosNaoOcupadosAvaliadosSimulado * propVagos);
+      const leitosInativosSimulado = leitosNaoOcupadosAvaliadosSimulado - leitosVagosSimulado;
+
+      leitosSimulados = {
+        leitosOcupados: leitosOcupadosSimulado,
+        leitosVagos: leitosVagosSimulado,
+        leitosInativos: leitosInativosSimulado,
+        leitosPendentes: leitosPendentesSimulado,
+        leitosAvaliados: leitosAvaliadosSimulados
+      };
+
+    } 
 
     // --- ETAPA 3: CALCULAR TOTAL DE HORAS DE ENFERMAGEM (THE) ---
     // Mapeamento de classificações do banco para horas de enfermagem
@@ -443,113 +466,7 @@ export class DimensionamentoService {
         : 0;
     const segurancaTecnico = qpTecnicosExato - cuidadoTecnico;
 
-    // 📊 CONSOLE LOG: MÉTRICAS DO DIMENSIONAMENTO - INTERNAÇÃO
-    console.log("\n" + "=".repeat(80));
-    console.log("📊 DIMENSIONAMENTO CALCULADO - UNIDADE DE INTERNAÇÃO");
-    console.log("=".repeat(80));
-    console.log(`🏥 Unidade: ${unidade.nome} (ID: ${unidadeId})`);
-    console.log(
-      `📋 Método de Avaliação SCP: ${unidade.scpMetodo?.title || "NÃO DEFINIDO"} ${unidade.scpMetodo?.key ? `(${unidade.scpMetodo.key})` : ""}`
-    );
-    console.log("-".repeat(80));
-
-    console.log("\n📅 PERÍODO DE AVALIAÇÃO:");
-    console.log(`   Início: ${inicioPeriodo.toFormat("dd/MM/yyyy HH:mm")}`);
-    console.log(`   Fim: ${fimPeriodo.toFormat("dd/MM/yyyy HH:mm")}`);
-    console.log(`   Total de Dias Avaliados: ${diasNoPeriodo}`);
-
-    console.log("\n🛏️  LEITOS DO SETOR:");
-    console.log(`   Total de Leitos: ${totalLeitos}`);
-    console.log(`   Total de Leitos-Dia Disponível: ${totalLeitosDia}`);
-    console.log(`   Leitos Ocupados no Período: ${leitosOcupados}`);
-    console.log(`   Leitos Vagos no Período: ${leitosVagos}`);
-    console.log(`   Leitos Inativos no Período: ${leitosInativos}`);
-    console.log(
-      `   Percentual de Leitos Avaliados: ${percentualLeitosAvaliados.toFixed(2)}%`
-    );
-
-    console.log("\n📈 TAXA DE OCUPAÇÃO:");
-    console.log(
-      `   Taxa média de Ocupação no Período: ${(taxaOcupacaoPeriodo * 100).toFixed(2)}%`
-    );
-    if (taxaCustomizada) {
-      console.log(
-        `   ⭐ Taxa de Ocupação Customizada (salva): ${Number(taxaCustomizada.taxa).toFixed(2)}%`
-      );
-    }
-    console.log(
-      `   Taxa de Ocupação Considerada para Cálculo: ${(taxaOcupacaoPeriodo * 100).toFixed(2)}%`
-    );
-    console.log(
-      `   Total de Pacientes Médio: ${totalPacientesMedio.toFixed(2)}`
-    );
-
-    console.log("\n👥 CLASSIFICAÇÃO DE PACIENTES:");
-    console.log(
-      `   Cuidados Mínimos: ${somaTotalClassificacao["MINIMOS"] || 0} (${mediaDiariaClassificacao["MINIMOS"]?.toFixed(2) || 0} média/dia)`
-    );
-    console.log(
-      `   Cuidados Intermediários: ${somaTotalClassificacao["INTERMEDIARIOS"] || 0} (${mediaDiariaClassificacao["INTERMEDIARIOS"]?.toFixed(2) || 0} média/dia)`
-    );
-    console.log(
-      `   Cuidados Alta-Dependência: ${somaTotalClassificacao["ALTA_DEPENDENCIA"] || 0} (${mediaDiariaClassificacao["ALTA_DEPENDENCIA"]?.toFixed(2) || 0} média/dia)`
-    );
-    console.log(
-      `   Cuidados Semi-Intensivos: ${somaTotalClassificacao["SEMI_INTENSIVOS"] || 0} (${mediaDiariaClassificacao["SEMI_INTENSIVOS"]?.toFixed(2) || 0} média/dia)`
-    );
-    console.log(
-      `   Cuidados Intensivos: ${somaTotalClassificacao["INTENSIVOS"] || 0} (${mediaDiariaClassificacao["INTENSIVOS"]?.toFixed(2) || 0} média/dia)`
-    );
-
-    console.log("\n⏱️  HORAS DE ENFERMAGEM:");
-    console.log(
-      `   THE (Total Horas Enfermagem): ${totalHorasEnfermagem.toFixed(2)}h`
-    );
-    console.log(
-      `   THE/Dia: ${(totalHorasEnfermagem / diasNoPeriodo).toFixed(2)}h`
-    );
-
-    console.log("\n👨‍⚕️ DISTRIBUIÇÃO DA EQUIPE:");
-    console.log(
-      `   QP (Técnicos & Enfermeiros): ${qpEnfermeiros + qpTecnicos}`
-    );
-    console.log(
-      `   Enfermeiros: ${qpEnfermeiros} (${(percentualEnfermeiro * 100).toFixed(1)}%)`
-    );
-    console.log(
-      `   Técnicos: ${qpTecnicos} (${(percentualTecnico * 100).toFixed(1)}%)`
-    );
-    console.log(`   Nível de Cuidado Predominante: ${criterioAplicado}`);
-
-    console.log("\n⚙️  PARÂMETROS:");
-    console.log(
-      `   IST (Índice Segurança Técnica): ${(ist * 100).toFixed(0)}%`
-    );
-    console.log(`   N. de dias trabalhados na semana: ${diasTrabalhoSemana}`);
-    console.log(
-      `   Carga Horária Semanal Enfermeiro (CHS): ${cargaHorariaEnfermeiro}h`
-    );
-    console.log(
-      `   Carga Horária Semanal Técnico (CHS): ${cargaHorariaTecnico}h`
-    );
-    console.log(
-      `   Equipe com restrições/idade avançada: ${equipeComRestricoes ? "SIM" : "NÃO"}`
-    );
-    console.log(`   Fator de Restrição aplicado: ${fatorRestricao}`);
-
-    console.log("\n🔢 CONSTANTES DE CÁLCULO:");
-    console.log(`   KOM (Enfermeiro): ${kmEnfermeiro.toFixed(4)}`);
-    console.log(`   KOM (Técnico): ${kmTecnico.toFixed(4)}`);
-
-    console.log("\n🔍 VALORES EXATOS (antes do arredondamento):");
-    console.log(
-      `   Enfermeiros: ${qpEnfermeirosExato.toFixed(4)} → ${qpEnfermeiros} (arredondado)`
-    );
-    console.log(
-      `   Técnicos: ${qpTecnicosExato.toFixed(4)} → ${qpTecnicos} (arredondado)`
-    );
-
-    console.log("=".repeat(80) + "\n");
+   
 
     // --- Montar a resposta da API ---
     const agregados = {
@@ -603,6 +520,8 @@ export class DimensionamentoService {
             totalPacientesMedio: Number(
               (totalLeitos * (Number(taxaCustomizada.taxa) / 100)).toFixed(2)
             ),
+            // Se modo simulado, inclui todos os leitos simulados agrupados
+            leitosSimulados, 
             // Distribuição histórica real (antes de qualquer ajuste simulado)
             distribuicaoTotalClassificacaoReal: { ...somaTotalClassificacaoReal },
             mediaDiariaClassificacaoReal: Object.keys(mediaDiariaClassificacaoReal).reduce(
@@ -711,6 +630,7 @@ export class DimensionamentoService {
         };
       }
     );
+    
     const response = { agregados, tabela };
 
     // Debug final: imprime amostras para validação

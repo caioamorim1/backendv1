@@ -318,6 +318,13 @@ export async function pdfDimensionamentoUnidade(payload: {
       distribuicaoClassificacao?: Record<string, number> | null;
       distribuicaoTotalClassificacaoReal?: Record<string, number>;
       mediaDiariaClassificacaoReal?: Record<string, number>;
+      leitosSimulados?: {
+        leitosOcupados: number;
+        leitosVagos: number;
+        leitosInativos: number;
+        leitosPendentes: number;
+        leitosAvaliados: number;
+      } | null;
       createdAt?: string;
       updatedAt?: string;
     };
@@ -459,31 +466,16 @@ export async function pdfDimensionamentoUnidade(payload: {
       width: pageW / 5,
       align: "center" as const,
     }));
-    let distRowsOc;
-    if (modoSimulado) {
-      // Mostra a distribuição inserida pelo gestor, em leito-dias simulados
-      const distSim = ag.taxaOcupacaoCustomizada!.distribuicaoClassificacao!;
-      const leitosOcupadosSim = ag.taxaOcupacaoCustomizada!.leitosOcupados;
-      const somaPerc = classOrder.reduce((s, k) => s + (distSim[k] ?? 0), 0);
-      distRowsOc = [
-        classOrder.map(k => {
-          const pct = somaPerc > 0 ? (distSim[k] ?? 0) / somaPerc : 0;
-          const n = Math.round(leitosOcupadosSim * pct);
-          return `${n} (${((pct * 100).toFixed(2))}%)`;
-        })
-      ];
-    } else {
-      // Mostra os dados reais
-      const distReal = ag.distribuicaoTotalClassificacao;
-      const totalDist = classOrder.reduce((s, k) => s + (distReal[k] ?? 0), 0);
-      distRowsOc = [
-        classOrder.map(k => {
-          const n = distReal[k] ?? 0;
-          const pct = totalDist > 0 ? ((n / totalDist) * 100).toFixed(2) : "0.00";
-          return `${n} (${pct}%)`;
-        })
-      ];
-    }
+    // Distribuição real — sempre usa dados históricos nesta seção
+    const distRealOc = ag.taxaOcupacaoCustomizada?.distribuicaoTotalClassificacaoReal ?? ag.distribuicaoTotalClassificacao;
+    const totalDistOc = classOrder.reduce((s, k) => s + (distRealOc[k] ?? 0), 0);
+    const distRowsOc = [
+      classOrder.map(k => {
+        const n = distRealOc[k] ?? 0;
+        const pct = totalDistOc > 0 ? ((n / totalDistOc) * 100).toFixed(2) : "0.00";
+        return `${n} (${pct}%)`;
+      })
+    ];
     doc.moveDown(0.4);
     doc.fontSize(8).font(FONT_BOLD).fillColor("#555555")
       .text("Distribuição da Classificação", ML, doc.y);
@@ -492,47 +484,58 @@ export async function pdfDimensionamentoUnidade(payload: {
     doc.moveDown(0.4);
 
     // ── 5. BASE DE CÁLCULO ────────────────────────────────────────────────
-    sectionTitle(doc, "Base de Cálculo");
-    const taxaCalc = ag.taxaOcupacaoCustomizada?.taxa ?? ag.taxaOcupacaoPeriodoPercent;
-    const leitosOcupadosCalc = ag.taxaOcupacaoCustomizada?.leitosOcupados ?? ag.leitosOcupados;
-    const totalPacientesMedioCalc = ag.taxaOcupacaoCustomizada?.totalPacientesMedio ?? ag.totalPacientesMedio;
-
-
-    // Sempre exibe 4 cards: Taxa de Ocupação | Leitos Ocupados | Pacientes Médio/dia | % Leitos Avaliados
-    const cw4 = pageW / 4;
-    if (doc.y + 52 > doc.page.height - doc.page.margins.bottom) doc.addPage();
-    const calcY4 = doc.y;
-    let percAval = null;
-    if (ag.taxaOcupacaoCustomizada?.percentualLeitosAvaliados != null) {
-      percAval = ag.taxaOcupacaoCustomizada.percentualLeitosAvaliados;
-    } else {
-      percAval = ag.percentualLeitosAvaliados;
-    }
-    infoCard(doc, ML,           calcY4, cw4, 44, "Taxa de Ocupação",     `${taxaCalc}%`);
-    infoCard(doc, ML + cw4,     calcY4, cw4, 44, "Leitos Ocupados",      `${leitosOcupadosCalc}`);
-    infoCard(doc, ML + cw4 * 2, calcY4, cw4, 44, "Pacientes Médio/dia",  `${Number(totalPacientesMedioCalc).toFixed(2)}`);
-    infoCard(doc, ML + cw4 * 3, calcY4, cw4, 44, "% Leitos Avaliados",   percAval != null ? `${Number(percAval).toFixed(1)}%` : "—");
-    doc.y = calcY4 + 52;
-
-    // Sub-label: distribuição inserida pelo gestor (apenas modoSimulado)
+    // Só exibido quando utilizarComoBaseCalculo === true
     if (modoSimulado) {
+      sectionTitle(doc, "Base de Cálculo");
+      const tc = ag.taxaOcupacaoCustomizada!;
+      const sim = tc.leitosSimulados;
+
+      // 9 cards com os valores simulados
+      const cw9 = pageW / 9;
+      if (doc.y + 52 > doc.page.height - doc.page.margins.bottom) doc.addPage();
+      const calcY9 = doc.y;
+      const cards9: [string, string][] = [
+        ["Taxa de\nOcupação",     `${tc.taxa}%`],
+        ["% Leitos\nAvaliados",   tc.percentualLeitosAvaliados != null ? `${Number(tc.percentualLeitosAvaliados).toFixed(1)}%` : "—"],
+        ["Leitos\nDia/Período",   `${ag.totalLeitosDia}`],
+        ["Total de\nAvaliações",  `${ag.totalAvaliacoes}`],
+        ["Leitos\nOcupados",      sim ? `${sim.leitosOcupados}` : "—"],
+        ["Leitos\nVagos",         sim ? `${sim.leitosVagos}` : "—"],
+        ["Leitos\nInativos",      sim ? `${sim.leitosInativos}` : "—"],
+        ["Leitos\nPendentes",     sim ? `${sim.leitosPendentes}` : "—"],
+        ["Pacientes\nMédio/dia",  `${Number(tc.totalPacientesMedio).toFixed(2)}`],
+      ];
+      cards9.forEach(([lbl, val], i) => {
+        const cx = ML + cw9 * i;
+        doc.rect(cx, calcY9, cw9, 50).strokeColor("#e0e0e0").lineWidth(0.5).stroke();
+        doc.fontSize(6.5).font(FONT_NORMAL).fillColor("#888888")
+          .text(lbl, cx + 4, calcY9 + 6, { width: cw9 - 8, align: "center" });
+        doc.y = calcY9 + 6;
+        doc.fontSize(10).font(FONT_BOLD).fillColor("#1a365d")
+          .text(val, cx + 4, calcY9 + 28, { width: cw9 - 8, align: "center" });
+        doc.y = calcY9 + 28;
+      });
+      doc.y = calcY9 + 58;
+
+      // Distribuição SCP simulada com % e quantidade
       doc.moveDown(0.5);
       doc.fontSize(8).font(FONT_BOLD).fillColor("#555555")
         .text("Distribuição por nível SCP", ML, doc.y);
       doc.moveDown(0.3);
-      const classOrder5 = ["MINIMOS", "INTERMEDIARIOS", "ALTA_DEPENDENCIA", "SEMI_INTENSIVOS", "INTENSIVOS"];
-      const distSim = ag.taxaOcupacaoCustomizada!.distribuicaoClassificacao!;
-      const somaSimPerc = classOrder5.reduce((s, k) => s + (distSim[k] ?? 0), 0);
-      const simHeaders = classOrder5.map(k => ({
+      const distSim = tc.distribuicaoClassificacao!;
+      const somaSimPerc = classOrder.reduce((s, k) => s + (distSim[k] ?? 0), 0);
+      const leitosOcSim = sim?.leitosOcupados ?? tc.leitosOcupados;
+      const simHeaders = classOrder.map(k => ({
         text: CLASSIFICACAO_LABEL[k],
         width: pageW / 5,
         align: "center" as const,
       }));
       const simRows = [
-        classOrder5.map(k => {
+        classOrder.map(k => {
           const v = distSim[k] ?? 0;
           const pct = somaSimPerc > 0 ? ((v / somaSimPerc) * 100).toFixed(1) : "0.0";
-          return `${pct}%`;
+          const n = Math.round(leitosOcSim * (somaSimPerc > 0 ? v / somaSimPerc : 0));
+          return `${n} (${pct}%)`;
         }),
       ];
       generateTable(doc, simHeaders, simRows, { headerHeight: 30 });
