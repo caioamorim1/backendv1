@@ -495,15 +495,15 @@ export async function pdfDimensionamentoUnidade(payload: {
       if (doc.y + 52 > doc.page.height - doc.page.margins.bottom) doc.addPage();
       const calcY9 = doc.y;
       const cards9: [string, string][] = [
-        ["Taxa de\nOcupação",    `${tc.taxa}%`],
-        ["% Leitos\nAvaliados", tc.percentualLeitosAvaliados != null ? `${Number(tc.percentualLeitosAvaliados).toFixed(1)}%` : "—"],
-        ["Leitos\nDia/Período", `${ag.totalLeitosDia}`],
-        ["Leitos\nOcupados",    sim ? `${sim.leitosOcupados}` : "—"],
-        ["Leitos\nVagos",       sim ? `${sim.leitosVagos}` : "—"],
-        ["Leitos\nInativos",    sim ? `${sim.leitosInativos}` : "—"],
-        ["Leitos\nPendentes",   sim ? `${sim.leitosPendentes}` : "—"],
-        ["Leitos\nAvaliados",   sim ? `${sim.leitosAvaliados}` : "—"],
-        ["Pacientes\nMédio/dia", `${Number(tc.totalPacientesMedio).toFixed(2)}`],
+        ["Taxa de\nOcupação",     `${tc.taxa}%`],
+        ["% Leitos\nAvaliados",   tc.percentualLeitosAvaliados != null ? `${Number(tc.percentualLeitosAvaliados).toFixed(1)}%` : "—"],
+        ["Leitos\nDia/Período",   `${ag.totalLeitosDia}`],
+        ["Total de\nAvaliações",  `${ag.totalAvaliacoes}`],
+        ["Leitos\nOcupados",      sim ? `${sim.leitosOcupados}` : "—"],
+        ["Leitos\nVagos",         sim ? `${sim.leitosVagos}` : "—"],
+        ["Leitos\nInativos",      sim ? `${sim.leitosInativos}` : "—"],
+        ["Leitos\nPendentes",     sim ? `${sim.leitosPendentes}` : "—"],
+        ["Pacientes\nMédio/dia",  `${Number(tc.totalPacientesMedio).toFixed(2)}`],
       ];
       cards9.forEach(([lbl, val], i) => {
         const cx = ML + cw9 * i;
