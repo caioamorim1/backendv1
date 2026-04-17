@@ -27,7 +27,6 @@ export class TaxaOcupacaoCustomizadaService {
     if (existente) {
       // Atualizar existente
       existente.taxa = data.taxa;
-      existente.percentualLeitosAvaliados = data.percentualLeitosAvaliados ?? null;
       existente.distribuicaoClassificacao = data.distribuicaoClassificacao ?? null;
       existente.utilizarComoBaseCalculo = data.utilizarComoBaseCalculo ?? null;
       const atualizada = await repo.save(existente);
@@ -37,7 +36,6 @@ export class TaxaOcupacaoCustomizadaService {
       const nova = repo.create({
         unidadeId: data.unidadeId,
         taxa: data.taxa,
-        percentualLeitosAvaliados: data.percentualLeitosAvaliados ?? null,
         distribuicaoClassificacao: data.distribuicaoClassificacao ?? null,
         utilizarComoBaseCalculo: data.utilizarComoBaseCalculo ?? null,
       });
@@ -72,9 +70,6 @@ export class TaxaOcupacaoCustomizadaService {
       id: entity.id,
       unidadeId: entity.unidadeId,
       taxa: Number(entity.taxa),
-      percentualLeitosAvaliados: entity.percentualLeitosAvaliados !== null && entity.percentualLeitosAvaliados !== undefined
-        ? Number(entity.percentualLeitosAvaliados)
-        : null,
       distribuicaoClassificacao: entity.distribuicaoClassificacao ?? null,
       utilizarComoBaseCalculo: entity.utilizarComoBaseCalculo ?? null,
       createdAt: entity.createdAt,
