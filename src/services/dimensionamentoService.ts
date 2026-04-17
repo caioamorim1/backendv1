@@ -286,35 +286,20 @@ export class DimensionamentoService {
         somaTotalClassificacao[key] = Math.round(mediaDiariaClassificacao[key] * diasNoPeriodo);
       }
 
-      // --- ESCALA DE LEITOS OCUPADOS, VAGOS, INATIVOS, PENDENTES ---
-      // totalLeitosDia = L
-      // leitosSimulados = O (ocupados)
-      // percentualLeitosAvaliados = %A (customizado)
-      // leitosAvaliados = A = L * (%A/100)
-      // leitosPendentes = P = L - A
-      // leitosVagos + leitosInativos = V + I = A - O
-      // Mantém proporção real entre vagos/inativos
-      let leitosAvaliadosSimulados = totalLeitosDia;
-      if (taxaCustomizada.percentualLeitosAvaliados != null && taxaCustomizada.percentualLeitosAvaliados > 0) {
-        leitosAvaliadosSimulados = Math.round(totalLeitosDia * (Number(taxaCustomizada.percentualLeitosAvaliados) / 100));
-      }
-      const leitosOcupadosSimulado = Math.round(totalLeitosSimulados * diasNoPeriodo); // leito-dias ocupados no período
-      const leitosPendentesSimulado = totalLeitosDia - leitosAvaliadosSimulados;
-      const leitosNaoOcupadosAvaliadosSimulado = leitosAvaliadosSimulados - leitosOcupadosSimulado;
-      // Proporção real entre vagos/inativos
-      const totalVagosInativosReal = leitosVagos + leitosInativos;
-      let propVagos = 0.5, propInativos = 0.5;
-      if (totalVagosInativosReal > 0) {
-        propVagos = leitosVagos / totalVagosInativosReal;
-        propInativos = leitosInativos / totalVagosInativosReal;
-      }
-      const leitosVagosSimulado = Math.round(leitosNaoOcupadosAvaliadosSimulado * propVagos);
-      const leitosInativosSimulado = leitosNaoOcupadosAvaliadosSimulado - leitosVagosSimulado;
+      // --- ESCALA DE LEITOS SIMULADOS ---
+      // totalAvaliacoes = leito-dias efetivamente avaliados (ocupados + vagos + inativos reais)
+      // leitosOcupadosSimulado = taxa% × totalAvaliacoes
+      // vagosInativosSimulado  = totalAvaliacoes − leitosOcupadosSimulado (sem distinção)
+      // leitosPendentesSimulado = totalLeitosDia − totalAvaliacoes (igual ao real)
+      const totalAvaliacoesSimulado = leitosOcupados + leitosVagos + leitosInativos;
+      const leitosOcupadosSimulado = Math.round((Number(taxaCustomizada.taxa) / 100) * totalAvaliacoesSimulado);
+      const vagosInativosSimulado = totalAvaliacoesSimulado - leitosOcupadosSimulado;
+      const leitosPendentesSimulado = totalLeitosDia - totalAvaliacoesSimulado;
+      const leitosAvaliadosSimulados = totalAvaliacoesSimulado;
 
       leitosSimulados = {
         leitosOcupados: leitosOcupadosSimulado,
-        leitosVagos: leitosVagosSimulado,
-        leitosInativos: leitosInativosSimulado,
+        vagosInativos: vagosInativosSimulado,
         leitosPendentes: leitosPendentesSimulado,
         leitosAvaliados: leitosAvaliadosSimulados
       };
@@ -509,9 +494,6 @@ export class DimensionamentoService {
       taxaOcupacaoCustomizada: taxaCustomizada
         ? {
             taxa: Number(taxaCustomizada.taxa),
-            percentualLeitosAvaliados: taxaCustomizada.percentualLeitosAvaliados != null
-              ? Number(taxaCustomizada.percentualLeitosAvaliados)
-              : null,
             distribuicaoClassificacao: taxaCustomizada.distribuicaoClassificacao ?? null,
             utilizarComoBaseCalculo: taxaCustomizada.utilizarComoBaseCalculo ?? false,
             leitosOcupados: Math.round(

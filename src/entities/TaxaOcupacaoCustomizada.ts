@@ -24,9 +24,6 @@ export class TaxaOcupacaoCustomizada {
   @Column({ type: "decimal", precision: 5, scale: 2 })
   taxa!: number; // Taxa de ocupação em porcentagem (0-100)
 
-  @Column({ type: "decimal", precision: 5, scale: 2, nullable: true, name: "percentual_leitos_avaliados" })
-  percentualLeitosAvaliados!: number | null;
-
   @Column({ type: "jsonb", nullable: true, name: "distribuicao_classificacao" })
   distribuicaoClassificacao!: Record<string, number> | null;
 
