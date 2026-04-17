@@ -488,8 +488,8 @@ export async function pdfDimensionamentoUnidade(payload: {
       const tc = ag.taxaOcupacaoCustomizada!;
       const sim = tc.leitosSimulados;
 
-      // 8 cards com os valores simulados
-      const cw9 = pageW / 8;
+      // 7 cards com os valores simulados
+      const cw9 = pageW / 7;
       if (doc.y + 52 > doc.page.height - doc.page.margins.bottom) doc.addPage();
       const calcY9 = doc.y;
       const cards9: [string, string][] = [
@@ -499,7 +499,6 @@ export async function pdfDimensionamentoUnidade(payload: {
         ["Leitos\nOcupados",      sim ? `${sim.leitosOcupados}` : "—"],
         ["Vagos &\nInativos",     sim ? `${sim.vagosInativos}` : "—"],
         ["Leitos\nPendentes",     sim ? `${sim.leitosPendentes}` : "—"],
-        ["Leitos\nAvaliados",     sim ? `${sim.leitosAvaliados}` : "—"],
         ["Pacientes\nMédio/dia",  `${Number(tc.totalPacientesMedio).toFixed(2)}`],
       ];
       cards9.forEach(([lbl, val], i) => {
