@@ -120,6 +120,7 @@ const RULES: Rule[] = [
  
   // Colaboradores — AV recebe apenas os próprios dados (filtrado no controller)
   { methods: ["GET"], pattern: /^\/colaboradores(?:\/?|\?.*)$/, roles: ["ADM", "AV", "GTT","GTC","GTA","GEH","GER"], scope: "hospital" },
+  { methods: ["POST"], pattern: /^\/colaboradores\/?$/, roles: ["ADM"], scope: "none" },
 
   // SCP Metodos
   { methods: ["GET"], pattern: /^\/scp-metodos(?:\/.*)?$/, roles: ["ADM", "AV", "GTT","GTC","GTA","GEH","GER"], scope: "none" },
