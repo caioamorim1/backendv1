@@ -806,19 +806,18 @@ function buildRowCells(
   // DETALHAMENTO
   if (escopo === "QUANTIDADE")
     return [r.cargoNome, fmtQtd(r.atualQtd), fmtQtd(r.baselineQtd),
-      fmtNull(r.calculadoQtd, fmtQtd), v(Math.round(r.ajusteQtd)),
-      fmtQtd(r.projetadoQtd), fmtNull(r.variacaoQtd, (n) => v(Math.round(n))), r.observacao];
+      fmtNull(r.calculadoQtd, fmtQtd),
+      fmtQtd(r.projetadoQtd), v(Math.round(r.ajusteQtd)), r.observacao];
   if (escopo === "FINANCEIRO")
     return [r.cargoNome, fmtRs(r.atualRs), fmtRs(r.baselineRs),
-      fmtNull(r.calculadoRs, fmtRs), vRs(r.ajusteRs),
-      fmtRs(r.projetadoRs), fmtNull(r.variacaoRs, vRs), r.observacao];
+      fmtNull(r.calculadoRs, fmtRs),
+      fmtRs(r.projetadoRs), vRs(r.ajusteRs), r.observacao];
   // GERAL — usa formato compacto (sem "R$ ") para caber nas colunas estreitas
   return [r.cargoNome, fmtRsC(r.atualRs), fmtQtd(r.atualQtd),
     fmtRsC(r.baselineRs), fmtQtd(r.baselineQtd),
     fmtNull(r.calculadoRs, fmtRsC), fmtNull(r.calculadoQtd, fmtQtd),
-    vRsC(r.ajusteRs), v(Math.round(r.ajusteQtd)),
     fmtRsC(r.projetadoRs), fmtQtd(r.projetadoQtd),
-    fmtNull(r.variacaoRs, vRsC), fmtNull(r.variacaoQtd, (n) => v(Math.round(n))), r.observacao];
+    vRsC(r.ajusteRs), v(Math.round(r.ajusteQtd)), r.observacao];
 }
 
 function buildHeaders(
@@ -860,42 +859,37 @@ function buildHeaders(
   }
   // DETALHAMENTO — todos em landscape (~762px disponível)
   if (escopo === "QUANTIDADE") return [
-    { text: "CARGO",            width: pageW * 0.22, align: L },
-    { text: "ATUAL (QTD)",      width: pageW * 0.09, align: C },
-    { text: "BASELINE (QTD)",   width: pageW * 0.10, align: C },
-    { text: "CALCULADO (QTD)",  width: pageW * 0.10, align: C },
-    { text: "AJUSTE QUALIT.",   width: pageW * 0.10, align: C },
-    { text: "PROJETADO (QTD)",  width: pageW * 0.10, align: C },
-    { text: "VARIAÇÃO (QTD)",   width: pageW * 0.10, align: C },
-    { text: "OBSERVAÇÃO",       width: pageW * 0.19, align: L },
+    { text: "CARGO",            width: pageW * 0.24, align: L },
+    { text: "ATUAL (QTD)",      width: pageW * 0.10, align: C },
+    { text: "BASELINE (QTD)",   width: pageW * 0.11, align: C },
+    { text: "CALCULADO (QTD)",  width: pageW * 0.11, align: C },
+    { text: "PROJETADO (QTD)",  width: pageW * 0.11, align: C },
+    { text: "VARIAÇÃO (QTD)",   width: pageW * 0.11, align: C },
+    { text: "OBSERVAÇÃO",       width: pageW * 0.22, align: L },
   ];
   if (escopo === "FINANCEIRO") return [
-    { text: "CARGO",            width: pageW * 0.16, align: L },
-    { text: "ATUAL (R$)",       width: pageW * 0.11, align: R },
-    { text: "BASELINE (R$)",    width: pageW * 0.11, align: R },
-    { text: "CALCULADO (R$)",   width: pageW * 0.11, align: R },
-    { text: "AJUSTE (R$)",      width: pageW * 0.11, align: R },
-    { text: "PROJETADO (R$)",   width: pageW * 0.11, align: R },
-    { text: "VARIAÇÃO (R$)",    width: pageW * 0.11, align: R },
-    { text: "OBSERVAÇÃO",       width: pageW * 0.18, align: L },
+    { text: "CARGO",            width: pageW * 0.18, align: L },
+    { text: "ATUAL (R$)",       width: pageW * 0.12, align: R },
+    { text: "BASELINE (R$)",    width: pageW * 0.12, align: R },
+    { text: "CALCULADO (R$)",   width: pageW * 0.12, align: R },
+    { text: "PROJETADO (R$)",   width: pageW * 0.12, align: R },
+    { text: "VARIAÇÃO (R$)",    width: pageW * 0.12, align: R },
+    { text: "OBSERVAÇÃO",       width: pageW * 0.22, align: L },
   ];
   // DETALHAMENTO GERAL — renderizado em A3 landscape (~1110pt úteis)
-  // Proporções ajustadas para evitar quebra de linha nos cabeçalhos QTD
   return [
-    { text: "CARGO",          width: pageW * 0.14, align: L },
-    { text: "ATUAL (R$)",     width: pageW * 0.07, align: R },
+    { text: "CARGO",          width: pageW * 0.16, align: L },
+    { text: "ATUAL (R$)",     width: pageW * 0.08, align: R },
     { text: "AT. QTD",        width: pageW * 0.06, align: C },
-    { text: "BASE. (R$)",     width: pageW * 0.07, align: R },
+    { text: "BASE. (R$)",     width: pageW * 0.08, align: R },
     { text: "BASE. QTD",      width: pageW * 0.06, align: C },
-    { text: "CALC. (R$)",     width: pageW * 0.07, align: R },
+    { text: "CALC. (R$)",     width: pageW * 0.08, align: R },
     { text: "CALC. QTD",      width: pageW * 0.06, align: C },
-    { text: "AJ. (R$)",       width: pageW * 0.07, align: R },
-    { text: "AJ. QTD",        width: pageW * 0.05, align: C },
-    { text: "PROJ. (R$)",     width: pageW * 0.07, align: R },
+    { text: "PROJ. (R$)",     width: pageW * 0.08, align: R },
     { text: "PROJ. QTD",      width: pageW * 0.06, align: C },
-    { text: "VAR. (R$)",      width: pageW * 0.07, align: R },
+    { text: "VAR. (R$)",      width: pageW * 0.08, align: R },
     { text: "VAR. QTD",       width: pageW * 0.06, align: C },
-    { text: "OBS",            width: pageW * 0.09, align: L },
+    { text: "OBS",            width: pageW * 0.14, align: L },
   ];
 }
 
