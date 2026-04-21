@@ -235,7 +235,8 @@ export class SnapshotVariacaoReportService {
       const rows: CargoRow[] = pfCargos.map((pf: any) => {
         const atualInfo = atualCargoMap[pf.cargoId] ?? { qty: 0, custoUnitario: pf.custoUnitario ?? 0 };
         const baselineInfo = baselineStaffMap[pf.cargoId] ?? { qty: 0, custoUnitario: pf.custoUnitario ?? 0 };
-        const custoUnit = pf.custoUnitario ?? 0;
+        // Usa o custo do cargo atual ou baseline como fallback quando o snapshot não tem
+        const custoUnit = pf.custoUnitario || atualInfo.custoUnitario || baselineInfo.custoUnitario || 0;
 
         const atualQtd = atualInfo.qty;
         const baselineQtd = baselineInfo.qty;
@@ -370,9 +371,10 @@ export class SnapshotVariacaoReportService {
         }
 
         const rows: CargoRow[] = sitioCargos.map((pf: any) => {
-          const custoUnit = pf.custoUnitario ?? 0;
-          const baselineInfo = baselineStaffMap[pf.cargoId] ?? { qty: 0, custoUnitario: custoUnit };
-          const atualInfo = atualSitio[pf.cargoId] ?? { qty: 0, custoUnitario: custoUnit };
+          const baselineInfo = baselineStaffMap[pf.cargoId] ?? { qty: 0, custoUnitario: pf.custoUnitario ?? 0 };
+          const atualInfo = atualSitio[pf.cargoId] ?? { qty: 0, custoUnitario: pf.custoUnitario ?? 0 };
+          // Usa o custo do cargo atual ou baseline como fallback quando o snapshot não tem
+          const custoUnit = pf.custoUnitario || atualInfo.custoUnitario || baselineInfo.custoUnitario || 0;
 
           const atualQtd = atualInfo.qty;
           const baselineQtd = baselineInfo.qty;
