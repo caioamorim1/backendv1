@@ -42,14 +42,26 @@ export class AuthService {
    * Returns AuthResult with token + nome + hospital + cargo + role.
    */
   async login(email: string, senha: string): Promise<AuthResult | null> {
+    console.log("[AuthService] buscando colaborador com email:", email);
     const user = (await this.colaboradorRepo.findOne({
       where: { email },
       relations: ["hospital", "hospital.rede", "hospital.regiao", "hospital.regiao.grupo", "hospital.regiao.grupo.rede"],
     })) as Colaborador;
-    if (!user) return null;
-    if (!user.senha) return null;
+    if (!user) {
+      console.log("[AuthService] colaborador não encontrado:", email);
+      return null;
+    }
+    if (!user.senha) {
+      console.log("[AuthService] colaborador sem senha definida:", email);
+      return null;
+    }
     const okCol = await bcrypt.compare(senha, user.senha as string);
-    if (!okCol) return null;
+    if (!okCol) {
+      console.log("[AuthService] senha incorreta para:", email, "| tem CPF:", (user as any).cpf ? "sim (senha padrão = CPF)" : "não (senha padrão = email)");
+      return null;
+    }
+    console.log("[AuthService] autenticado:", email, "| permissao:", (user as any).permissao, "| mustChangePassword:", user.mustChangePassword);
+    console.log("[AuthService] info: senha padrão é o CPF (se tiver) ou o email. CPF cadastrado:", (user as any).cpf ? "sim" : "não");
 
     const tipoRaw = (user as any).permissao as string | undefined;
     const tipo = normalizeTipo(tipoRaw);

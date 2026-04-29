@@ -468,17 +468,7 @@ export class TermometroService {
       .orderBy("h.data", "DESC")
       .getMany();
 
-    // Calcular taxaMaxima (atual, estática para toda a série)
-    let taxaMaxima = 0;
-    try {
-      if (setorId) {
-        const r = await this.occupationService.analisarUnidadeInternacao(setorId);
-        taxaMaxima = r.ocupacaoMaximaAtendivel;
-      } else {
-        const r = await this.occupationService.analisarHospitalInternacao(hospitalId);
-        taxaMaxima = r.summary.ocupacaoMaximaAtendivel;
-      }
-    } catch { /* taxaMaxima = 0 */ }
+    // taxaMedia será calculada após montar os pontos de ocupação
 
     // ── Agrupar histórico de leitos (bedCount/evaluated) por período ──
     interface PontoAcum {
@@ -608,15 +598,23 @@ export class TermometroService {
     // Gerar pontos na ordem cronológica
     const chavesSorted = [...agrupado.keys()].sort();
 
-    const ocupacao = chavesSorted.map((chave) => {
+    const ocupacaoRaw = chavesSorted.map((chave) => {
       const p = agrupado.get(chave)!;
       return {
         label: _label(chave, gran),
         data: gran === "dia" ? chave : `${chave}-01`,
         taxa: pct(p.evaluated, p.bedCount),
-        taxaMaxima,
       };
     });
+
+    const taxaMedia =
+      ocupacaoRaw.length > 0
+        ? Math.round(
+            ocupacaoRaw.reduce((sum, p) => sum + p.taxa, 0) / ocupacaoRaw.length
+          )
+        : 0;
+
+    const ocupacao = ocupacaoRaw.map((p) => ({ ...p, taxaMedia }));
 
     const niveis = chavesSorted.map((chave) => {
       const p = agrupado.get(chave)!;
@@ -647,7 +645,7 @@ export class TermometroService {
         rt.semiIntensivos + rt.intensivos || 1;
       snapshotHoje = {
         taxaOcupacao: pct(rt.evaluated, rt.bedCount),
-        taxaMaxima,
+        taxaMedia,
         niveis: [
           { name: "Mínimos",          value: rt.minimos,          percentual: pct(rt.minimos,          totalNiveis) },
           { name: "Intermediários",   value: rt.intermediarios,   percentual: pct(rt.intermediarios,   totalNiveis) },
