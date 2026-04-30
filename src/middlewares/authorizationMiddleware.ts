@@ -142,14 +142,19 @@ const RULES: Rule[] = [
 
   // Unidades (inclui sub-rotas como /comentarios)
   { methods: ["GET"], pattern: /^\/unidades(?:\/.*)?$/, roles: ["ADM", "AV", "GTT","GTC","GTA","GEH","GER"], scope: "hospital" },
+  { methods: ["POST"], pattern: /^\/unidades\/?$/, roles: ["ADM"], scope: "none" },
   { methods: ["PUT"], pattern: /^\/unidades\/[^/]+\/?$/, roles: ["ADM", "GTT","GTC","GTA"], scope: "hospital" },
+  { methods: ["DELETE"], pattern: /^\/unidades\/[^/]+\/?$/, roles: ["ADM"], scope: "none" },
 
   // Unidades não internação
   { methods: ["GET"], pattern: /^\/unidades-nao-internacao(?:\/.*)?$/, roles: ["ADM", "GTT", "GTC", "GTA","GEH","GER"], scope: "hospital" },
+  { methods: ["POST"], pattern: /^\/unidades-nao-internacao\/?$/, roles: ["ADM"], scope: "none" },
   { methods: ["POST"], pattern: /^\/unidades-nao-internacao\/[^/]+\/sitios\/?$/, roles: ["ADM", "GTT", "GTC", "GTA"], scope: "hospital" },
+  { methods: ["PUT", "DELETE"], pattern: /^\/unidades-nao-internacao\/[^/]+\/?$/, roles: ["ADM"], scope: "none" },
 
   // Unidades neutras
   { methods: ["GET"], pattern: /^\/unidades-neutras(?:\/.*)?$/, roles: ["ADM", "GTT","GTC","GTA","GEH","GER"], scope: "hospital" },
+  { methods: ["POST", "PUT", "DELETE"], pattern: /^\/unidades-neutras(?:\/.*)?$/, roles: ["ADM"], scope: "none" },
 
   // Sítios funcionais
   { methods: ["GET"], pattern: /^\/sitios(?:\/.*)?$/, roles: ["ADM", "GTT", "GTC", "GTA","GEH","GER"], scope: "hospital" },
