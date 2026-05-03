@@ -89,6 +89,8 @@ const RULES: Rule[] = [
   { methods: ["GET"], pattern: /^\/hospitais\/[^/]+\/?$/, roles: ["ADM", "AV", "GTT", "GTC","GTA","GEH","GER"], scope: "hospital" },  
   { methods: ["GET"], pattern: /^\/hospitais\/[^/]+\/ultima-atualizacao-cargo\/?$/, roles: ["ADM", "GTT","GTA","GEH","GER"], scope: "hospital" },
   { methods: ["GET"], pattern: /^\/hospitais\/[^/]+\/cargos(?:\/.*)?$/, roles: ["ADM", "GTT","GTC","GTA","GEH","GER"], scope: "hospital" },
+  { methods: ["POST"], pattern: /^\/hospitais\/[^/]+\/cargos\/?$/, roles: ["ADM"], scope: "none" },
+  { methods: ["PATCH", "DELETE"], pattern: /^\/hospitais\/[^/]+\/cargos\/[^/]+\/?$/, roles: ["ADM"], scope: "none" },
 
   // Termômetro
   { methods: ["GET"], pattern: /^\/termometro\/[^/]+\/(?:global|detalhamento|serie-historica)\/?$/, roles: ["ADM", "GTT","GTC","GEH","GER"], scope: "hospital" },
