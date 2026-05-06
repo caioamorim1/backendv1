@@ -141,15 +141,28 @@ export class DimensionamentoService {
       }
 
       if (leitosStatus) {
-        leitosOcupados = leitosStatus.evaluated;
-        leitosInativos = leitosStatus.inactive;
-        leitosVagos = leitosStatus.vacant;
+        // Verificar se o registro foi atualizado hoje; caso contrário, os dados
+        // são do dia anterior (ainda não houve nenhuma avaliação hoje).
+        const updatedAtDia = DateTime.fromJSDate(leitosStatus.updatedAt).setZone(ZONE).toISODate();
+        const hoje = dataAtual.toISODate();
+        const atualizadoHoje = updatedAtDia === hoje;
 
-        somaTotalClassificacao.MINIMOS = leitosStatus.minimumCare;
-        somaTotalClassificacao.INTERMEDIARIOS = leitosStatus.intermediateCare;
-        somaTotalClassificacao.ALTA_DEPENDENCIA = leitosStatus.highDependency;
-        somaTotalClassificacao.SEMI_INTENSIVOS = leitosStatus.semiIntensive;
-        somaTotalClassificacao.INTENSIVOS = leitosStatus.intensive;
+        if (atualizadoHoje) {
+          leitosOcupados = leitosStatus.evaluated;
+          leitosInativos = leitosStatus.inactive;
+          leitosVagos = leitosStatus.vacant;
+
+          somaTotalClassificacao.MINIMOS = leitosStatus.minimumCare;
+          somaTotalClassificacao.INTERMEDIARIOS = leitosStatus.intermediateCare;
+          somaTotalClassificacao.ALTA_DEPENDENCIA = leitosStatus.highDependency;
+          somaTotalClassificacao.SEMI_INTENSIVOS = leitosStatus.semiIntensive;
+          somaTotalClassificacao.INTENSIVOS = leitosStatus.intensive;
+        } else {
+          // leitos_status tem dados de ontem — ainda não houve avaliação hoje
+          leitosOcupados = 0;
+          leitosVagos = 0;
+          leitosPendentes = totalLeitos - leitosInativos;
+        }
       } else {
         // Fallback: sem registro ainda hoje, tudo zero
         leitosOcupados = 0;

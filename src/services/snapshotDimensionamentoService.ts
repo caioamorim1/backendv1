@@ -10,6 +10,7 @@ import { ProjetadoFinalNaoInternacao } from "../entities/ProjetadoFinalNaoIntern
 import { UnidadeInternacao } from "../entities/UnidadeInternacao";
 import { UnidadeNaoInternacao } from "../entities/UnidadeNaoInternacao";
 import { DimensionamentoNaoInternacao } from "../entities/DimensionamentoNaoInternacao";
+import { TaxaOcupacaoCustomizada } from "../entities/TaxaOcupacaoCustomizada";
 import { createHash } from "crypto";
 
 // Parse de campos string do banco que podem conter 'null', '' ou formato BR (vírgula decimal)
@@ -1023,9 +1024,11 @@ export class SnapshotDimensionamentoService {
           unidade.id
         );
 
-        // Buscar período travado da unidade de internação
-        const periodoTravado =
-          await this.controlePeriodoService.buscarTravadoPorUnidade(unidade.id);
+        // Buscar período travado e taxa de ocupação customizada da unidade de internação
+        const [periodoTravado, taxaOcupacaoCustomizada] = await Promise.all([
+          this.controlePeriodoService.buscarTravadoPorUnidade(unidade.id),
+          this.ds.getRepository(TaxaOcupacaoCustomizada).findOne({ where: { unidadeId: unidade.id } }),
+        ]);
 
         // Buscar dados de dimensionamento (métricas de leitos e distribuição)
         let dimensionamentoData = null;
@@ -1115,6 +1118,13 @@ export class SnapshotDimensionamentoService {
                   travado: periodoTravado.travado,
                 }
               : null,
+            ...(taxaOcupacaoCustomizada
+              ? {
+                  taxa: Number(taxaOcupacaoCustomizada.taxa),
+                  distribuicaoPorcentagem: taxaOcupacaoCustomizada.distribuicaoClassificacao ?? null,
+                  utilizarComoBaseCalculo: taxaOcupacaoCustomizada.utilizarComoBaseCalculo ?? null,
+                }
+              : {}),
             dimensionamento: dimensionamentoData,
           });
         }
