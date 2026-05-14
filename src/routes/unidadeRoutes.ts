@@ -5,7 +5,6 @@ import { ComentarioUnidadeRepository } from "../repositories/comentarioUnidadeRe
 import { ComentarioUnidadeController } from "../controllers/comentarioUnidadeController";
 
 import { DataSource } from "typeorm";
-import { post } from "axios";
 
 export const UnidadeRoutes = (ds: DataSource): Router => {
   const r = Router();

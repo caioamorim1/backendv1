@@ -136,6 +136,7 @@ const RULES: Rule[] = [
 
   // Avaliações SCP
   { methods: ["GET"], pattern: /^\/avaliacoes\/sessoes-ativas\/?$/, roles: ["ADM", "AV", "GTT","GTC","GTA","GEH","GER"], scope: "hospital" },
+  { methods: ["GET"], pattern: /^\/avaliacoes\/taxa-ocupacao-dia\/?$/, roles: ["ADM", "AV", "GTT","GTC","GTA","GEH","GER"], scope: "hospital" },
   { methods: ["GET"], pattern: /^\/avaliacoes\/leito\/[^/]+\/ultimo-prontuario\/?$/, roles: ["ADM", "AV", "GTT","GTC"], scope: "none" },
   { methods: ["GET"], pattern: /^\/avaliacoes\/schema\/?$/, roles: ["ADM", "AV", "GTT","GTC"], scope: "none" },
   { methods: ["POST"], pattern: /^\/avaliacoes\/sessao\/?$/, roles: ["ADM", "AV", "GTT","GTC"], scope: "hospital" },
