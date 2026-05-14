@@ -1,11 +1,11 @@
 // backend/src/app.ts
-import express from "express";
+import express, { NextFunction, Request, Response } from "express";
 import type { DataSource } from "typeorm";
 import { createIndexRouter } from "./routes";
 import cors from "cors";
 import { authMiddleware } from "./middlewares/authMiddleware";
 import { buildAuthorizationMiddleware } from "./middlewares/authorizationMiddleware";
-import path from "path"; // Importe o 'path'
+import path from "path";
 
 // Cria e configura o app SEM efeitos colaterais (sem iniciar DB/servidor)
 export function createApp(dataSource: DataSource) {
@@ -50,6 +50,14 @@ export function createApp(dataSource: DataSource) {
   app.use(buildAuthorizationMiddleware(dataSource));
 
   app.use("/", createIndexRouter(dataSource));
+
+  // Handler global de erros — captura qualquer exceção não tratada.
+  // Loga internamente mas nunca expõe detalhes ao cliente.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    console.error("[UNHANDLED ERROR]", err);
+    res.status(500).json({ error: "Erro interno do servidor" });
+  });
 
   return app;
 }

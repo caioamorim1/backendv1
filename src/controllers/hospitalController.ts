@@ -17,55 +17,19 @@ export class HospitalController {
 
   criar = async (req: Request, res: Response) => {
     try {
-      console.log("\n═══════════════════════════════════════════════════");
-      console.log("🏥 [CRIAR HOSPITAL] Iniciando");
-      console.log("═══════════════════════════════════════════════════");
-      console.log("Body recebido:", req.body);
-      console.log("Arquivo recebido (req.file)?", !!req.file);
-
       if (req.file) {
-        console.log("✅ Arquivo detectado:");
-        console.log("   - Original name:", req.file.originalname);
-        console.log("   - Filename:", req.file.filename);
-        console.log("   - Mimetype:", req.file.mimetype);
-        console.log("   - Size:", req.file.size);
-        console.log("   - Path:", req.file.path);
-        console.log("   - Destination:", req.file.destination);
-
-        const fileExists = require("fs").existsSync(req.file.path);
-        console.log("   - Arquivo existe no disco?", fileExists);
-
-        if (fileExists) {
-          console.log("   - ✅ Arquivo salvo com sucesso!");
-        } else {
-          console.log("   - ❌ ERRO: Arquivo NÃO foi salvo no disco!");
-        }
-
         req.body.foto = `/uploads/hospital/${req.file.filename}`;
-        console.log("   - URL da foto:", req.body.foto);
-      } else {
-        console.log("⚠️  Nenhum arquivo foi enviado");
       }
-      console.log("═══════════════════════════════════════════════════\n");
-
       const novo = await this.repo.criar(req.body);
       res.status(201).json(novo);
     } catch (error) {
       console.error("[HospitalController] erro ao criar hospital:", error);
-      const msg = error instanceof Error ? error.message : String(error);
-      // Em dev, retornar mensagem completa para facilitar debug
-      if (process.env.NODE_ENV !== "production") {
-        return res
-          .status(400)
-          .json({ error: "Erro ao criar hospital", details: msg });
-      }
       return res.status(400).json({ error: "Erro ao criar hospital" });
     }
   };
 
   listar = async (_: Request, res: Response) => {
     try {
-      console.log("Listando hospitais...");
       const hospitais = await this.repo.buscarTodos();
       const normalized = hospitais.map((h: any) => ({
         ...h,

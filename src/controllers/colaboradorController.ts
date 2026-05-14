@@ -57,17 +57,16 @@ export class ColaboradorController {
 
   criarAdmin = async (req: Request, res: Response) => {
     try {
-      console.log("Criando admin com dados:", req.body);
       const novoAdmin = await this.repo.criarAdmin(req.body);
       res.status(201).json(novoAdmin);
     } catch (error: any) {
-      res.status(400).json({ erro: error.message || String(error) });
+      console.error("[colaboradorController] erro ao criar admin:", error);
+      res.status(400).json({ erro: "Erro ao criar colaborador" });
     }
   };
 
   obter = async (req: Request, res: Response) => {
     const col = await this.repo.obter(req.params.id);
-    console.log(req.params.id, col);
     res.json(col);
   };
 

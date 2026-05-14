@@ -35,7 +35,6 @@ export class CargoHospitalController {
 
       res.status(500).json({
         mensagem: "Erro interno do servidor",
-        error: error.message,
       });
     }
   };
@@ -58,7 +57,6 @@ export class CargoHospitalController {
       console.error("Erro ao listar cargos:", error);
       res.status(500).json({
         mensagem: "Erro interno do servidor",
-        error: error.message,
       });
     }
   };
@@ -84,7 +82,6 @@ export class CargoHospitalController {
       console.error("Erro ao obter cargo:", error);
       res.status(500).json({
         mensagem: "Erro interno do servidor",
-        error: error.message,
       });
     }
   };
@@ -115,7 +112,6 @@ export class CargoHospitalController {
       console.error("Erro ao atualizar cargo:", error);
       res.status(500).json({
         mensagem: "Erro interno do servidor",
-        error: error.message,
       });
     }
   };
@@ -143,7 +139,6 @@ export class CargoHospitalController {
       console.error("Erro ao deletar cargo:", error);
       res.status(500).json({
         mensagem: "Erro interno do servidor",
-        error: error.message,
       });
     }
   };

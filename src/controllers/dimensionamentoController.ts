@@ -10,7 +10,6 @@ export class DimensionamentoController {
       const { unidadeId } = req.params;
       const inicio = (req.query.inicio as string) || undefined;
       const fim = (req.query.fim as string) || undefined;
-      console.log("Inicio:", inicio, "Fim:", fim);
       const resultado = await this.service.calcularParaInternacao(
         unidadeId,
         inicio,
@@ -18,11 +17,9 @@ export class DimensionamentoController {
       );
       res.json(resultado);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Erro desconhecido";
-      res.status(404).json({
+      console.error("[dimensionamentoController] erro internacao:", error);
+      res.status(500).json({
         error: "Erro ao calcular análise para unidade de internação",
-        details: message,
       });
     }
   };
@@ -31,15 +28,12 @@ export class DimensionamentoController {
   analiseNaoInternacao = async (req: Request, res: Response) => {
     try {
       const { unidadeId } = req.params;
-      console.log("Unidade ID after destructuring:", unidadeId);
       const resultado = await this.service.calcularParaNaoInternacao(unidadeId);
       res.json(resultado);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Erro desconhecido";
-      res.status(404).json({
+      console.error("[dimensionamentoController] erro nao internacao:", error);
+      res.status(500).json({
         error: "Erro ao calcular análise para unidade de não internação",
-        details: message,
       });
     }
   };

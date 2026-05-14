@@ -201,8 +201,8 @@ export class ExportController {
       );
       return res.send(pdf);
     } catch (err) {
-      const details = err instanceof Error ? err.message : String(err);
-      return res.status(500).json({ error: "Erro ao gerar PDF", details });
+      console.error("[exportController] erro ao gerar PDF dimensionamento:", err);
+      return res.status(500).json({ error: "Erro ao gerar PDF" });
     }
   };
 
@@ -237,14 +237,15 @@ export class ExportController {
       res.setHeader("Content-Disposition", `inline; filename="${fname}"`);
       return res.send(pdf);
     } catch (err) {
-      const details = err instanceof Error ? err.message : String(err);
+      console.error("[exportController] erro ao gerar PDF variacao:", err);
+      const message = err instanceof Error ? err.message : "";
       if (
-        details.includes("Nenhum snapshot selecionado") ||
-        details.includes("Unidade não encontrada no snapshot")
+        message.includes("Nenhum snapshot selecionado") ||
+        message.includes("Unidade não encontrada no snapshot")
       ) {
-        return res.status(404).json({ error: "Snapshot não encontrado", details });
+        return res.status(404).json({ error: "Snapshot não encontrado" });
       }
-      return res.status(500).json({ error: "Erro ao gerar PDF de variação", details });
+      return res.status(500).json({ error: "Erro ao gerar PDF de variação" });
     }
   };
 
@@ -263,8 +264,6 @@ export class ExportController {
       const unidadeRepo = new UnidadeRepository(this.ds);
       const avaliacaoRepo = new AvaliacaoRepository(this.ds);
       const comentarioRepo = new ComentarioUnidadeRepository(this.ds);
-
-      console.log(`[DIARIO] rawData="${rawData}" data=${data} hoje=${DateTime.now().setZone(SAO_PAULO_TZ).toISODate()}`);
 
       const unidade = await unidadeRepo.obter(unidadeId);
       if (!unidade) return res.status(404).json({ error: "Unidade não encontrada" });
@@ -344,7 +343,6 @@ export class ExportController {
 
       // Avaliações do dia — usando find() do TypeORM que trata corretamente a coluna `date`
       const avalsDia = await avaliacaoRepo.listarPorDia({ data, unidadeId });
-      console.log(`[DIARIO] avalsDia (data=${data}): ${avalsDia.length} avaliações | dataAplicacao encontrados: [${[...new Set(avalsDia.map(a => a.dataAplicacao))].join(', ')}]`);
 
       // Mapa leito → avaliação mais recente do dia
       const avalPorLeito = new Map<string, AvaliacaoSCP>();
@@ -361,7 +359,6 @@ export class ExportController {
         .minus({ days: 1 })
         .toISODate()!;
       const avalsAnterior = await avaliacaoRepo.listarPorDia({ data: dataAnterior, unidadeId });
-      console.log(`[DIARIO] avalsAnterior (dataAnterior=${dataAnterior}): ${avalsAnterior.length} avaliações | dataAplicacao: [${[...new Set(avalsAnterior.map(a => a.dataAplicacao))].join(', ')}]`);
       const avalAnteriorPorLeito = new Map<string, AvaliacaoSCP>();
       for (const a of avalsAnterior) {
         if (!a.leito) continue;
@@ -428,7 +425,6 @@ export class ExportController {
           .andWhere("h.data >= :inicioJanela AND h.data <= :fimJanela", { inicioJanela, fimJanela })
           .orderBy("h.data", "DESC")
           .getOne();
-        console.log(`[DIARIO] historico (janela ${inicioJanela} → ${fimJanela}): ${historico ? `encontrado data=${new Date(historico.data).toISOString()} evaluated=${historico.evaluated} vacant=${historico.vacant} inactive=${historico.inactive}` : 'NÃO encontrado → fallback'}`);
 
         if (historico) {
           ocupados = historico.evaluated;
