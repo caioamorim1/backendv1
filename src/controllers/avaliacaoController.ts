@@ -81,33 +81,15 @@ export class AvaliacaoController {
     try {
       const leitoId = req.params.leitoId as string;
 
-      console.log("\n🔍 ===== [CONTROLLER] BUSCAR ÚLTIMO PRONTUÁRIO =====");
-      console.log("📋 Leito ID:", leitoId);
-
       if (!leitoId) {
-        console.log("❌ Erro: leitoId não fornecido");
         return res.status(400).json({ error: "leitoId é obrigatório" });
       }
 
-      console.log("🔄 Chamando repository...");
       const resultado = await this.repo.buscarUltimoProntuarioPorLeito(leitoId);
-
-      console.log("✅ Resultado encontrado:");
-      console.log("   - Prontuário:", resultado.prontuario);
-      console.log("   - Data Aplicação:", resultado.dataAplicacao);
-      console.log("   - Avaliação ID:", resultado.avaliacaoId);
-      console.log("================================================\n");
-
       return res.json(resultado);
     } catch (err) {
-      console.log("\n❌ [CONTROLLER] ERRO ao buscar último prontuário:");
-      console.error(err);
-      console.log("================================================\n");
-
-      const details = err instanceof Error ? err.message : String(err);
-      return res
-        .status(500)
-        .json({ error: "Erro ao buscar último prontuário", details });
+      console.error("[avaliacaoController] erro ao buscar último prontuário:", err);
+      return res.status(500).json({ error: "Erro ao buscar último prontuário" });
     }
   };
 

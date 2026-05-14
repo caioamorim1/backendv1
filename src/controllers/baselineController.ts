@@ -42,7 +42,6 @@ export class BaselineController {
     try {
       const { id } = req.params;
       const item = await this.repo.buscarPorId(id);
-      console.log("BASELINE", item);
       if (!item)
         return res.status(404).json({ error: "Baseline não encontrado" });
       res.json(item);
