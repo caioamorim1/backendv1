@@ -16,5 +16,7 @@
 
     /* Type Checking */
     "strict": true /* Enable all strict type-checking options. */
-  }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/__tests__/**/*"]
 }
