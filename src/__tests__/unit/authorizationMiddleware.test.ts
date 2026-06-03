@@ -180,6 +180,15 @@ describe("buildAuthorizationMiddleware — RBAC (papel correto / errado)", () =>
     expect(res.status).toHaveBeenCalledWith(403);
   });
 
+  it("ADM pode fazer PATCH /colaboradores/:id", async () => {
+    const req = makeReq("PATCH", "/colaboradores/f3db547f-6cca-4d8b-9cd9-2917fe90cb2a", {
+      tipo: "ADMIN",
+    });
+    const res = makeRes();
+    await middleware(req, res, next);
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
   it("GESTOR_TATICO_TEC_ADM pode fazer GET /dimensionamento/internacao/:id no próprio hospital", async () => {
     // hospitalId é extraído do path diretamente pela regex do middleware
     // Aqui o path contém o ID da unidade, não do hospital —
