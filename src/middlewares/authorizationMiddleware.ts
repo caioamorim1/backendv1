@@ -70,7 +70,7 @@ const RULES: Rule[] = [
   { methods: ["PUT"], pattern: /^\/leitos-status(?:\/.*)?$/, roles: ["ADM"], scope: "none" },
   { methods: ["DELETE"], pattern: /^\/password-reset\/cleanup\/?$/, roles: ["ADM"], scope: "none" },
   { methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], pattern: /^\/colaboradores\/admin(?:\/.*)?$/, roles: ["ADM"], scope: "none" },
-  { methods: ["DELETE"], pattern: /^\/colaboradores\/[^/]+\/?$/, roles: ["ADM"], scope: "none" },
+  { methods: ["PATCH", "DELETE"], pattern: /^\/colaboradores\/[^/]+\/?$/, roles: ["ADM"], scope: "none" },
   { methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], pattern: /^\/hospitais\/?$/, roles: ["ADM"], scope: "none" },
   { methods: ["PUT", "DELETE"], pattern: /^\/hospitais\/[^/]+\/?$/, roles: ["ADM"], scope: "none" },
   { methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], pattern: /^\/(grupos|regioes|questionarios|cargos)(?:\/.*)?$/, roles: ["ADM"], scope: "none" },

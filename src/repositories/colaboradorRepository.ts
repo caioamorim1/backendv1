@@ -187,9 +187,15 @@ export class ColaboradorRepository {
     });
     if (!colaboradorAtual) throw new Error("Colaborador não encontrado");
 
-    // Clone dos dados recebidos
-    const updateData: Partial<Colaborador> = { ...data } as any;
+    // Clone dos dados recebidos. O frontend usa "tipo", mas a entity usa
+    // "permissao"; campos undefined tambem nao devem entrar no update.
+    const updateData: Partial<Colaborador> = Object.fromEntries(
+      Object.entries(data as Record<string, unknown>).filter(
+        ([, value]) => value !== undefined
+      )
+    ) as Partial<Colaborador>;
     const incomingTipo = (data as any).tipo ?? (data as any).permissao;
+    delete (updateData as any).tipo;
     if (incomingTipo) {
       const tipo = mapLegacyPermissao(incomingTipo);
       (updateData as any).permissao = tipo;
